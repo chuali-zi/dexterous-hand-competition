@@ -234,7 +234,7 @@ class PathVerifier:
                 if abs(measured-d['backend_elapsed_s'])>1e-6 or not (d['backend_elapsed_s']>=budget or d['wall_elapsed_s']>=wall_budget):
                     raise ValueError('deadline evidence does not exceed matching budget')
                 proof=True
-            elif category=='trial_timeout': proof=bool(self.last_sample or rejected) and result['elapsed_s']>=self.config.trial_timeout_s
+            elif category=='trial_timeout': proof=bool(self.last_sample or rejected) and payload['_time_s']-trial_start>=self.config.trial_timeout_s
             else: proof=any(payload['_time_s']-r['start']>=self.config.action_timeout_s for r in actions.values())
         elif category=='grasp_target_unverified':
             proof=self.terminal_state=='grasp_ready' and self.last_sample is not None and (self.last_sample['point'] is None or distance(self.last_sample['point'],self.source['position_m'])>self.config.grasp_distance_m)

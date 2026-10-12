@@ -23,6 +23,7 @@
 | [噪声鲁棒性](docs/noise-robustness.md) | 单帧失败根因、多帧估计、匹配对照、未见夹具及限制 |
 | [回放状态/时间修复](docs/replay-state-time.md) | 独立复验状态、完整控制路径、真实缓存包时间与失败依据 |
 | [逐帧稳定与M1](docs/motion-stability.md) | 定位/稳定分离、完整真值窗口、运动负例及完成率回落 |
+| [审查状态与C1/C2](docs/replay-residuals.md) | 已关闭R4核心/N1、回执年龄与超时回退的残余修复 |
 | [证据协议v5](docs/protocol.md) | 时间/来源/schema、阶段门、配置和重建回放 |
 | [闭环实验](docs/closed-loop-experiments.md) | 自动执行、RGB后验、恢复、回放、批量评估与反馈层级 |
 | [官方接入交接](docs/platform-access.md) | 实际访问、登录/费用边界、所需模板与最小人工步骤 |

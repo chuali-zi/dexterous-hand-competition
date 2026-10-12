@@ -72,6 +72,10 @@
 
 原79例配置回归加16例交替/周期/缓漂，共95例；匹配多帧11/18→6/18，原留出回归3/12→0/12。70项测试、94个相对链接及95例/14,526组RGB回放通过，13个成功窗口完整真值评估通过，没有为追回完成率放宽阈值。旧结果保留，新[修复文档](motion-stability.md)及[机器证据](evidence/motion-stability-validation.json)另存；R4/N1/M1等待统一独立复验。
 
+## C1/C2残余与独立状态更新
+
+父任务已独立确认0024ef8的R4核心P1与N1关闭，20非法变体拒绝、12正例通过；M1未在该轮复验。cfad964仍存在pending年龄漏查和footer证明较早超时两个P2；本轮仅补回放检查及针对性回归，不改M1控制/稳定策略。73项本地测试通过，M1既有95例另用新回放器核验，不称作重新执行控制器。当前[审查状态及修复](replay-residuals.md)、[机器记录](evidence/replay-residuals-validation.json)分开保存；M1+C1/C2待统一独立复验。
+
 ## Git交付核验口径
 
 保留初始提交，直接在既有`work`工作分支创建初始化及后续规则整合提交。推送前fetch并检查origin/main没有他人更新；采用普通非强制`HEAD:main`推送。如果远端变更则停止覆盖，先保留并整合他人内容。推送后以`git ls-remote origin refs/heads/main`和本地`git rev-parse HEAD`比对。最终SHA和核验结果记录在任务最终回报；此文件不伪造包含自身的提交哈希。

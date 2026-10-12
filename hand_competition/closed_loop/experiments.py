@@ -338,10 +338,10 @@ def _replay(directory, expected_runtime_sha256=None):
             if action_id not in actions or active != action_id or state not in ('pending', 'complete', 'failed'):
                 raise ValueError('status without active action / invalid lifecycle')
             record = actions[action_id]
+            if not samples or samples[-1]['sensor_time_s'] < stamp-config.max_observation_age_s-1e-9:
+                raise ValueError('status without fresh measured feedback')
             if state == 'complete':
                 if stamp-record['start'] >= config.action_timeout_s: raise ValueError('late completion bypasses action deadline')
-                if not samples or samples[-1]['sensor_time_s'] < stamp-config.max_observation_age_s-1e-9:
-                    raise ValueError('completion without fresh measured feedback')
                 record['motion_verified'] = True
                 if record['action']['kind'] == 'move':
                     record['motion_verified'] = distance(samples[-1]['tip'], record['action']['target_m']) <= config.motion_completion_m

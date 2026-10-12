@@ -68,3 +68,5 @@ python -m hand_competition.closed_loop replay runs/my-v5 --expected-runtime-sha2
 可信源码指纹须来自调用者审查的提交/源码，不能仅从待验证manifest自己取值就称认证。v1只用于明确的历史日志回放，不进入实时观测门；旧记录没有机器人时间/生产者及manifest绑定，返回标志会体现缺口。
 
 原始被拒绝包不落盘；未知后端异常只记录类别/类型。日志写入失败会停止且结果标`trace_complete=false`，回放不认可缺损记录。`stop_request_succeeded`仅为调用成功，物理停止仍未验证。闭环结果仍不自动转换为官方或人工标签分数。
+
+最新[残余回放检查](replay-residuals.md)：所有pending/failed/complete统一核验源反馈年龄；缺deadline时只按失败发生时刻推算后端超时，不借晚到footer证明较早超时。
