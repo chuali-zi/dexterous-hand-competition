@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "run_id": "synthetic-brick-001",
+  "task": "brick",
+  "control_mode": "autonomous",
+  "elapsed_s": 240,
+  "evidence_kind": "synthetic_example",
+  "evidence_ref": "handwritten fixture; no platform run",
+  "final_state": [
+    {
+      "id": "b01",
+      "released": true,
+      "stable_for_s": 3,
+      "stable_valid": true,
+      "shape_awarded": true,
+      "color_awarded": true
+    },
+    {
+      "id": "b02",
+      "released": true,
+      "stable_for_s": 3,
+      "stable_valid": true,
+      "shape_awarded": true,
+      "color_awarded": true
+    },
+    {
+      "id": "b03",
+      "released": true,
+      "stable_for_s": 3,
+      "stable_valid": true,
+      "shape_awarded": true,
+      "color_awarded": true
+    },
+    {
+      "id": "b04",
+      "released": true,
+      "stable_for_s": 3,
+      "stable_valid": true,
+      "shape_awarded": true,
+      "color_awarded": true
+    },
+    {
+      "id": "b05",
+      "released": true,
+      "stable_for_s": 3,
+      "stable_valid": true,
+      "shape_awarded": true,
+      "color_awarded": true
+    },
+    {
+      "id": "b06",
+      "released": true,
+      "stable_for_s": 3,
+      "stable_valid": true,
+      "shape_awarded": true,
+      "color_awarded": false
+    },
+    {
+      "id": "b07",
+      "released": true,
+      "stable_for_s": 3,
+      "stable_valid": true,
+      "shape_awarded": false,
+      "color_awarded": false
+    },
+    {
+      "id": "b08",
+      "released": true,
+      "stable_for_s": 3,
+      "stable_valid": true,
+      "shape_awarded": false,
+      "color_awarded": false
+    },
+    {
+      "id": "b09",
+      "released": true,
+      "stable_for_s": 0,
+      "stable_valid": false,
+      "shape_awarded": false,
+      "color_awarded": false
+    },
+    {
+      "id": "b10",
+      "released": true,
+      "stable_for_s": 0,
+      "stable_valid": false,
+      "shape_awarded": false,
+      "color_awarded": false
+    }
+  ]
+}

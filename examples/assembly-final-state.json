@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "run_id": "synthetic-assembly-001",
+  "task": "assembly",
+  "control_mode": "teleoperation",
+  "elapsed_s": 240,
+  "evidence_kind": "synthetic_example",
+  "evidence_ref": "handwritten fixture; no platform run",
+  "final_state": [
+    {
+      "id": "s1",
+      "kind": "preset",
+      "effective_inserted": true
+    },
+    {
+      "id": "s2",
+      "kind": "preset",
+      "effective_inserted": true
+    },
+    {
+      "id": "s3",
+      "kind": "preset",
+      "effective_inserted": true
+    },
+    {
+      "id": "s4",
+      "kind": "preset",
+      "effective_inserted": true
+    },
+    {
+      "id": "s5",
+      "kind": "loose",
+      "effective_inserted": true
+    },
+    {
+      "id": "s6",
+      "kind": "loose",
+      "effective_inserted": true
+    }
+  ]
+}

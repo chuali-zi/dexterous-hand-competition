@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "purpose": "planning_and_log_conventions_only_not_loaded_by_cli",
+  "selected_group": null,
+  "recommended_group": "simulation_brick_autonomous_pending_confirmation",
+  "robot_execution_implemented": false,
+  "platform_verified": false,
+  "official_rules_verified_in_this_environment": false,
+  "evidence_date": "2026-10-12",
+  "source_timezone": "Asia/Shanghai",
+  "provisional_limits": {"attempt_s": 300, "brick_settle_s": 3},
+  "experiment_targets_not_official_rules": {
+    "single_block_trials": 30,
+    "single_block_initial_gate_successes": 27,
+    "recovery_trials": 20,
+    "full_attempt_trials": 10
+  },
+  "failure_categories": [
+    "perception_unknown", "calibration_bias", "unreachable", "collision",
+    "empty_grasp", "slip", "release_stuck", "collapse", "timeout", "unknown"
+  ]
+}

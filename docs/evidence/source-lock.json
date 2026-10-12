@@ -1,0 +1,274 @@
+{
+  "evidence_date": "2026-10-12",
+  "timezone": "Asia/Shanghai",
+  "scope": "README, license and selected interfaces; no third-party scripts executed, no weights downloaded",
+  "repositories": [
+    {
+      "repo": "opencv/opencv",
+      "commit": "802cf95aa3d42816995695bf68a86b3532f12760",
+      "files": [
+        {
+          "url": "https://raw.githubusercontent.com/opencv/opencv/802cf95aa3d42816995695bf68a86b3532f12760/README.md",
+          "status": 200,
+          "sha256": "203259b7bcbd3dcc994e821bcf9a22bb12b8750ac7b07a421104828b74d21629",
+          "bytes": 1698,
+          "accessed_utc": "2026-10-12T05:58:52.897948+00:00",
+          "upstream_path": "README.md"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/opencv/opencv/802cf95aa3d42816995695bf68a86b3532f12760/LICENSE",
+          "status": 200,
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "bytes": 11358,
+          "accessed_utc": "2026-10-12T05:58:53.132424+00:00",
+          "upstream_path": "LICENSE"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/opencv/opencv/802cf95aa3d42816995695bf68a86b3532f12760/modules/calib3d/include/opencv2/calib3d.hpp",
+          "status": 200,
+          "sha256": "dce08edf7603f424781fcefd74f4abeb2146950f09934281ebd51fec5346cfec",
+          "bytes": 246463,
+          "accessed_utc": "2026-10-12T05:58:53.448315+00:00",
+          "upstream_path": "modules/calib3d/include/opencv2/calib3d.hpp"
+        }
+      ],
+      "ref": "refs/heads/4.x"
+    },
+    {
+      "repo": "AprilRobotics/apriltag",
+      "commit": "b7c0ebe9aa20f82ec7a828579004f9e706bfecd9",
+      "files": [
+        {
+          "url": "https://raw.githubusercontent.com/AprilRobotics/apriltag/b7c0ebe9aa20f82ec7a828579004f9e706bfecd9/README.md",
+          "accessed_utc": "2026-10-12T05:57:36.129064+00:00",
+          "status": 200,
+          "sha256": "a4a8a0994f012d31c9364af6d8fe454a2c10a14747434f08584815e1df7c88b2",
+          "bytes": 11458,
+          "upstream_path": "README.md"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/AprilRobotics/apriltag/b7c0ebe9aa20f82ec7a828579004f9e706bfecd9/LICENSE",
+          "accessed_utc": "2026-10-12T05:57:36.324518+00:00",
+          "error": "HTTP Error 404: Not Found",
+          "upstream_path": "LICENSE"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/AprilRobotics/apriltag/b7c0ebe9aa20f82ec7a828579004f9e706bfecd9/LICENSE.md",
+          "accessed_utc": "2026-10-12T05:58:20.850318+00:00",
+          "status": 200,
+          "sha256": "9b6baf7627d6a4b0f1f79cf72253ddd8ad7ca55a52aa47331c45f2628c910c11",
+          "bytes": 1593,
+          "upstream_path": "LICENSE.md"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/AprilRobotics/apriltag/b7c0ebe9aa20f82ec7a828579004f9e706bfecd9/apriltag.h",
+          "accessed_utc": "2026-10-12T05:58:20.850737+00:00",
+          "status": 200,
+          "sha256": "036fcd511e1ff97651eba57f53f348037c4e415c4d744af3c478ceafca45fcbf",
+          "bytes": 10905,
+          "upstream_path": "apriltag.h"
+        }
+      ]
+    },
+    {
+      "repo": "moveit/moveit2",
+      "commit": "a9004a43151b7d1fd50d462b8db6d4d280b0cc21",
+      "files": [
+        {
+          "url": "https://raw.githubusercontent.com/moveit/moveit2/a9004a43151b7d1fd50d462b8db6d4d280b0cc21/README.md",
+          "accessed_utc": "2026-10-12T05:57:36.075299+00:00",
+          "status": 200,
+          "sha256": "0bf90b231c20c1c3b67f03fc85145886f9a5f901cc1e6446293a6fb066ebc7b7",
+          "bytes": 40656,
+          "upstream_path": "README.md"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/moveit/moveit2/a9004a43151b7d1fd50d462b8db6d4d280b0cc21/LICENSE",
+          "accessed_utc": "2026-10-12T05:57:36.378719+00:00",
+          "error": "HTTP Error 404: Not Found",
+          "upstream_path": "LICENSE"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/moveit/moveit2/a9004a43151b7d1fd50d462b8db6d4d280b0cc21/LICENSE.txt",
+          "accessed_utc": "2026-10-12T05:58:20.851207+00:00",
+          "status": 200,
+          "sha256": "a3f6cba11d82a296d93c4a44496463e5fdf1038cdf97fc43e56dc2499982cc34",
+          "bytes": 1524,
+          "upstream_path": "LICENSE.txt"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/moveit/moveit2/a9004a43151b7d1fd50d462b8db6d4d280b0cc21/moveit_ros/planning_interface/move_group_interface/include/moveit/move_group_interface/move_group_interface.hpp",
+          "accessed_utc": "2026-10-12T05:58:20.851643+00:00",
+          "status": 200,
+          "sha256": "5ff091ecaf2d7bf0cae30f5ba310609b428763a9ec59ba87d0aa519a985049f6",
+          "bytes": 49106,
+          "upstream_path": "moveit_ros/planning_interface/move_group_interface/include/moveit/move_group_interface/move_group_interface.hpp"
+        }
+      ]
+    },
+    {
+      "repo": "tonyzhaozh/act",
+      "commit": "742c753c0d4a5d87076c8f69e5628c79a8cc5488",
+      "files": [
+        {
+          "url": "https://raw.githubusercontent.com/tonyzhaozh/act/742c753c0d4a5d87076c8f69e5628c79a8cc5488/README.md",
+          "accessed_utc": "2026-10-12T05:57:36.078965+00:00",
+          "status": 200,
+          "sha256": "5059f601c1f0409556fd467150b99e93208de5d5594e9049f87ca92b24a5e7a2",
+          "bytes": 3500,
+          "upstream_path": "README.md"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/tonyzhaozh/act/742c753c0d4a5d87076c8f69e5628c79a8cc5488/LICENSE",
+          "accessed_utc": "2026-10-12T05:57:36.271416+00:00",
+          "status": 200,
+          "sha256": "4666c312da313e6c46929f6695d06cf98a2e7359b9c7dcbb0ea232d01b32cd42",
+          "bytes": 1069,
+          "upstream_path": "LICENSE"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/tonyzhaozh/act/742c753c0d4a5d87076c8f69e5628c79a8cc5488/policy.py",
+          "accessed_utc": "2026-10-12T05:58:20.853181+00:00",
+          "status": 200,
+          "sha256": "352efca415ee0e31073a27ca91560195702d1e9b545e573a3a668a53f06dd127",
+          "bytes": 3277,
+          "upstream_path": "policy.py"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/tonyzhaozh/act/742c753c0d4a5d87076c8f69e5628c79a8cc5488/constants.py",
+          "accessed_utc": "2026-10-12T05:58:20.857647+00:00",
+          "status": 200,
+          "sha256": "2e27d4412e2b7e1f2e4148105fdf514d8c52ec6c8f1c86ef0549c475e8b91d86",
+          "bytes": 4021,
+          "upstream_path": "constants.py"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/tonyzhaozh/act/742c753c0d4a5d87076c8f69e5628c79a8cc5488/utils.py",
+          "accessed_utc": "2026-10-12T05:58:21.068354+00:00",
+          "status": 200,
+          "sha256": "71315de9e613024e781f089c2f46baa6a94be79daa97a45c8601829fc1badcec",
+          "bytes": 6969,
+          "upstream_path": "utils.py"
+        }
+      ]
+    },
+    {
+      "repo": "real-stanford/diffusion_policy",
+      "commit": "5ba07ac6661db573af695b419a7947ecb704690f",
+      "files": [
+        {
+          "url": "https://raw.githubusercontent.com/real-stanford/diffusion_policy/5ba07ac6661db573af695b419a7947ecb704690f/README.md",
+          "accessed_utc": "2026-10-12T05:57:36.127984+00:00",
+          "status": 200,
+          "sha256": "51b6717d694a4ea4b476cf07c64651dc58643402beb0a27cda38a87cc58334b0",
+          "bytes": 25219,
+          "upstream_path": "README.md"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/real-stanford/diffusion_policy/5ba07ac6661db573af695b419a7947ecb704690f/LICENSE",
+          "accessed_utc": "2026-10-12T05:57:36.323166+00:00",
+          "status": 200,
+          "sha256": "304e99a48271e10820f71a1b86ef395c06c100d7f68dd1d308790d1064fc4d41",
+          "bytes": 1106,
+          "upstream_path": "LICENSE"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/real-stanford/diffusion_policy/5ba07ac6661db573af695b419a7947ecb704690f/diffusion_policy/policy/base_image_policy.py",
+          "accessed_utc": "2026-10-12T05:58:21.081427+00:00",
+          "status": 200,
+          "sha256": "32fd3fe35e2827f4472e195381e642dd8d78f4f0038f4f9625e0128c76e1aecd",
+          "bytes": 815,
+          "upstream_path": "diffusion_policy/policy/base_image_policy.py"
+        }
+      ]
+    },
+    {
+      "repo": "openvla/openvla",
+      "commit": "c8f03f48af692657d3060c19588038c7220e9af9",
+      "files": [
+        {
+          "url": "https://raw.githubusercontent.com/openvla/openvla/c8f03f48af692657d3060c19588038c7220e9af9/README.md",
+          "accessed_utc": "2026-10-12T05:57:36.037568+00:00",
+          "status": 200,
+          "sha256": "ba8e9a2884e38a8000dafc98af4116512e37b0e143dad2f940100482bfd6b75c",
+          "bytes": 38458,
+          "upstream_path": "README.md"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/openvla/openvla/c8f03f48af692657d3060c19588038c7220e9af9/LICENSE",
+          "accessed_utc": "2026-10-12T05:57:36.228916+00:00",
+          "status": 200,
+          "sha256": "c4ee2ba5958af03d74b1d3dfa174e3749171d689fb4c23cc170749c05ae3eeb5",
+          "bytes": 1105,
+          "upstream_path": "LICENSE"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/openvla/openvla/c8f03f48af692657d3060c19588038c7220e9af9/prismatic/extern/hf/modeling_prismatic.py",
+          "accessed_utc": "2026-10-12T05:58:21.075943+00:00",
+          "status": 200,
+          "sha256": "9ce241c5ca09a4bed73654d0ca509baaff0fc5887d0bdd62e360ca8254f7794a",
+          "bytes": 26062,
+          "upstream_path": "prismatic/extern/hf/modeling_prismatic.py"
+        }
+      ]
+    },
+    {
+      "repo": "NVlabs/FoundationPose",
+      "commit": "a1b694b83e633c2cb6115b9063d940a687759392",
+      "files": [
+        {
+          "url": "https://raw.githubusercontent.com/NVlabs/FoundationPose/a1b694b83e633c2cb6115b9063d940a687759392/README.md",
+          "accessed_utc": "2026-10-12T05:57:36.007442+00:00",
+          "error": "HTTP Error 404: Not Found",
+          "upstream_path": "README.md"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/NVlabs/FoundationPose/a1b694b83e633c2cb6115b9063d940a687759392/LICENSE",
+          "accessed_utc": "2026-10-12T05:57:36.229508+00:00",
+          "status": 200,
+          "sha256": "0de51abc6b73e24724858239efc42cfeada5d9e7c911cf7eff077bd9a23dec62",
+          "bytes": 4352,
+          "upstream_path": "LICENSE"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/NVlabs/FoundationPose/a1b694b83e633c2cb6115b9063d940a687759392/readme.md",
+          "accessed_utc": "2026-10-12T05:58:20.851984+00:00",
+          "status": 200,
+          "sha256": "77dff29225aa2e53b48b7444afa5e25a1573f22a1eef497c61da212511dc086f",
+          "bytes": 10937,
+          "upstream_path": "readme.md"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/NVlabs/FoundationPose/a1b694b83e633c2cb6115b9063d940a687759392/run_demo.py",
+          "accessed_utc": "2026-10-12T05:58:20.852298+00:00",
+          "status": 200,
+          "sha256": "ff7fa1caee76e36ecc3a5ab6abe86f20ad96e3a98dda42be6d41666bcdc7c31b",
+          "bytes": 3242,
+          "upstream_path": "run_demo.py"
+        }
+      ]
+    },
+    {
+      "repo": "morluto/rea",
+      "commit": "69e097a8ca256ab97ee4b2883739447784a5f90e",
+      "files": [
+        {
+          "url": "https://raw.githubusercontent.com/morluto/rea/69e097a8ca256ab97ee4b2883739447784a5f90e/README.md",
+          "accessed_utc": "2026-10-12T05:57:36.061217+00:00",
+          "status": 200,
+          "sha256": "7fb18a3893167e6c9f8010936c686f6b3846b20b91c91ac3e9f39d416be03510",
+          "bytes": 18687,
+          "upstream_path": "README.md"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/morluto/rea/69e097a8ca256ab97ee4b2883739447784a5f90e/LICENSE",
+          "accessed_utc": "2026-10-12T05:57:36.276545+00:00",
+          "status": 200,
+          "sha256": "798f9e4d18e49b30bf2f12696c8ced73dc4e1413da375a333d01281543a1ea8b",
+          "bytes": 1064,
+          "upstream_path": "LICENSE"
+        }
+      ]
+    }
+  ]
+}
