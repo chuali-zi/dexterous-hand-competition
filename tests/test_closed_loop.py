@@ -147,7 +147,15 @@ class ExperimentTests(unittest.TestCase):
             first = run_trial(root/'a', 'nominal', 8)
             second = run_trial(root/'b', 'nominal', 8)
             self.assertEqual(first, second)
-            self.assertEqual((root/'a/events.jsonl').read_bytes(), (root/'b/events.jsonl').read_bytes())
+            def semantics(path):
+                return [{k: v for k, v in json.loads(line).items()
+                         if k not in ('sha256', 'previous_sha256', 'manifest_sha256')}
+                        for line in path.read_text().splitlines()]
+            # V2 binds the manifest, whose replay command includes each output
+            # path. Sensor/action content remains deterministic across paths.
+            self.assertEqual(semantics(root/'a/events.jsonl'), semantics(root/'b/events.jsonl'))
+            for frame in (root/'a/frames').glob('*.ppm'):
+                self.assertEqual(frame.read_bytes(), (root/'b/frames'/frame.name).read_bytes())
 
     def test_manifest_records_actual_checkout_and_runtime_fingerprints(self):
         identity = code_identity()

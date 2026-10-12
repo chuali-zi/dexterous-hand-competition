@@ -6,15 +6,35 @@ object pose/held-state or fault labels. It does not import this module.
 """
 import math
 import random
+from dataclasses import dataclass, asdict, replace
 from .contracts import ActionStatus
-from .geometry import distance, look_at
+from .geometry import distance, look_at, finite
 
 SCENARIOS = (
     'nominal', 'empty_grasp_once', 'slip_once', 'occluded_start',
     'release_stuck_once', 'drift_after_release', 'move_timeout',
     'motion_failed', 'stale_after_close', 'pose_leak', 'camera_skew',
     'occluded_always', 'duplicate_after_close', 'continuous_drift',
+    'slip_during_transit', 'false_move_complete', 'sparse_frames',
 )
+
+
+@dataclass(frozen=True)
+class SensorNoise:
+    pixel_jitter_px: int = 0
+    calibration_shift_m: float = 0.0
+
+    def __post_init__(self):
+        if type(self.pixel_jitter_px) is not int or not 0 <= self.pixel_jitter_px <= 8:
+            raise ValueError('pixel jitter must be an integer from 0 to 8')
+        if not finite(self.calibration_shift_m) or abs(self.calibration_shift_m) > 0.05:
+            raise ValueError('synthetic calibration shift must be finite and <=50mm')
+
+    @classmethod
+    def from_dict(cls, value):
+        if not isinstance(value, dict) or set(value)-{'pixel_jitter_px', 'calibration_shift_m'}:
+            raise ValueError('unknown sensor-noise configuration')
+        return cls(**value)
 
 
 class SyntheticBackend:
@@ -24,16 +44,22 @@ class SyntheticBackend:
         look_at('camera_right', (0.38, -0.50, 0.65), (0, 0.40, 0.05)),
     )
 
-    def __init__(self, scenario='nominal', seed=0):
+    def __init__(self, scenario='nominal', seed=0, noise=None):
+        self.noise = noise or SensorNoise()
+        self._render_cameras = type(self).cameras
+        self.cameras = tuple(replace(c, origin=(c.origin[0]+self.noise.calibration_shift_m, *c.origin[1:]))
+                             for c in self._render_cameras)
         if scenario not in SCENARIOS: raise ValueError('unknown synthetic scenario')
         self.environment = {
             'feedback_level': 'synthetic_rgb_kinematic',
-            'backend_version': '1', 'official_platform': False,
+            'backend_version': '2', 'official_platform': False,
             'contact_physics': False, 'robot_model': 'point_tip_not_LBot',
             'scene': scenario, 'seed': seed,
             'camera_calibration': 'synthetic_pinhole_not_platform_calibration',
+            'sensor_noise': asdict(self.noise),
         }
         self._scenario = scenario; self._rng = random.Random(seed)
+        self._pixel_rng = random.Random(seed+100000)
         self._time = 0.0; self._sequence = 0
         self._tip = (0.0, 0.36, 0.23)
         self._block = (-0.16+self._rng.uniform(-0.015, 0.015),
@@ -64,7 +90,7 @@ class SyntheticBackend:
             self._pending = None
 
     def _advance(self):
-        self._time = round(self._time+0.1, 6); self._sequence += 1
+        self._time = round(self._time+(0.5 if self._scenario == 'sparse_frames' else 0.1), 6); self._sequence += 1
         if self._pending:
             record = self._actions[self._pending]; action = record['action']
             if self._scenario == 'move_timeout' and self._moves == 1: return
@@ -73,9 +99,11 @@ class SyntheticBackend:
                     record['status'] = ActionStatus('failed', 'synthetic actuator failure')
                 else:
                     if action.kind == 'move':
-                        self._tip = tuple(action.target_m)
+                        if not (self._scenario == 'false_move_complete' and self._moves == 1):
+                            self._tip = tuple(action.target_m)
                         if self._held:
-                            if self._scenario == 'slip_once' and not self._slip_used and self._tip[2] > 0.12:
+                            if (not self._slip_used and ((self._scenario == 'slip_once' and self._tip[2] > 0.12)
+                                    or (self._scenario == 'slip_during_transit' and self._moves == 5))):
                                 self._slip_used = True; self._held = False
                                 self._block = (self._tip[0], self._tip[1], 0.025)
                             else: self._block = self._tip
@@ -107,7 +135,9 @@ class SyntheticBackend:
         def rectangle(point, half_width, half_height, color):
             u, v = camera.project(point)
             # Exact RGB pixels; no hidden segmentation/pose accompanies them.
-            cx = round(u); cy = round(v)
+            jitter = self.noise.pixel_jitter_px
+            cx = round(u)+self._pixel_rng.randint(-jitter, jitter)
+            cy = round(v)+self._pixel_rng.randint(-jitter, jitter)
             for y in range(max(0, cy-half_height), min(camera.height, cy+half_height+1)):
                 for x in range(max(0, cx-half_width), min(camera.width, cx+half_width+1)):
                     index = 3*(y*camera.width+x); pixels[index:index+3] = bytes(color)
@@ -127,9 +157,10 @@ class SyntheticBackend:
             frames.append({'camera_id': camera.name, 'frame_id': camera.name+'_optical',
                            'sequence': 1 if duplicate else self._sequence,
                            'captured_s': stamp, 'width': camera.width, 'height': camera.height,
-                           'encoding': 'rgb8', 'rgb': self._render(camera, hidden)})
-        raw = {'schema_version': 1, 'producer': self.producer, 'calibration_id': 'synthetic-pinhole-v1',
+                           'encoding': 'rgb8', 'rgb': self._render(self._render_cameras[i], hidden)})
+        raw = {'schema_version': 2, 'producer': self.producer, 'calibration_id': 'synthetic-pinhole-v1',
                'time_s': self._time, 'frames': frames,
-               'robot': {'frame_id': 'base_link', 'tip_position_m': self._tip}}
+               'robot': {'frame_id': 'base_link', 'tip_position_m': self._tip, 'producer': self.producer,
+                         'captured_s': self._time, 'sequence': self._sequence}}
         if self._scenario == 'pose_leak': raw['ground_truth_object_pose'] = self._block
         return raw

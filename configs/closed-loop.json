@@ -1,0 +1,46 @@
+{
+  "target": [
+    0.16,
+    0.42,
+    0.025
+  ],
+  "safe_height_m": 0.2,
+  "transit_min_height_m": 0.15,
+  "action_timeout_s": 1.8,
+  "trial_timeout_s": 30.0,
+  "wall_timeout_s": 60.0,
+  "settle_s": 3.0,
+  "stability_m": 0.015,
+  "goal_tolerance_m": 0.025,
+  "table_center_height_m": 0.025,
+  "table_height_tolerance_m": 0.012,
+  "lift_min_m": 0.06,
+  "grasp_distance_m": 0.03,
+  "hand_separation_m": 0.08,
+  "motion_completion_m": 0.015,
+  "max_observation_age_s": 0.25,
+  "max_sensor_skew_s": 0.03,
+  "max_observation_gap_s": 0.25,
+  "stereo_residual_m": 0.02,
+  "recovery_enabled": true,
+  "supply_xy": [
+    -0.3,
+    -0.05,
+    0.2,
+    0.6
+  ],
+  "build_xy": [
+    0.05,
+    0.3,
+    0.2,
+    0.6
+  ],
+  "workspace": [
+    -0.35,
+    0.35,
+    0.1,
+    0.65,
+    0.005,
+    0.3
+  ]
+}

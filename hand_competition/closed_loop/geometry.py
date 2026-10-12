@@ -1,20 +1,39 @@
 """Small pinhole/stereo geometry implementation, independent of robot SDKs."""
 from dataclasses import dataclass
 import math
+import re
 
 
-def add(a, b): return tuple(x + y for x, y in zip(a, b))
-def sub(a, b): return tuple(x - y for x, y in zip(a, b))
-def mul(a, k): return tuple(x * k for x in a)
-def dot(a, b): return sum(x * y for x, y in zip(a, b))
+def finite(value):
+    if type(value) not in (int, float):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
+
+
+def vector(value, size, label):
+    if not isinstance(value, (tuple, list)) or len(value) != size or not all(finite(x) for x in value):
+        raise ValueError(f'{label}: expected {size} finite coordinates')
+    return tuple(value)
+
+
+def add(a, b): return tuple(x+y for x, y in zip(vector(a, 3, 'vector'), vector(b, 3, 'vector')))
+def sub(a, b): return tuple(x-y for x, y in zip(vector(a, 3, 'vector'), vector(b, 3, 'vector')))
+def mul(a, k):
+    if not finite(k): raise ValueError('invalid vector scale')
+    return tuple(x*k for x in vector(a, 3, 'vector'))
+def dot(a, b): return sum(x*y for x, y in zip(vector(a, 3, 'vector'), vector(b, 3, 'vector')))
 def norm(a): return math.sqrt(dot(a, a))
 def distance(a, b): return norm(sub(a, b))
 def cross(a, b):
+    a = vector(a, 3, 'vector'); b = vector(b, 3, 'vector')
     return (a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0])
 def unit(a):
     length = norm(a)
     if length < 1e-12: raise ValueError('zero vector')
-    return mul(a, 1 / length)
+    return mul(a, 1/length)
 
 
 @dataclass(frozen=True)
@@ -31,19 +50,26 @@ class Camera:
     calibration_id: str = 'synthetic-pinhole-v1'
 
     def __post_init__(self):
-        values = (*self.origin, *(v for row in self.rotation for v in row),
-                  self.fx, self.fy, self.cx, self.cy)
-        if len(self.origin) != 3 or len(self.rotation) != 3 or any(len(r) != 3 for r in self.rotation):
-            raise ValueError('invalid camera transform dimensions')
-        if not all(type(v) in (int, float) and math.isfinite(v) for v in values):
-            raise ValueError('non-finite camera calibration')
-        if self.fx <= 0 or self.fy <= 0 or self.width <= 0 or self.height <= 0:
-            raise ValueError('invalid camera intrinsics')
-        for i, row in enumerate(self.rotation):
-            for j, other in enumerate(self.rotation):
-                if abs(dot(row, other) - int(i == j)) > 1e-6:
+        if not isinstance(self.name, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,80}', self.name):
+            raise ValueError('camera name must be a safe internal identifier')
+        if not isinstance(self.calibration_id, str) or not self.calibration_id.strip():
+            raise ValueError('invalid calibration identifier')
+        origin = vector(self.origin, 3, 'camera origin')
+        if not isinstance(self.rotation, (tuple, list)) or len(self.rotation) != 3:
+            raise ValueError('invalid camera rotation dimensions')
+        rotation = tuple(vector(row, 3, 'camera rotation row') for row in self.rotation)
+        object.__setattr__(self, 'origin', origin)
+        object.__setattr__(self, 'rotation', rotation)
+        if not all(finite(v) for v in (self.fx, self.fy, self.cx, self.cy)):
+            raise ValueError('non-finite camera intrinsics')
+        if (self.fx <= 0 or self.fy <= 0 or type(self.width) is not int or type(self.height) is not int
+                or self.width <= 0 or self.height <= 0):
+            raise ValueError('invalid camera intrinsics/image dimensions')
+        for i, row in enumerate(rotation):
+            for j, other in enumerate(rotation):
+                if abs(dot(row, other)-int(i == j)) > 1e-6:
                     raise ValueError('camera rotation is not orthonormal')
-        if distance(cross(self.rotation[0], self.rotation[1]), self.rotation[2]) > 1e-6:
+        if distance(cross(rotation[0], rotation[1]), rotation[2]) > 1e-6:
             raise ValueError('camera rotation is not right handed')
 
     def project(self, point):
@@ -53,6 +79,9 @@ class Camera:
         return (self.fx*x/z + self.cx, self.fy*y/z + self.cy)
 
     def ray(self, uv):
+        uv = vector(uv, 2, 'pixel')
+        if not 0 <= uv[0] < self.width or not 0 <= uv[1] < self.height:
+            raise ValueError('pixel outside image')
         optical = ((uv[0]-self.cx)/self.fx, (uv[1]-self.cy)/self.fy, 1.0)
         base = tuple(sum(self.rotation[j][i]*optical[j] for j in range(3)) for i in range(3))
         return self.origin, unit(base)
@@ -66,6 +95,8 @@ def look_at(name, origin, target):
 
 
 def triangulate(first, uv1, second, uv2, max_residual_m=0.02):
+    if not finite(max_residual_m) or max_residual_m <= 0:
+        raise ValueError('invalid stereo residual threshold')
     o1, d1 = first.ray(uv1); o2, d2 = second.ray(uv2)
     w = sub(o1, o2); b = dot(d1, d2); denominator = 1-b*b
     if denominator < 0.0025: raise ValueError('stereo rays almost parallel')

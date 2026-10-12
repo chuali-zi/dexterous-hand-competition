@@ -52,7 +52,7 @@ def components(frame, minimum_area=20):
     return result
 
 
-def estimate_single_block(observation, cameras):
+def estimate_single_block(observation, cameras, max_residual_m=0.02):
     by_name = {camera.name: camera for camera in cameras}
     if len(observation.frames) != 2: raise VisionError('single-block baseline requires two calibrated RGB views')
     found = [components(frame) for frame in observation.frames]
@@ -62,7 +62,7 @@ def estimate_single_block(observation, cameras):
     if first.color != second.color: raise VisionError('stereo color correspondence mismatch')
     try:
         point, residual = triangulate(by_name[observation.frames[0].camera_id], first.centroid,
-                                      by_name[observation.frames[1].camera_id], second.centroid)
+                                      by_name[observation.frames[1].camera_id], second.centroid, max_residual_m)
     except ValueError as error: raise VisionError(str(error)) from error
     if not (-0.4 <= point[0] <= 0.4 and 0.05 <= point[1] <= 0.75 and -0.02 <= point[2] <= 0.35):
         raise VisionError('visual estimate outside experiment bounds')

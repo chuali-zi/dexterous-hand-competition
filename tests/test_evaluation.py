@@ -102,7 +102,7 @@ class EvaluationTests(unittest.TestCase):
         self.assertEqual(evaluate(brick_record(0))['raw_score'], 0)
 
     def test_nonfinite_negative_boolean_or_overtime_duration_rejected(self):
-        for value in (float('nan'), float('inf'), -1, True, '240', 300.001):
+        for value in (float('nan'), float('inf'), 10**400, -1, True, '240', 300.001):
             record = brick_record(1)
             record['elapsed_s'] = value
             with self.subTest(value=value), self.assertRaises(ValueError):

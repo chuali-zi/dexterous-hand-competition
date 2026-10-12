@@ -4,6 +4,21 @@ import json
 from pathlib import Path
 
 
+def decode_json(text):
+    def unique(pairs):
+        value = {}
+        for key, item in pairs:
+            if key in value: raise ValueError(f'duplicate JSON key: {key}')
+            value[key] = item
+        return value
+    def invalid(value): raise ValueError(f'non-finite JSON constant: {value}')
+    return json.loads(text, object_pairs_hook=unique, parse_constant=invalid)
+
+
+def load_json(path):
+    return decode_json(Path(path).read_text(encoding='utf-8'))
+
+
 def canonical(value):
     return json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False, separators=(',', ':'))
 
@@ -28,13 +43,19 @@ class Trace:
         self.root = Path(directory)
         self.root.mkdir(parents=True, exist_ok=False)
         (self.root/'frames').mkdir()
-        (self.root/'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2, allow_nan=False)+'\n')
+        self.version = manifest.get('schema_version', 1)
+        manifest_path = self.root/'manifest.json'
+        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2, allow_nan=False)+'\n')
+        self.manifest_hash = digest(manifest_path.read_bytes())
+        if self.version >= 2:
+            (self.root/'config.json').write_text(json.dumps(manifest['config'], indent=2, allow_nan=False)+'\n')
         self._stream = (self.root/'events.jsonl').open('w', encoding='utf-8')
         self._previous = '0'*64; self.count = 0; self.observations = 0
 
     def event(self, kind, time_s, **payload):
         event = {'index': self.count, 'kind': kind, 'time_s': time_s,
                  'payload': payload, 'previous_sha256': self._previous}
+        if self.version >= 2: event['manifest_sha256'] = self.manifest_hash
         event['sha256'] = digest(canonical(event).encode('utf-8'))
         self._stream.write(canonical(event)+'\n'); self._stream.flush()
         self._previous = event['sha256']; self.count += 1
@@ -48,9 +69,15 @@ class Trace:
                            'sequence': frame.sequence, 'captured_s': frame.captured_s,
                            'width': frame.width, 'height': frame.height, 'encoding': 'rgb8',
                            'file': name, 'file_sha256': digest((self.root/name).read_bytes())})
+        robot = {'frame_id': 'base_link', 'tip_position_m': observation.tip}
+        version = 1
+        if observation.robot_captured_s is not None:
+            version = 2
+            robot.update(producer=observation.robot_producer, captured_s=observation.robot_captured_s,
+                         sequence=observation.robot_sequence)
         self.event('observation', observation.time_s, producer=self.producer,
-                   calibration_id=observation.calibration_id, frames=frames,
-                   robot={'frame_id': 'base_link', 'tip_position_m': observation.tip},
+                   observation_schema_version=version, sensor_time_s=observation.sensor_time_s,
+                   calibration_id=observation.calibration_id, frames=frames, robot=robot,
                    visual_position_m=estimate.position_m if estimate else None,
                    stereo_residual_m=estimate.stereo_residual_m if estimate else None,
                    vision_error=error)
@@ -63,7 +90,9 @@ class Trace:
     @producer.setter
     def producer(self, value): self._producer = value
 
-    def finish(self, result):
-        self.event('result', result['elapsed_s'], result=result)
-        self._stream.close()
-        (self.root/'result.json').write_text(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False)+'\n')
+    def finish(self, result, time_s=None):
+        try:
+            self.event('result', result['elapsed_s'] if time_s is None else time_s, result=result)
+            (self.root/'result.json').write_text(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False)+'\n')
+        finally:
+            self._stream.close()

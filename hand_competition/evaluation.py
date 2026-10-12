@@ -19,7 +19,11 @@ def _text(value, label):
 
 
 def _number(value, label, minimum=0, maximum=None):
-    if type(value) not in (int, float) or not math.isfinite(value):
+    valid = type(value) in (int, float)
+    if valid:
+        try: valid = math.isfinite(value)
+        except OverflowError: valid = False
+    if not valid:
         raise ValueError(f"{label}: expected finite number")
     if value < minimum or (maximum is not None and value > maximum):
         raise ValueError(f"{label}: outside supported range")

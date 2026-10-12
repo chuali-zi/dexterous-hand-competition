@@ -1,0 +1,1642 @@
+{
+  "date": "2026-10-12",
+  "scope": "offline_only_platform_measurements_deferred",
+  "feedback_level": "offline_analytic_and_synthetic_rgb",
+  "official_platform": false,
+  "official_score": null,
+  "review_baseline_commit": "e33ccb441a0a75a78681eb640441574e99a768ac",
+  "independent_revalidation_status": "pending_parent_reviewer_after_repair_commit",
+  "tested_runtime": {
+    "git_commit": "e33ccb441a0a75a78681eb640441574e99a768ac",
+    "dirty_tree": true,
+    "runtime_files": {
+      "__init__.py": "c97b2ee03a290716010891846cea5fbe0edf07f763f94e96e49d341e9e04098a",
+      "__main__.py": "c981c7cdc98ab848875589af36674311c62a5db11ca7535fb6b01addbe558634",
+      "closed_loop/__init__.py": "f52f2011888ef1f4584bffe3de9923feb5111ead3752cda93a9bb43879bf518d",
+      "closed_loop/__main__.py": "da06136c40c8ec7906b42f6ff5c87887775f12eb9340cc5b66b2876a67f236e6",
+      "closed_loop/artifacts.py": "ee0d09e063a3289e4e070df83ee528746d449f3643f46f6432766ade445902bb",
+      "closed_loop/contracts.py": "90537b8e3b5af488bb797e3660fbcbb15d06ee450f6d2f274e8b507dcc603c96",
+      "closed_loop/controller.py": "037ddbe28eb08f7a1aaa2a0e4c9abd5a11cb02167e02a5acffb2e63d09bbcdac",
+      "closed_loop/experiments.py": "6547caba0afc4061266fe5a897af23ab9358450632f971e61ebd1b0571a9c9f2",
+      "closed_loop/geometry.py": "ff30a70f3e32ba0ac6d6fe4f2307d4cf73117169d89dc73b0476eca996a7a009",
+      "closed_loop/preflight.py": "98f80d6278ee5f9f928f632bafdf7b4a3d2151f7df386a4574f9a0f247b191ff",
+      "closed_loop/synthetic.py": "e5f7d790f357b2fa12d9296767278e14be2e6fe371db83d6f73c6174ce4d83eb",
+      "closed_loop/vision.py": "c2a94c21e63d393b3622bd4f565a8711619749f25417e2c05a91a840d8b46c69",
+      "evaluation.py": "9a439d30dc366dc3a0de2aa45186a8f070382c30b42a3c2c5a81176b245f4613"
+    },
+    "runtime_tree_sha256": "6f1449b2017b24dd83d539e626d52a0ddcdeee2530a5c9901df577c7ecc9ebe1"
+  },
+  "review_probes": [
+    {
+      "probe": "sparse-settling",
+      "result": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "official_score": null,
+        "task": "single_block_pick_place",
+        "success": false,
+        "elapsed_s": 32.5,
+        "terminal_failure": "trial_timeout",
+        "failures": [
+          {
+            "category": "trial_timeout",
+            "phase": "settling",
+            "detail": "experiment deadline reached"
+          }
+        ],
+        "stop_request_succeeded": true,
+        "physical_stop_verified": false,
+        "recoveries": 0,
+        "action_count": 9,
+        "stability_verified_s": 0.0,
+        "started_in_configured_supply": true,
+        "final_visual_position_m": [
+          0.159373821485221,
+          0.4251891578247129,
+          0.02207225245708211
+        ],
+        "trace_complete": true
+      },
+      "replay": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "observations_recomputed": 45,
+        "rejected_observation_events": 0,
+        "actions_recorded": 9,
+        "grasp_evidence_reconstructed": 1,
+        "trace_verified": true,
+        "visual_evidence_recomputed": true,
+        "control_record_consistent": true,
+        "sensor_authenticity_verified": false,
+        "physical_action_execution_verified": false,
+        "runtime_identity_checked": false,
+        "manifest_bound": false,
+        "robot_timestamps_checked": true,
+        "evidence_contract": "v1",
+        "recorded_success": false
+      }
+    },
+    {
+      "probe": "over-deadline-settling",
+      "result": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "official_score": null,
+        "task": "single_block_pick_place",
+        "success": false,
+        "elapsed_s": 34.8,
+        "terminal_failure": "trial_timeout",
+        "failures": [
+          {
+            "category": "trial_timeout",
+            "phase": "settling",
+            "detail": "experiment deadline reached"
+          }
+        ],
+        "stop_request_succeeded": true,
+        "physical_stop_verified": false,
+        "recoveries": 0,
+        "action_count": 9,
+        "stability_verified_s": 0.0,
+        "started_in_configured_supply": true,
+        "final_visual_position_m": [
+          0.159373821485221,
+          0.4251891578247129,
+          0.02207225245708211
+        ],
+        "trace_complete": true
+      },
+      "replay": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "observations_recomputed": 37,
+        "rejected_observation_events": 0,
+        "actions_recorded": 9,
+        "grasp_evidence_reconstructed": 1,
+        "trace_verified": true,
+        "visual_evidence_recomputed": true,
+        "control_record_consistent": true,
+        "sensor_authenticity_verified": false,
+        "physical_action_execution_verified": false,
+        "runtime_identity_checked": false,
+        "manifest_bound": false,
+        "robot_timestamps_checked": true,
+        "evidence_contract": "v1",
+        "recorded_success": false
+      }
+    },
+    {
+      "probe": "late-action-complete",
+      "result": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "official_score": null,
+        "task": "single_block_pick_place",
+        "success": false,
+        "elapsed_s": 2.2,
+        "terminal_failure": "action_timeout",
+        "failures": [
+          {
+            "category": "action_timeout",
+            "phase": "raise_for_approach",
+            "detail": "raise_for_approach: command exceeded deadline"
+          }
+        ],
+        "stop_request_succeeded": true,
+        "physical_stop_verified": false,
+        "recoveries": 0,
+        "action_count": 1,
+        "stability_verified_s": 0.0,
+        "started_in_configured_supply": true,
+        "final_visual_position_m": [
+          -0.14964846716259259,
+          0.4361430619457303,
+          0.019359902275555174
+        ],
+        "trace_complete": true
+      },
+      "replay": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "observations_recomputed": 3,
+        "rejected_observation_events": 0,
+        "actions_recorded": 1,
+        "grasp_evidence_reconstructed": 0,
+        "trace_verified": true,
+        "visual_evidence_recomputed": true,
+        "control_record_consistent": true,
+        "sensor_authenticity_verified": false,
+        "physical_action_execution_verified": false,
+        "runtime_identity_checked": false,
+        "manifest_bound": false,
+        "robot_timestamps_checked": true,
+        "evidence_contract": "v1",
+        "recorded_success": false
+      }
+    },
+    {
+      "probe": "hand-not-retreated",
+      "result": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "official_score": null,
+        "task": "single_block_pick_place",
+        "success": false,
+        "elapsed_s": 3.6,
+        "terminal_failure": "motion_not_verified",
+        "failures": [
+          {
+            "category": "motion_not_verified",
+            "phase": "retreat",
+            "detail": "reported completion without measured target arrival"
+          }
+        ],
+        "stop_request_succeeded": true,
+        "physical_stop_verified": false,
+        "recoveries": 0,
+        "action_count": 9,
+        "stability_verified_s": 0.0,
+        "started_in_configured_supply": true,
+        "final_visual_position_m": [
+          0.159373821485221,
+          0.4251891578247129,
+          0.02207225245708211
+        ],
+        "trace_complete": true
+      },
+      "replay": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "observations_recomputed": 36,
+        "rejected_observation_events": 0,
+        "actions_recorded": 9,
+        "grasp_evidence_reconstructed": 1,
+        "trace_verified": true,
+        "visual_evidence_recomputed": true,
+        "control_record_consistent": true,
+        "sensor_authenticity_verified": false,
+        "physical_action_execution_verified": false,
+        "runtime_identity_checked": false,
+        "manifest_bound": false,
+        "robot_timestamps_checked": true,
+        "evidence_contract": "v1",
+        "recorded_success": false
+      }
+    },
+    {
+      "probe": "blind-transit",
+      "result": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "official_score": null,
+        "task": "single_block_pick_place",
+        "success": false,
+        "elapsed_s": 2.2,
+        "terminal_failure": "carried_object_unobserved",
+        "failures": [
+          {
+            "category": "carried_object_unobserved",
+            "phase": "target_transit",
+            "detail": "lost RGB evidence while carrying"
+          }
+        ],
+        "stop_request_succeeded": true,
+        "physical_stop_verified": false,
+        "recoveries": 0,
+        "action_count": 6,
+        "stability_verified_s": 0.0,
+        "started_in_configured_supply": true,
+        "final_visual_position_m": null,
+        "trace_complete": true
+      },
+      "replay": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "observations_recomputed": 22,
+        "rejected_observation_events": 0,
+        "actions_recorded": 6,
+        "grasp_evidence_reconstructed": 1,
+        "trace_verified": true,
+        "visual_evidence_recomputed": true,
+        "control_record_consistent": true,
+        "sensor_authenticity_verified": false,
+        "physical_action_execution_verified": false,
+        "runtime_identity_checked": false,
+        "manifest_bound": false,
+        "robot_timestamps_checked": true,
+        "evidence_contract": "v1",
+        "recorded_success": false
+      }
+    },
+    {
+      "probe": "huge-tip",
+      "result": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "official_score": null,
+        "task": "single_block_pick_place",
+        "success": false,
+        "elapsed_s": 0.1,
+        "terminal_failure": "invalid_observation",
+        "failures": [
+          {
+            "category": "invalid_observation",
+            "phase": "initial",
+            "detail": "robot tip: expected 3 finite coordinates"
+          }
+        ],
+        "stop_request_succeeded": true,
+        "physical_stop_verified": false,
+        "recoveries": 0,
+        "action_count": 0,
+        "stability_verified_s": 0.0,
+        "started_in_configured_supply": false,
+        "final_visual_position_m": null,
+        "trace_complete": true
+      },
+      "replay": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "observations_recomputed": 0,
+        "rejected_observation_events": 1,
+        "actions_recorded": 0,
+        "grasp_evidence_reconstructed": 0,
+        "trace_verified": true,
+        "visual_evidence_recomputed": true,
+        "control_record_consistent": true,
+        "sensor_authenticity_verified": false,
+        "physical_action_execution_verified": false,
+        "runtime_identity_checked": false,
+        "manifest_bound": false,
+        "robot_timestamps_checked": false,
+        "evidence_contract": "v1",
+        "recorded_success": false
+      }
+    },
+    {
+      "probe": "invalid-status",
+      "result": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "official_score": null,
+        "task": "single_block_pick_place",
+        "success": false,
+        "elapsed_s": 0.3,
+        "terminal_failure": "action_protocol_failure",
+        "failures": [
+          {
+            "category": "action_protocol_failure",
+            "phase": "raise_for_approach",
+            "detail": "invalid action status"
+          }
+        ],
+        "stop_request_succeeded": true,
+        "physical_stop_verified": false,
+        "recoveries": 0,
+        "action_count": 1,
+        "stability_verified_s": 0.0,
+        "started_in_configured_supply": true,
+        "final_visual_position_m": [
+          -0.14964846716259259,
+          0.4361430619457303,
+          0.019359902275555174
+        ],
+        "trace_complete": true
+      },
+      "replay": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "observations_recomputed": 3,
+        "rejected_observation_events": 0,
+        "actions_recorded": 1,
+        "grasp_evidence_reconstructed": 0,
+        "trace_verified": true,
+        "visual_evidence_recomputed": true,
+        "control_record_consistent": true,
+        "sensor_authenticity_verified": false,
+        "physical_action_execution_verified": false,
+        "runtime_identity_checked": false,
+        "manifest_bound": false,
+        "robot_timestamps_checked": true,
+        "evidence_contract": "v1",
+        "recorded_success": false
+      }
+    },
+    {
+      "probe": "no-actions-no-grasp-frames",
+      "rejected": true,
+      "reason": "grasp label contradicts reconstructed RGB"
+    },
+    {
+      "probe": "forged-grasp-coordinate",
+      "rejected": true,
+      "reason": "missing v2 event payload fields"
+    },
+    {
+      "probe": "missing-success-stop",
+      "rejected": true,
+      "reason": "missing/duplicate stop evidence"
+    },
+    {
+      "probe": "trailing-data-after-result",
+      "rejected": true,
+      "reason": "events after final result"
+    },
+    {
+      "probe": "manifest-changed",
+      "rejected": true,
+      "reason": "manifest binding mismatch"
+    }
+  ],
+  "analytic_profiles": [
+    {
+      "pixel_jitter_px": 0.0,
+      "common_extrinsic_shift_m": 0.0,
+      "fixtures": 18,
+      "accepted": 18,
+      "rejected": 0,
+      "error_median_m": 6.2662476575832016e-15,
+      "error_p95_m": 1.56825633951279e-14,
+      "error_max_m": 1.56825633951279e-14,
+      "residual_max_m": 3.1363800445660672e-15
+    },
+    {
+      "pixel_jitter_px": 0.0,
+      "common_extrinsic_shift_m": 0.005,
+      "fixtures": 18,
+      "accepted": 18,
+      "rejected": 0,
+      "error_median_m": 0.0050000000000000044,
+      "error_p95_m": 0.0050000000000014755,
+      "error_max_m": 0.0050000000000014755,
+      "residual_max_m": 3.1363800445660672e-15
+    },
+    {
+      "pixel_jitter_px": 0.0,
+      "common_extrinsic_shift_m": 0.02,
+      "fixtures": 18,
+      "accepted": 18,
+      "rejected": 0,
+      "error_median_m": 0.020000000000000004,
+      "error_p95_m": 0.02000000000000149,
+      "error_max_m": 0.02000000000000149,
+      "residual_max_m": 3.1363800445660672e-15
+    },
+    {
+      "pixel_jitter_px": 0.5,
+      "common_extrinsic_shift_m": 0.0,
+      "fixtures": 18,
+      "accepted": 18,
+      "rejected": 0,
+      "error_median_m": 0.01839546847908457,
+      "error_p95_m": 0.06502139722412455,
+      "error_max_m": 0.06502139722412455,
+      "residual_max_m": 0.007948899952767591
+    },
+    {
+      "pixel_jitter_px": 0.5,
+      "common_extrinsic_shift_m": 0.005,
+      "fixtures": 18,
+      "accepted": 18,
+      "rejected": 0,
+      "error_median_m": 0.01775324706956631,
+      "error_p95_m": 0.06513855255263037,
+      "error_max_m": 0.06513855255263037,
+      "residual_max_m": 0.007948899952767591
+    },
+    {
+      "pixel_jitter_px": 0.5,
+      "common_extrinsic_shift_m": 0.02,
+      "fixtures": 18,
+      "accepted": 18,
+      "rejected": 0,
+      "error_median_m": 0.024009664217573876,
+      "error_p95_m": 0.0677405183304275,
+      "error_max_m": 0.0677405183304275,
+      "residual_max_m": 0.007948899952767591
+    },
+    {
+      "pixel_jitter_px": 1.0,
+      "common_extrinsic_shift_m": 0.0,
+      "fixtures": 18,
+      "accepted": 18,
+      "rejected": 0,
+      "error_median_m": 0.03743607274153805,
+      "error_p95_m": 0.13619988523179993,
+      "error_max_m": 0.13619988523179993,
+      "residual_max_m": 0.015672845638925896
+    },
+    {
+      "pixel_jitter_px": 1.0,
+      "common_extrinsic_shift_m": 0.005,
+      "fixtures": 18,
+      "accepted": 18,
+      "rejected": 0,
+      "error_median_m": 0.036446363978317436,
+      "error_p95_m": 0.13621658876015214,
+      "error_max_m": 0.13621658876015214,
+      "residual_max_m": 0.015672845638925896
+    },
+    {
+      "pixel_jitter_px": 1.0,
+      "common_extrinsic_shift_m": 0.02,
+      "fixtures": 18,
+      "accepted": 18,
+      "rejected": 0,
+      "error_median_m": 0.03753626462543651,
+      "error_p95_m": 0.13736305908920057,
+      "error_max_m": 0.13736305908920057,
+      "residual_max_m": 0.015672845638925893
+    },
+    {
+      "pixel_jitter_px": 2.0,
+      "common_extrinsic_shift_m": 0.0,
+      "fixtures": 18,
+      "accepted": 15,
+      "rejected": 3,
+      "error_median_m": 0.03569492539021784,
+      "error_p95_m": 0.30075748465002117,
+      "error_max_m": 0.30075748465002117,
+      "residual_max_m": 0.01847917781233194
+    },
+    {
+      "pixel_jitter_px": 2.0,
+      "common_extrinsic_shift_m": 0.005,
+      "fixtures": 18,
+      "accepted": 15,
+      "rejected": 3,
+      "error_median_m": 0.03721213607016062,
+      "error_p95_m": 0.3007237661751176,
+      "error_max_m": 0.3007237661751176,
+      "residual_max_m": 0.01847917781233194
+    },
+    {
+      "pixel_jitter_px": 2.0,
+      "common_extrinsic_shift_m": 0.02,
+      "fixtures": 18,
+      "accepted": 15,
+      "rejected": 3,
+      "error_median_m": 0.045352797073532874,
+      "error_p95_m": 0.3011211391635665,
+      "error_max_m": 0.3011211391635665,
+      "residual_max_m": 0.01847917781233194
+    }
+  ],
+  "rgb_noise_trials": [
+    {
+      "name": "jitter-0-shift-0mm-seed-0",
+      "pixel_jitter_px": 0,
+      "calibration_shift_m": 0.0,
+      "seed": 0,
+      "result": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "official_score": null,
+        "task": "single_block_pick_place",
+        "success": true,
+        "elapsed_s": 6.7,
+        "terminal_failure": null,
+        "failures": [],
+        "stop_request_succeeded": true,
+        "physical_stop_verified": false,
+        "recoveries": 0,
+        "action_count": 9,
+        "stability_verified_s": 3.0,
+        "started_in_configured_supply": true,
+        "final_visual_position_m": [
+          0.159373821485221,
+          0.4251891578247129,
+          0.02207225245708211
+        ],
+        "trace_complete": true
+      },
+      "replay": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "observations_recomputed": 67,
+        "rejected_observation_events": 0,
+        "actions_recorded": 9,
+        "grasp_evidence_reconstructed": 1,
+        "trace_verified": true,
+        "visual_evidence_recomputed": true,
+        "control_record_consistent": true,
+        "sensor_authenticity_verified": false,
+        "physical_action_execution_verified": false,
+        "runtime_identity_checked": false,
+        "manifest_bound": true,
+        "robot_timestamps_checked": true,
+        "evidence_contract": "v2",
+        "recorded_success": true
+      }
+    },
+    {
+      "name": "jitter-0-shift-0mm-seed-1",
+      "pixel_jitter_px": 0,
+      "calibration_shift_m": 0.0,
+      "seed": 1,
+      "result": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "official_score": null,
+        "task": "single_block_pick_place",
+        "success": true,
+        "elapsed_s": 6.7,
+        "terminal_failure": null,
+        "failures": [],
+        "stop_request_succeeded": true,
+        "physical_stop_verified": false,
+        "recoveries": 0,
+        "action_count": 9,
+        "stability_verified_s": 3.0,
+        "started_in_configured_supply": true,
+        "final_visual_position_m": [
+          0.159373821485221,
+          0.4251891578247129,
+          0.02207225245708211
+        ],
+        "trace_complete": true
+      },
+      "replay": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "observations_recomputed": 67,
+        "rejected_observation_events": 0,
+        "actions_recorded": 9,
+        "grasp_evidence_reconstructed": 1,
+        "trace_verified": true,
+        "visual_evidence_recomputed": true,
+        "control_record_consistent": true,
+        "sensor_authenticity_verified": false,
+        "physical_action_execution_verified": false,
+        "runtime_identity_checked": false,
+        "manifest_bound": true,
+        "robot_timestamps_checked": true,
+        "evidence_contract": "v2",
+        "recorded_success": true
+      }
+    },
+    {
+      "name": "jitter-0-shift-0mm-seed-2",
+      "pixel_jitter_px": 0,
+      "calibration_shift_m": 0.0,
+      "seed": 2,
+      "result": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "official_score": null,
+        "task": "single_block_pick_place",
+        "success": true,
+        "elapsed_s": 6.7,
+        "terminal_failure": null,
+        "failures": [],
+        "stop_request_succeeded": true,
+        "physical_stop_verified": false,
+        "recoveries": 0,
+        "action_count": 9,
+        "stability_verified_s": 3.0,
+        "started_in_configured_supply": true,
+        "final_visual_position_m": [
+          0.159373821485221,
+          0.4251891578247129,
+          0.02207225245708211
+        ],
+        "trace_complete": true
+      },
+      "replay": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "observations_recomputed": 67,
+        "rejected_observation_events": 0,
+        "actions_recorded": 9,
+        "grasp_evidence_reconstructed": 1,
+        "trace_verified": true,
+        "visual_evidence_recomputed": true,
+        "control_record_consistent": true,
+        "sensor_authenticity_verified": false,
+        "physical_action_execution_verified": false,
+        "runtime_identity_checked": false,
+        "manifest_bound": true,
+        "robot_timestamps_checked": true,
+        "evidence_contract": "v2",
+        "recorded_success": true
+      }
+    },
+    {
+      "name": "jitter-0-shift-10mm-seed-0",
+      "pixel_jitter_px": 0,
+      "calibration_shift_m": 0.01,
+      "seed": 0,
+      "result": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "official_score": null,
+        "task": "single_block_pick_place",
+        "success": true,
+        "elapsed_s": 6.7,
+        "terminal_failure": null,
+        "failures": [],
+        "stop_request_succeeded": true,
+        "physical_stop_verified": false,
+        "recoveries": 0,
+        "action_count": 9,
+        "stability_verified_s": 3.0,
+        "started_in_configured_supply": true,
+        "final_visual_position_m": [
+          0.169373821485221,
+          0.4251891578247129,
+          0.02207225245708211
+        ],
+        "trace_complete": true
+      },
+      "replay": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "observations_recomputed": 67,
+        "rejected_observation_events": 0,
+        "actions_recorded": 9,
+        "grasp_evidence_reconstructed": 1,
+        "trace_verified": true,
+        "visual_evidence_recomputed": true,
+        "control_record_consistent": true,
+        "sensor_authenticity_verified": false,
+        "physical_action_execution_verified": false,
+        "runtime_identity_checked": false,
+        "manifest_bound": true,
+        "robot_timestamps_checked": true,
+        "evidence_contract": "v2",
+        "recorded_success": true
+      }
+    },
+    {
+      "name": "jitter-0-shift-10mm-seed-1",
+      "pixel_jitter_px": 0,
+      "calibration_shift_m": 0.01,
+      "seed": 1,
+      "result": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "official_score": null,
+        "task": "single_block_pick_place",
+        "success": true,
+        "elapsed_s": 6.7,
+        "terminal_failure": null,
+        "failures": [],
+        "stop_request_succeeded": true,
+        "physical_stop_verified": false,
+        "recoveries": 0,
+        "action_count": 9,
+        "stability_verified_s": 3.0,
+        "started_in_configured_supply": true,
+        "final_visual_position_m": [
+          0.169373821485221,
+          0.4251891578247129,
+          0.02207225245708211
+        ],
+        "trace_complete": true
+      },
+      "replay": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "observations_recomputed": 67,
+        "rejected_observation_events": 0,
+        "actions_recorded": 9,
+        "grasp_evidence_reconstructed": 1,
+        "trace_verified": true,
+        "visual_evidence_recomputed": true,
+        "control_record_consistent": true,
+        "sensor_authenticity_verified": false,
+        "physical_action_execution_verified": false,
+        "runtime_identity_checked": false,
+        "manifest_bound": true,
+        "robot_timestamps_checked": true,
+        "evidence_contract": "v2",
+        "recorded_success": true
+      }
+    },
+    {
+      "name": "jitter-0-shift-10mm-seed-2",
+      "pixel_jitter_px": 0,
+      "calibration_shift_m": 0.01,
+      "seed": 2,
+      "result": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "official_score": null,
+        "task": "single_block_pick_place",
+        "success": true,
+        "elapsed_s": 6.7,
+        "terminal_failure": null,
+        "failures": [],
+        "stop_request_succeeded": true,
+        "physical_stop_verified": false,
+        "recoveries": 0,
+        "action_count": 9,
+        "stability_verified_s": 3.0,
+        "started_in_configured_supply": true,
+        "final_visual_position_m": [
+          0.169373821485221,
+          0.4251891578247129,
+          0.02207225245708211
+        ],
+        "trace_complete": true
+      },
+      "replay": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "observations_recomputed": 67,
+        "rejected_observation_events": 0,
+        "actions_recorded": 9,
+        "grasp_evidence_reconstructed": 1,
+        "trace_verified": true,
+        "visual_evidence_recomputed": true,
+        "control_record_consistent": true,
+        "sensor_authenticity_verified": false,
+        "physical_action_execution_verified": false,
+        "runtime_identity_checked": false,
+        "manifest_bound": true,
+        "robot_timestamps_checked": true,
+        "evidence_contract": "v2",
+        "recorded_success": true
+      }
+    },
+    {
+      "name": "jitter-1-shift-0mm-seed-0",
+      "pixel_jitter_px": 1,
+      "calibration_shift_m": 0.0,
+      "seed": 0,
+      "result": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "official_score": null,
+        "task": "single_block_pick_place",
+        "success": false,
+        "elapsed_s": 20.5,
+        "terminal_failure": "grasp_target_unverified",
+        "failures": [
+          {
+            "category": "placement_drift",
+            "phase": "settling",
+            "detail": "placement/support-height/hand-clearance criterion failed"
+          },
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "placement_drift",
+            "phase": "settling",
+            "detail": "placement/support-height/hand-clearance criterion failed"
+          },
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "placement_drift",
+            "phase": "settling",
+            "detail": "RGB position changed during stability window"
+          },
+          {
+            "category": "placement_drift",
+            "phase": "settling",
+            "detail": "RGB position changed during stability window"
+          },
+          {
+            "category": "grasp_target_unverified",
+            "phase": "grasp_descent",
+            "detail": "target lost/moved before closing"
+          }
+        ],
+        "stop_request_succeeded": true,
+        "physical_stop_verified": false,
+        "recoveries": 9,
+        "action_count": 49,
+        "stability_verified_s": 0.0,
+        "started_in_configured_supply": true,
+        "final_visual_position_m": [
+          0.16164867914214043,
+          0.44276860397689083,
+          0.011901024228264945
+        ],
+        "trace_complete": true
+      },
+      "replay": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "observations_recomputed": 205,
+        "rejected_observation_events": 0,
+        "actions_recorded": 49,
+        "grasp_evidence_reconstructed": 4,
+        "trace_verified": true,
+        "visual_evidence_recomputed": true,
+        "control_record_consistent": true,
+        "sensor_authenticity_verified": false,
+        "physical_action_execution_verified": false,
+        "runtime_identity_checked": false,
+        "manifest_bound": true,
+        "robot_timestamps_checked": true,
+        "evidence_contract": "v2",
+        "recorded_success": false
+      }
+    },
+    {
+      "name": "jitter-1-shift-0mm-seed-1",
+      "pixel_jitter_px": 1,
+      "calibration_shift_m": 0.0,
+      "seed": 1,
+      "result": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "official_score": null,
+        "task": "single_block_pick_place",
+        "success": false,
+        "elapsed_s": 1.3,
+        "terminal_failure": "grasp_target_unverified",
+        "failures": [
+          {
+            "category": "grasp_target_unverified",
+            "phase": "grasp_descent",
+            "detail": "target lost/moved before closing"
+          }
+        ],
+        "stop_request_succeeded": true,
+        "physical_stop_verified": false,
+        "recoveries": 0,
+        "action_count": 3,
+        "stability_verified_s": 0.0,
+        "started_in_configured_supply": true,
+        "final_visual_position_m": [
+          -0.17324756329918164,
+          0.42169582319105836,
+          0.03233351504194221
+        ],
+        "trace_complete": true
+      },
+      "replay": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "observations_recomputed": 13,
+        "rejected_observation_events": 0,
+        "actions_recorded": 3,
+        "grasp_evidence_reconstructed": 0,
+        "trace_verified": true,
+        "visual_evidence_recomputed": true,
+        "control_record_consistent": true,
+        "sensor_authenticity_verified": false,
+        "physical_action_execution_verified": false,
+        "runtime_identity_checked": false,
+        "manifest_bound": true,
+        "robot_timestamps_checked": true,
+        "evidence_contract": "v2",
+        "recorded_success": false
+      }
+    },
+    {
+      "name": "jitter-1-shift-0mm-seed-2",
+      "pixel_jitter_px": 1,
+      "calibration_shift_m": 0.0,
+      "seed": 2,
+      "result": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "official_score": null,
+        "task": "single_block_pick_place",
+        "success": false,
+        "elapsed_s": 3.0,
+        "terminal_failure": "grasp_target_unverified",
+        "failures": [
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "grasp_target_unverified",
+            "phase": "grasp_descent",
+            "detail": "target lost/moved before closing"
+          }
+        ],
+        "stop_request_succeeded": true,
+        "physical_stop_verified": false,
+        "recoveries": 2,
+        "action_count": 7,
+        "stability_verified_s": 0.0,
+        "started_in_configured_supply": true,
+        "final_visual_position_m": [
+          -0.14768086086620935,
+          0.4358223002067199,
+          0.02701462268756638
+        ],
+        "trace_complete": true
+      },
+      "replay": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "observations_recomputed": 30,
+        "rejected_observation_events": 0,
+        "actions_recorded": 7,
+        "grasp_evidence_reconstructed": 0,
+        "trace_verified": true,
+        "visual_evidence_recomputed": true,
+        "control_record_consistent": true,
+        "sensor_authenticity_verified": false,
+        "physical_action_execution_verified": false,
+        "runtime_identity_checked": false,
+        "manifest_bound": true,
+        "robot_timestamps_checked": true,
+        "evidence_contract": "v2",
+        "recorded_success": false
+      }
+    },
+    {
+      "name": "jitter-1-shift-10mm-seed-0",
+      "pixel_jitter_px": 1,
+      "calibration_shift_m": 0.01,
+      "seed": 0,
+      "result": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "official_score": null,
+        "task": "single_block_pick_place",
+        "success": false,
+        "elapsed_s": 20.5,
+        "terminal_failure": "grasp_target_unverified",
+        "failures": [
+          {
+            "category": "placement_drift",
+            "phase": "settling",
+            "detail": "placement/support-height/hand-clearance criterion failed"
+          },
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "placement_drift",
+            "phase": "settling",
+            "detail": "placement/support-height/hand-clearance criterion failed"
+          },
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "placement_drift",
+            "phase": "settling",
+            "detail": "RGB position changed during stability window"
+          },
+          {
+            "category": "placement_drift",
+            "phase": "settling",
+            "detail": "RGB position changed during stability window"
+          },
+          {
+            "category": "grasp_target_unverified",
+            "phase": "grasp_descent",
+            "detail": "target lost/moved before closing"
+          }
+        ],
+        "stop_request_succeeded": true,
+        "physical_stop_verified": false,
+        "recoveries": 9,
+        "action_count": 49,
+        "stability_verified_s": 0.0,
+        "started_in_configured_supply": true,
+        "final_visual_position_m": [
+          0.17164867914214044,
+          0.44276860397689083,
+          0.011901024228264945
+        ],
+        "trace_complete": true
+      },
+      "replay": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "observations_recomputed": 205,
+        "rejected_observation_events": 0,
+        "actions_recorded": 49,
+        "grasp_evidence_reconstructed": 4,
+        "trace_verified": true,
+        "visual_evidence_recomputed": true,
+        "control_record_consistent": true,
+        "sensor_authenticity_verified": false,
+        "physical_action_execution_verified": false,
+        "runtime_identity_checked": false,
+        "manifest_bound": true,
+        "robot_timestamps_checked": true,
+        "evidence_contract": "v2",
+        "recorded_success": false
+      }
+    },
+    {
+      "name": "jitter-1-shift-10mm-seed-1",
+      "pixel_jitter_px": 1,
+      "calibration_shift_m": 0.01,
+      "seed": 1,
+      "result": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "official_score": null,
+        "task": "single_block_pick_place",
+        "success": false,
+        "elapsed_s": 1.3,
+        "terminal_failure": "grasp_target_unverified",
+        "failures": [
+          {
+            "category": "grasp_target_unverified",
+            "phase": "grasp_descent",
+            "detail": "target lost/moved before closing"
+          }
+        ],
+        "stop_request_succeeded": true,
+        "physical_stop_verified": false,
+        "recoveries": 0,
+        "action_count": 3,
+        "stability_verified_s": 0.0,
+        "started_in_configured_supply": true,
+        "final_visual_position_m": [
+          -0.16324756329918164,
+          0.42169582319105836,
+          0.03233351504194221
+        ],
+        "trace_complete": true
+      },
+      "replay": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "observations_recomputed": 13,
+        "rejected_observation_events": 0,
+        "actions_recorded": 3,
+        "grasp_evidence_reconstructed": 0,
+        "trace_verified": true,
+        "visual_evidence_recomputed": true,
+        "control_record_consistent": true,
+        "sensor_authenticity_verified": false,
+        "physical_action_execution_verified": false,
+        "runtime_identity_checked": false,
+        "manifest_bound": true,
+        "robot_timestamps_checked": true,
+        "evidence_contract": "v2",
+        "recorded_success": false
+      }
+    },
+    {
+      "name": "jitter-1-shift-10mm-seed-2",
+      "pixel_jitter_px": 1,
+      "calibration_shift_m": 0.01,
+      "seed": 2,
+      "result": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "official_score": null,
+        "task": "single_block_pick_place",
+        "success": false,
+        "elapsed_s": 3.0,
+        "terminal_failure": "grasp_target_unverified",
+        "failures": [
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "grasp_target_unverified",
+            "phase": "grasp_descent",
+            "detail": "target lost/moved before closing"
+          }
+        ],
+        "stop_request_succeeded": true,
+        "physical_stop_verified": false,
+        "recoveries": 2,
+        "action_count": 7,
+        "stability_verified_s": 0.0,
+        "started_in_configured_supply": true,
+        "final_visual_position_m": [
+          -0.13768086086620934,
+          0.4358223002067199,
+          0.02701462268756638
+        ],
+        "trace_complete": true
+      },
+      "replay": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "observations_recomputed": 30,
+        "rejected_observation_events": 0,
+        "actions_recorded": 7,
+        "grasp_evidence_reconstructed": 0,
+        "trace_verified": true,
+        "visual_evidence_recomputed": true,
+        "control_record_consistent": true,
+        "sensor_authenticity_verified": false,
+        "physical_action_execution_verified": false,
+        "runtime_identity_checked": false,
+        "manifest_bound": true,
+        "robot_timestamps_checked": true,
+        "evidence_contract": "v2",
+        "recorded_success": false
+      }
+    },
+    {
+      "name": "jitter-2-shift-0mm-seed-0",
+      "pixel_jitter_px": 2,
+      "calibration_shift_m": 0.0,
+      "seed": 0,
+      "result": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "official_score": null,
+        "task": "single_block_pick_place",
+        "success": false,
+        "elapsed_s": 10.3,
+        "terminal_failure": "grasp_target_unverified",
+        "failures": [
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "grasp_target_unverified",
+            "phase": "grasp_descent",
+            "detail": "target lost/moved before closing"
+          }
+        ],
+        "stop_request_succeeded": true,
+        "physical_stop_verified": false,
+        "recoveries": 9,
+        "action_count": 21,
+        "stability_verified_s": 0.0,
+        "started_in_configured_supply": true,
+        "final_visual_position_m": null,
+        "trace_complete": true
+      },
+      "replay": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "observations_recomputed": 103,
+        "rejected_observation_events": 0,
+        "actions_recorded": 21,
+        "grasp_evidence_reconstructed": 0,
+        "trace_verified": true,
+        "visual_evidence_recomputed": true,
+        "control_record_consistent": true,
+        "sensor_authenticity_verified": false,
+        "physical_action_execution_verified": false,
+        "runtime_identity_checked": false,
+        "manifest_bound": true,
+        "robot_timestamps_checked": true,
+        "evidence_contract": "v2",
+        "recorded_success": false
+      }
+    },
+    {
+      "name": "jitter-2-shift-0mm-seed-1",
+      "pixel_jitter_px": 2,
+      "calibration_shift_m": 0.0,
+      "seed": 1,
+      "result": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "official_score": null,
+        "task": "single_block_pick_place",
+        "success": false,
+        "elapsed_s": 3.9,
+        "terminal_failure": "carried_object_unobserved",
+        "failures": [
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "carried_object_unobserved",
+            "phase": "target_transit",
+            "detail": "lost RGB evidence while carrying"
+          }
+        ],
+        "stop_request_succeeded": true,
+        "physical_stop_verified": false,
+        "recoveries": 1,
+        "action_count": 8,
+        "stability_verified_s": 0.0,
+        "started_in_configured_supply": true,
+        "final_visual_position_m": null,
+        "trace_complete": true
+      },
+      "replay": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "observations_recomputed": 39,
+        "rejected_observation_events": 0,
+        "actions_recorded": 8,
+        "grasp_evidence_reconstructed": 1,
+        "trace_verified": true,
+        "visual_evidence_recomputed": true,
+        "control_record_consistent": true,
+        "sensor_authenticity_verified": false,
+        "physical_action_execution_verified": false,
+        "runtime_identity_checked": false,
+        "manifest_bound": true,
+        "robot_timestamps_checked": true,
+        "evidence_contract": "v2",
+        "recorded_success": false
+      }
+    },
+    {
+      "name": "jitter-2-shift-0mm-seed-2",
+      "pixel_jitter_px": 2,
+      "calibration_shift_m": 0.0,
+      "seed": 2,
+      "result": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "official_score": null,
+        "task": "single_block_pick_place",
+        "success": false,
+        "elapsed_s": 1.3,
+        "terminal_failure": "grasp_target_unverified",
+        "failures": [
+          {
+            "category": "grasp_target_unverified",
+            "phase": "grasp_descent",
+            "detail": "target lost/moved before closing"
+          }
+        ],
+        "stop_request_succeeded": true,
+        "physical_stop_verified": false,
+        "recoveries": 0,
+        "action_count": 3,
+        "stability_verified_s": 0.0,
+        "started_in_configured_supply": true,
+        "final_visual_position_m": [
+          -0.1481268674508437,
+          0.4359423343292116,
+          0.01917481138870436
+        ],
+        "trace_complete": true
+      },
+      "replay": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "observations_recomputed": 13,
+        "rejected_observation_events": 0,
+        "actions_recorded": 3,
+        "grasp_evidence_reconstructed": 0,
+        "trace_verified": true,
+        "visual_evidence_recomputed": true,
+        "control_record_consistent": true,
+        "sensor_authenticity_verified": false,
+        "physical_action_execution_verified": false,
+        "runtime_identity_checked": false,
+        "manifest_bound": true,
+        "robot_timestamps_checked": true,
+        "evidence_contract": "v2",
+        "recorded_success": false
+      }
+    },
+    {
+      "name": "jitter-2-shift-10mm-seed-0",
+      "pixel_jitter_px": 2,
+      "calibration_shift_m": 0.01,
+      "seed": 0,
+      "result": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "official_score": null,
+        "task": "single_block_pick_place",
+        "success": false,
+        "elapsed_s": 10.3,
+        "terminal_failure": "grasp_target_unverified",
+        "failures": [
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "grasp_target_unverified",
+            "phase": "grasp_descent",
+            "detail": "target lost/moved before closing"
+          }
+        ],
+        "stop_request_succeeded": true,
+        "physical_stop_verified": false,
+        "recoveries": 9,
+        "action_count": 21,
+        "stability_verified_s": 0.0,
+        "started_in_configured_supply": true,
+        "final_visual_position_m": null,
+        "trace_complete": true
+      },
+      "replay": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "observations_recomputed": 103,
+        "rejected_observation_events": 0,
+        "actions_recorded": 21,
+        "grasp_evidence_reconstructed": 0,
+        "trace_verified": true,
+        "visual_evidence_recomputed": true,
+        "control_record_consistent": true,
+        "sensor_authenticity_verified": false,
+        "physical_action_execution_verified": false,
+        "runtime_identity_checked": false,
+        "manifest_bound": true,
+        "robot_timestamps_checked": true,
+        "evidence_contract": "v2",
+        "recorded_success": false
+      }
+    },
+    {
+      "name": "jitter-2-shift-10mm-seed-1",
+      "pixel_jitter_px": 2,
+      "calibration_shift_m": 0.01,
+      "seed": 1,
+      "result": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "official_score": null,
+        "task": "single_block_pick_place",
+        "success": false,
+        "elapsed_s": 3.5,
+        "terminal_failure": "uncertain_grasp_state",
+        "failures": [
+          {
+            "category": "target_moved",
+            "phase": "above_grasp",
+            "detail": "RGB target moved during approach"
+          },
+          {
+            "category": "grasp_not_verified",
+            "phase": "lift",
+            "detail": "RGB did not confirm object lifting with hand"
+          },
+          {
+            "category": "uncertain_grasp_state",
+            "phase": "lift",
+            "detail": "unknown airborne state cannot be safely recovered"
+          }
+        ],
+        "stop_request_succeeded": true,
+        "physical_stop_verified": false,
+        "recoveries": 2,
+        "action_count": 7,
+        "stability_verified_s": 0.0,
+        "started_in_configured_supply": true,
+        "final_visual_position_m": [
+          -0.17235959370188442,
+          0.4377845248682241,
+          0.011289524925858274
+        ],
+        "trace_complete": true
+      },
+      "replay": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "observations_recomputed": 35,
+        "rejected_observation_events": 0,
+        "actions_recorded": 7,
+        "grasp_evidence_reconstructed": 0,
+        "trace_verified": true,
+        "visual_evidence_recomputed": true,
+        "control_record_consistent": true,
+        "sensor_authenticity_verified": false,
+        "physical_action_execution_verified": false,
+        "runtime_identity_checked": false,
+        "manifest_bound": true,
+        "robot_timestamps_checked": true,
+        "evidence_contract": "v2",
+        "recorded_success": false
+      }
+    },
+    {
+      "name": "jitter-2-shift-10mm-seed-2",
+      "pixel_jitter_px": 2,
+      "calibration_shift_m": 0.01,
+      "seed": 2,
+      "result": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "official_score": null,
+        "task": "single_block_pick_place",
+        "success": false,
+        "elapsed_s": 1.3,
+        "terminal_failure": "grasp_target_unverified",
+        "failures": [
+          {
+            "category": "grasp_target_unverified",
+            "phase": "grasp_descent",
+            "detail": "target lost/moved before closing"
+          }
+        ],
+        "stop_request_succeeded": true,
+        "physical_stop_verified": false,
+        "recoveries": 0,
+        "action_count": 3,
+        "stability_verified_s": 0.0,
+        "started_in_configured_supply": true,
+        "final_visual_position_m": [
+          -0.13812686745084368,
+          0.4359423343292116,
+          0.01917481138870436
+        ],
+        "trace_complete": true
+      },
+      "replay": {
+        "feedback_level": "synthetic_rgb_kinematic",
+        "official_platform": false,
+        "observations_recomputed": 13,
+        "rejected_observation_events": 0,
+        "actions_recorded": 3,
+        "grasp_evidence_reconstructed": 0,
+        "trace_verified": true,
+        "visual_evidence_recomputed": true,
+        "control_record_consistent": true,
+        "sensor_authenticity_verified": false,
+        "physical_action_execution_verified": false,
+        "runtime_identity_checked": false,
+        "manifest_bound": true,
+        "robot_timestamps_checked": true,
+        "evidence_contract": "v2",
+        "recorded_success": false
+      }
+    }
+  ],
+  "noise_interpretation": "6/18 completed, all 18 replayed. 1-2px noise remains a demonstrated limitation. No tolerances loosened; no official or physical accuracy claim.",
+  "commands": [
+    "python scripts/check.py",
+    "python scripts/robustness.py --output <new-output-directory>",
+    "python -m hand_competition.closed_loop validate-config configs/closed-loop.json"
+  ],
+  "local_ci": {
+    "tests_passed": 50,
+    "relative_markdown_links": 70,
+    "python": "3.12.14",
+    "remote_actions_executed": false
+  }
+}

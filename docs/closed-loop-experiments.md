@@ -68,11 +68,11 @@ python -m hand_competition.closed_loop preflight --template /path/to/exported/ag
 
 新增[手动GitHub工作流](../.github/workflows/ci.yml)，仅`workflow_dispatch`，Python3.10/3.12矩阵。未触发远端runner；账号分钟/费用确认前不启动。两官方Actions已读原始README并固定SHA：[checkout](https://github.com/actions/checkout/blob/11d5960a326750d5838078e36cf38b85af677262/README.md)、[setup-python](https://github.com/actions/setup-python/blob/a26af69be951a213d495a4c3e4e4022e16d87065/README.md)。本环境只实际验证Python3.12.14，不能把配置矩阵写成已通过。
 
-## 真正下一道人工依赖
+## 后续实际接入（本阶段暂搁）
 
-真实官方模板和反馈需要登录及确认运行环境费用。父任务已确认打开agent编辑区可能自动启动计费运行环境，分享display页也可能自动运行工程。当前停在这一接入边界，完整输入/输出步骤见[接入交接](platform-access.md)；不能继续把合成场景扩写成“比赛跑通”。
+真实官方模板和反馈需要登录及确认运行环境费用。父任务已确认打开agent编辑区可能自动启动计费运行环境，分享display页也可能自动运行工程。用户当前优先要求无需平台实测的工作；协议/策略/异常/噪声加固继续推进，完整输入/输出步骤保留在[接入交接](platform-access.md)；不能继续把合成场景扩写成“比赛跑通”。
 
-## 本次冻结版本实测摘要
+## e33ccb4历史冻结版本离线摘要
 
 同一冻结代码、每场景种子0/1/2，两批各42试次；独立回放全部84试次、5,391组RGB观测。`runtime_tree_sha256=32cba608b80a6ece6fcced104b724eb73a84fcaa38f431dc8d87ec0bd06eefb4`。执行时Git基线984f94a且dirty=true，具体模块散列保存在验证JSON，不能把修改前提交号冒充新代码已提交版本。
 
@@ -89,3 +89,5 @@ python -m hand_competition.closed_loop preflight --template /path/to/exported/ag
 | 持续遮挡/持续漂移 | 0/6 | 0/6 | 无假成功，达到实验期限停止 |
 
 四类暂态故障12个案例从失败变为完成；这只证明当前合成场景族的恢复回归行为。混合总数6/42→18/42包含应停止负例，不是比赛成功率、获胜概率或现实泛化测量。整体本地CI **38项测试通过，60个文档相对链接、JSON及源锁结构检查通过**；远端Actions未执行。
+
+当前v2协议、配置与审查修复见[协议](protocol.md)及[离线加固](offline-hardening.md)。历史84试次不是新版本的复验结论。
