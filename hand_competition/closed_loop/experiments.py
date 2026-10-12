@@ -44,7 +44,7 @@ def run_trial(directory, scenario='nominal', seed=0, config=None, noise=None):
     if type(seed) is not int: raise ValueError('seed must be an integer')
     noise = noise or SensorNoise()
     backend = SyntheticBackend(scenario, seed, noise)
-    manifest = {'schema_version': 4, 'environment': backend.environment,
+    manifest = {'schema_version': 5, 'environment': backend.environment,
                 'producer': backend.producer, 'python': platform.python_version(),
                 'host': {'system': platform.system(), 'machine': platform.machine()},
                 'clock': '0.1s deterministic synthetic steps; independent wall deadline also enforced',
@@ -143,6 +143,9 @@ def validate_payload(kind, payload, version, robust=False):
     if version >= 2: required = required | optional
     optional = optional | {'observation':{'packet_time_s','received_s'},'trial_stopped':{'deadline'}}.get(kind,set())
     if version >= 4: required = required | {'observation':{'packet_time_s','received_s'},'trial_stopped':{'deadline'}}.get(kind,set())
+    optional = optional | ({'stability_basis'} if kind in ('settle_started','stability_verified') else set())
+    if version >= 5 and kind in ('settle_started','stability_verified'): required = required | {'stability_basis'}
+    if 'stability_basis' in payload and payload['stability_basis'] != 'raw_rgb_per_frame': raise ValueError('unsupported stability evidence basis')
     if not required <= set(payload) or set(payload)-required-optional:
         raise ValueError('unknown/missing event payload fields')
 
@@ -155,7 +158,7 @@ def _replay(directory, expected_runtime_sha256=None):
     root = Path(directory)
     manifest = load_json(root/'manifest.json')
     version = manifest.get('schema_version')
-    if type(version) is not int or version not in (1, 2, 3, 4): raise ValueError('unsupported trace schema')
+    if type(version) is not int or version not in (1, 2, 3, 4, 5): raise ValueError('unsupported trace schema')
     if (manifest['environment'].get('official_platform') is not False
             or manifest['environment'].get('feedback_level') != 'synthetic_rgb_kinematic'):
         raise ValueError('this offline verifier only supports declared synthetic records')
@@ -275,8 +278,10 @@ def _replay(directory, expected_runtime_sha256=None):
         elif kind == 'settle_started':
             if robust:
                 anchor = bundles.get(payload['estimate_id'])
-                if (anchor is None or last_bundle != payload['estimate_id']
-                        or not bundle_replay.placement(anchor, config)
+                if anchor is None or last_bundle != payload['estimate_id']:
+                    raise ValueError('invalid localization reference at settle start')
+                if payload.get('stability_basis') != 'raw_rgb_per_frame' and (
+                        not bundle_replay.placement(anchor, config)
                         or distance(payload['anchor_m'], anchor['position_m']) > 1e-9
                         or payload['sensor_start_s'] != anchor['sensor_start_s']):
                     raise ValueError('settle anchor contradicts RGB bundle')
@@ -385,6 +390,8 @@ def _replay(directory, expected_runtime_sha256=None):
             raise ValueError('final visual result contradicts RGB evidence')
     elif samples and samples[-1]['point'] is not None:
         raise ValueError('final visual result missing despite visible final sample')
+    if (version >= 5 or 'physical_stability_verified' in final) and final.get('physical_stability_verified') is not False:
+        raise ValueError('offline observation cannot certify physical stability')
     if final.get('action_count') != len(actions): raise ValueError('action count differs from evidence')
     if len(stop_events) != 1: raise ValueError('missing/duplicate stop evidence')
     if final.get('stop_request_succeeded') is True and stop_events[0] not in ('backend_stopped', 'stop_request_succeeded'):
@@ -425,33 +432,20 @@ def _replay(directory, expected_runtime_sha256=None):
         window = [s for s in samples if start-1e-6 <= s['sensor_time_s'] <= end+1e-6]
         if not window or window[0]['sensor_time_s'] > start+1e-6 or window[-1]['sensor_time_s'] < end-1e-6:
             raise ValueError('stability evidence window incomplete')
-        if robust:
-            if carry_errors: raise ValueError('success ignores lost carried RGB evidence')
-            anchor_bundle = bundles[stability['payload']['anchor_estimate_id']]
-            end_bundle = bundles[stability['payload']['estimate_id']]
-            if start != anchor_bundle['sensor_start_s'] or end != end_bundle['sensor_end_s']:
-                raise ValueError('stability time differs from bundle capture times')
-            valid_bundles = [b for b in bundles.values() if anchor_bundle['event_index'] <= b['event_index'] <= end_bundle['event_index']]
-            if any(anchor_bundle['event_index'] < i < stability['index'] for i in bundle_breaks):
-                raise ValueError('stability window contains a reset')
-            covered = set()
-            for b in valid_bundles:
-                if not bundle_replay.placement(b, config) or not bundle_replay.stable(anchor_bundle, b, config):
-                    raise ValueError('bundle violates conservative placement/stability bounds')
-                covered.update(b['sample_indices'])
-            needed = {i for i, s in enumerate(samples) if start-1e-6 <= s['sensor_time_s'] <= end+1e-6}
-            if covered != needed: raise ValueError('stability bundles omit primary observations')
-            if distance(stability['payload']['position_m'], end_bundle['position_m']) > 1e-9:
-                raise ValueError('stability label contradicts RGB bundle')
+        if robust and carry_errors: raise ValueError('success ignores lost carried RGB evidence')
+        # Always inspect primary time-resolved evidence, including older mean
+        # records. Statistical precision cannot excuse an unstable raw window.
         anchor = window[0]['point']
         for i, sample in enumerate(window):
             point = sample['point']; tip = sample['tip']
-            if not robust and (point is None or not inside_xy(point, config.build_xy)
+            if (point is None or not inside_xy(point, config.build_xy)
                     or abs(point[2]-config.table_center_height_m) > config.table_height_tolerance_m
                     or distance(point, config.target) > config.goal_tolerance_m
-                    or distance(point, anchor) > config.stability_m
+                    or any(distance(point, prior['point']) > config.stability_m for prior in window[:i])
                     or distance(point, tip) < config.hand_separation_m):
                 raise ValueError('stability sample violates placement/height/hand-separation criterion')
+            if sample['pixels'] is None or sample['color'] != window[0]['color'] or sample['camera_ids'] != window[0]['camera_ids'] or sample['pixels'] != window[0]['pixels']:
+                raise ValueError('raw RGB change is motion/noise ambiguity; no validated noise discount')
             if i and sample['sensor_time_s']-window[i-1]['sensor_time_s'] > config.max_observation_gap_s+1e-9:
                 raise ValueError('gap in continuous visual stability evidence')
     failure_proof, failure_limits = path_verifier.failure_cause(final,actions,rejected,trial_start,version)
@@ -461,7 +455,8 @@ def _replay(directory, expected_runtime_sha256=None):
             'actions_recorded': len(actions), 'grasp_evidence_reconstructed': len(grasps),
             'trace_verified': True, 'visual_evidence_recomputed': True,
             'control_record_consistent': failure_proof, 'failure_reason_reconstructed':failure_proof if not final['success'] else None,
-            'failure_reason_limitations':failure_limits, 'legal_path_reconstructed':True,
+            'failure_reason_limitations':failure_limits, 'legal_path_reconstructed':True, 'stability_evidence_time_resolved': bool(final['success']),
+            'physical_stability_verified':False,
             'receipt_timestamps_recorded': bool(samples) and all(s['receipt_timed'] for s in samples), 'sensor_authenticity_verified': False,
             'physical_action_execution_verified': False,
             'runtime_identity_checked': expected_runtime_sha256 is not None,

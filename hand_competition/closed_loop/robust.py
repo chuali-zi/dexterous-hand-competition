@@ -1,4 +1,4 @@
-"""Stationary RGB bundle estimates; no scene truth or command targets used.
+"""RGB location bundles; their mean precision never certifies stability.
 
 Uncertainty is a heuristic under the documented bounded/stationary-noise model,
 not a calibrated real-world confidence guarantee. Moving objects must not be
@@ -112,8 +112,3 @@ def bounded_placement(estimate, tip, config):
             and distance(point, config.target)+radius <= config.goal_tolerance_m
             and abs(point[2]-config.table_center_height_m)+estimate.uncertainty_xyz_m[2]+config.robust_absolute_floor_m <= config.table_height_tolerance_m
             and distance(point, tip)-radius-config.robust_stationary_tip_m >= config.hand_separation_m)
-
-
-def bounded_stability(anchor, estimate, config):
-    difference_uncertainty = math.sqrt(sum(a*a+b*b for a, b in zip(anchor.uncertainty_xyz_m, estimate.uncertainty_xyz_m)))
-    return distance(anchor.position_m, estimate.position_m)+difference_uncertainty+config.robust_difference_floor_m <= config.stability_m

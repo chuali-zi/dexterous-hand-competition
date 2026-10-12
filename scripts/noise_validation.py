@@ -22,6 +22,8 @@ from hand_competition.closed_loop.controller import Controller
 from hand_competition.closed_loop.experiments import code_identity, replay
 from hand_competition.closed_loop.geometry import look_at, distance
 from hand_competition.closed_loop.synthetic import SyntheticBackend, SensorNoise
+from motion_fixtures import (AlternatingPlacement,Alternating16,PeriodicPlacement,SlowDriftPlacement,
+                             evaluated_backend,evaluate_window)
 from test_offline_hardening import (SparseSettling, OverDeadlineSettling, SlowComplete,
     IncompleteRetreat, OccludedTransit, HugeTip, InvalidStatus)
 
@@ -66,32 +68,35 @@ class EvaluationTrace(Trace):
 
 
 BACKENDS={c.__name__:c for c in (SyntheticBackend,WiderPixels,NarrowerBaseline,CorrelatedPixels,LateStep,
-                               SparseSettling,OverDeadlineSettling,SlowComplete,IncompleteRetreat,OccludedTransit,HugeTip,InvalidStatus)}
+                               SparseSettling,OverDeadlineSettling,SlowComplete,IncompleteRetreat,OccludedTransit,HugeTip,InvalidStatus,AlternatingPlacement,Alternating16,PeriodicPlacement,SlowDriftPlacement)}
 
 
 def execute(args):
     root,row=args; config=Config(robust_observations=row['mode']=='robust')
     cls=BACKENDS[row.get('backend','SyntheticBackend')]
-    backend=cls(row.get('scenario','nominal'),row['seed'],SensorNoise(row['jitter'],row['shift']))
+    backend=evaluated_backend(cls,row.get('scenario','nominal'),row['seed'],SensorNoise(row['jitter'],row['shift']))
     path=Path(root)/row['name']
-    manifest={'schema_version':3,'environment':backend.environment,'producer':backend.producer,
+    manifest={'schema_version':5,'environment':backend.environment,'producer':backend.producer,
               'config':asdict(config),'cameras':[asdict(c) for c in backend.cameras],'code':code_identity(),
-              'evaluation_fixture':row,'fixture_source_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
+              'evaluation_fixture':row,'fixture_source_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+              'motion_fixture_source_sha256':hashlib.sha256((ROOT/'scripts/motion_fixtures.py').read_bytes()).hexdigest()}
     result=Controller(backend,config,EvaluationTrace(path,manifest,backend)).run()
     try: verification=replay(path)
     except ValueError as error: verification={'trace_verified':False,'error':str(error)}
-    true_error=distance(backend._block,config.target)
-    late_time=getattr(backend,'changed_s',None)
-    elapsed=result['elapsed_s']
-    false_accept=result['success'] and (true_error>config.goal_tolerance_m or (late_time is not None and elapsed-late_time<config.settle_s))
-    safety={'evaluator_only_final_goal_error_m':true_error,'late_step_s':late_time,
-            'elapsed_after_late_step_s':elapsed-late_time if late_time is not None else None,
-            'false_accept_under_evaluator_checks':false_accept}
-    phases=[]
-    for line in (path/'events.jsonl').read_text().splitlines():
-        event=json.loads(line)
-        if event['kind']=='action_submitted': phases.append(event['payload']['phase'])
-    return {**row,'result':result,'replay':verification,'evaluator':safety,'phases':phases}
+    # Read truth only after Controller.run ended; replay never reads this file.
+    events=[json.loads(line) for line in (path/'events.jsonl').read_text().splitlines()]
+    safety=evaluate_window(backend.evaluation_history,result,events,config)
+    (path/'evaluation-trajectory.json').write_text(json.dumps(backend.evaluation_history,indent=2)+'\n')
+    safety['trajectory_file']='evaluation-trajectory.json'
+    safety['trajectory_sha256']=hashlib.sha256((path/'evaluation-trajectory.json').read_bytes()).hexdigest()
+    safety['evaluator_only_final_goal_error_m']=distance(backend._block,config.target)
+    phases=[e['payload']['phase'] for e in events if e['kind']=='action_submitted']
+    resets={}
+    for event in events:
+        if event['kind']=='settle_reset':
+            reason=event['payload']['reason'];resets[reason]=resets.get(reason,0)+1
+
+    return {**row,'result':result,'replay':verification,'evaluator':safety,'phases':phases,'stability_resets':resets}
 
 
 def cases(suites):
@@ -114,6 +119,10 @@ def cases(suites):
             for scenario in ('slip_during_transit','continuous_drift','false_move_complete','pose_leak','camera_skew','stale_after_close','duplicate_after_close'):
                 add('negative',mode,0,scenario=scenario)
         for jitter in (0,1,2): add('negative','robust',101,jitter,backend='LateStep')
+    if 'motion' in suites:
+        for mode in ('raw','robust'):
+            for backend in ('Alternating16','AlternatingPlacement','PeriodicPlacement','SlowDriftPlacement'):
+                for jitter in (0,1): add('motion',mode,0,jitter,backend=backend)
     if len({r['name'] for r in rows}) != len(rows): raise ValueError('duplicate case names')
     return rows
 
@@ -121,14 +130,17 @@ def cases(suites):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output',required=True); parser.add_argument('--workers',type=int,default=2)
-    parser.add_argument('--suites',nargs='+',choices=['matched','holdout','negative'],default=['matched','holdout','negative'])
+    parser.add_argument('--suites',nargs='+',choices=['matched','holdout','negative','motion'],default=['matched','holdout','negative','motion'])
     args=parser.parse_args()
     if not 1<=args.workers<=3: parser.error('workers must be 1..3')
     root=Path(args.output); root.mkdir(parents=True,exist_ok=False)
-    report={'schema_version':1,'official_platform':False,'official_score':None,'runtime':code_identity(),
+    report={'schema_version':2,'official_platform':False,'official_score':None,'runtime':code_identity(),
             'fixture_source_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-            'policy':asdict(Config(robust_observations=True)),'development_seeds':[20,21],
-            'matched_seeds_already_seen':[0,1,2],'held_out_seeds':[100,101,102],'trials':[]}
+            'motion_fixture_source_sha256':hashlib.sha256((ROOT/'scripts/motion_fixtures.py').read_bytes()).hexdigest(),
+            'evaluation_scope':'entire successful window at every generated tick; no controller access to truth',
+            'holdout_status':'previously observed configurations; regression, not new holdout',
+            'policy':asdict(Config(robust_observations=True)),'historical_development_seeds':[20,21],
+            'matched_seeds_already_seen':[0,1,2],'previous_holdout_regression_seeds':[100,101,102],'trials':[]}
     with ProcessPoolExecutor(max_workers=args.workers) as executor:
         for row in executor.map(execute,[(str(root),row) for row in cases(args.suites)]):
             report['trials'].append(row)

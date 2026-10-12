@@ -16,7 +16,7 @@ class PathVerifier:
         self.release=None; self.retreat=None; self.anchor=None; self.anchor_start=None; self.held_color=None; self.held_offset=None
         self.failure=None; self.recovery=None; self.recoveries=0; self.blocked=None; self.block_status_seen=False
         self.terminal=None; self.terminal_payload=None; self.terminal_state=None; self.success_before_stop=False
-        self.last_sample=None; self.last_bundle=None
+        self.last_sample=None; self.last_bundle=None; self.stability_points=[]
 
     def evidence(self, samples, bundles):
         if self.robust:
@@ -48,6 +48,11 @@ class PathVerifier:
 
     def accept(self,event,samples,bundles,actions):
         kind=event['kind'];p=event['payload'];stamp=event['time_s'];e=self.evidence(samples,bundles)
+        frame_stability=kind in ('settle_started','stability_verified') and p.get('stability_basis')=='raw_rgb_per_frame'
+        if frame_stability:
+            sample=samples[-1] if samples else None
+            e=None if not sample or sample['point'] is None else {'position_m':sample['point'],'tip':sample['tip'],'color':sample['color'],
+                 'sensor_end_s':sample['sensor_time_s'],'radius_m':0,'uncertainty_xyz_m':(0,0,0)}
         if self.state=='stopped' and kind!='result': raise ValueError('events after irreversible stop')
         if self.state=='terminated' and kind not in ('backend_stopped','stop_request_succeeded','stop_request_failed'):
             raise ValueError('events after irreversible trial termination')
@@ -76,6 +81,7 @@ class PathVerifier:
                 if self.last_sample and s['sensor_time_s']-self.last_sample['sensor_time_s']>self.config.max_observation_gap_s+1e-9:
                     bad='carried_object_unobserved'
                 if bad: self.blocked=bad
+            if self.state=='settling' and s['point'] is not None: self.stability_points.append(s['point'])
             self.last_sample=s
         elif kind=='robust_observation': self.last_bundle=e
         elif kind=='bundle_reset':
@@ -92,7 +98,7 @@ class PathVerifier:
             if phase=='raise_for_approach':
                 if e is None: raise ValueError('approach lacks visual source')
                 self.attempt+=1;self.source=e;self.cycle=None;self.close=None;self.lift=None
-                self.transit=None;self.descent=None;self.release=None;self.retreat=None;self.anchor=None;self.anchor_start=None;self.recovery=None
+                self.transit=None;self.descent=None;self.release=None;self.retreat=None;self.anchor=None;self.anchor_start=None;self.recovery=None;self.stability_points=[]
             elif phase=='close':
                 if not self.is_held(e): raise ValueError('close lacks fresh visual proximity')
             elif phase=='target_transit':
@@ -138,7 +144,7 @@ class PathVerifier:
                 elif phase=='lift': self.lift=record
                 elif phase=='target_transit': self.transit=record
                 elif phase=='target_descent': self.descent=record
-                elif phase=='release': self.release=record;self.cycle=self.attempt
+                elif phase=='release': self.release=record;self.cycle=self.attempt;self.stability_points=[]
                 elif phase=='retreat': self.retreat=record
                 elif phase=='reset_empty_grasp': self.recovery=None
                 self.active=None
@@ -153,7 +159,7 @@ class PathVerifier:
                 confirmed=distance(e['position_m'],e['tip'])+e['radius_m'] <= self.config.grasp_distance_m
             elif category=='placement_drift' and self.state in ('withdrawn','settling') and e:
                 if self.robust: confirmed=distance(e['position_m'],self.config.target)-e['radius_m']-self.config.robust_absolute_floor_m > self.config.goal_tolerance_m
-                else: confirmed=not placement_valid(e['position_m'],e['tip'],self.config) or (self.anchor is not None and distance(e['position_m'],self.anchor['position_m'])>self.config.stability_m)
+                else: confirmed=not placement_valid(e['position_m'],e['tip'],self.config) or any(distance(e['position_m'],point)>self.config.stability_m for point in self.stability_points)
             self.failure=(category,confirmed)
         elif kind=='recovery_started':
             if (not self.config.recovery_enabled or self.recovery is not None or self.failure!=(p['category'],True)
@@ -168,12 +174,12 @@ class PathVerifier:
             if e is None or p.get('sensor_start_s',stamp)<self.retreat['after']['sensor_time_s']-1e-9:
                 raise ValueError('stable captures precede measured withdrawal')
             start=p.get('sensor_start_s',stamp)
-            expected_start=e['sensor_start_s'] if self.robust else e['sensor_end_s']
+            expected_start=e['sensor_start_s'] if self.robust and not frame_stability else e['sensor_end_s']
             if abs(start-expected_start)>1e-9 or distance(p['anchor_m'],e['position_m'])>1e-9:
                 raise ValueError('settle anchor/time contradicts latest primary evidence')
-            valid=bundle_replay.placement(e,self.config) if self.robust else placement_valid(e['position_m'],e['tip'],self.config)
+            valid=bundle_replay.placement(e,self.config) if self.robust and not frame_stability else placement_valid(e['position_m'],e['tip'],self.config)
             if not valid: raise ValueError('settle anchor is not a verified supported placement')
-            self.anchor=e;self.anchor_start=start;self.state='settling'
+            self.anchor=e;self.anchor_start=start;self.stability_points=[e['position_m']];self.state='settling'
         elif kind=='settle_reset':
             if self.state not in ('withdrawn','settling'): raise ValueError('settle reset outside placed state')
             # Keep the anchor for a following factual placement_drift check.

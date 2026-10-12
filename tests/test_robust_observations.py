@@ -74,9 +74,9 @@ class BundleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory); path=root/'valid'
             result=run_trial(path,seed=20,noise=SensorNoise(1))
-            self.assertTrue(result['success']); self.assertGreater(replay(path)['bundles_recomputed'],0)
+            self.assertFalse(result['success']); self.assertGreater(replay(path)['bundles_recomputed'],0)
             original=[json.loads(line) for line in (path/'events.jsonl').read_text().splitlines()]
-            for fault in ('point','uncertainty','omit-sample','duplicate-sample','stability-label'):
+            for fault in ('point','uncertainty','omit-sample','duplicate-sample'):
                 bad=root/fault; shutil.copytree(path,bad); events=json.loads(json.dumps(original))
                 event=next(e for e in events if e['kind']==('stability_verified' if fault=='stability-label' else 'robust_observation'))
                 p=event['payload']

@@ -5,7 +5,7 @@ from .contracts import (Action, ActionStatus, ObservationGate, ObservationError,
                         inside_xy, placement_valid, finite, PHASE_ACTIONS)
 from .geometry import distance, sub, add
 from .vision import estimate_single_block, observe_single_block_pixels, VisionError
-from .robust import Sample, estimate_bundle, BundleError, bounded_placement, bounded_stability
+from .robust import Sample, estimate_bundle, BundleError, bounded_placement
 
 
 class TrialFailure(RuntimeError):
@@ -179,31 +179,49 @@ class Controller:
         self.command('retreat', 'move', (target[0], target[1], self.config.safe_height_m))
 
     def settle(self, initial):
+        """Time-resolved evidence, never a mean/covariance motion certificate.
+
+        Without a validated noise model, changing image centroids may be motion.
+        Reject that ambiguity rather than discounting it as random measurement.
+        """
+        if initial is None or self.pixels is None or not placement_valid(initial.position_m, self.observation.tip, self.config):
+            self.emit('settle_reset', reason='raw_placement_unverified')
+            return 'restart_window'
         self.phase = 'settling'
         anchor = initial.position_m; start = self.observation.sensor_time_s; previous = start
-        self.emit('settle_started', anchor_m=anchor, sensor_start_s=start)
+        signature = (self.pixels.color, self.pixels.camera_ids, self.pixels.pixels)
+        points = [anchor]
+        refs = {'estimate_id': self.bundle_id} if self.config.robust_observations else {}
+        self.emit('settle_started', anchor_m=anchor, sensor_start_s=start,
+                  stability_basis='raw_rgb_per_frame', **refs)
         while self.observation.sensor_time_s-start < self.config.settle_s:
             estimate = self.sense(); stamp = self.observation.sensor_time_s
             if stamp-previous > self.config.max_observation_gap_s+1e-9:
-                self.emit('settle_reset', reason='sensor_gap')
-                return 'restart_window'
+                self.emit('settle_reset', reason='sensor_gap'); return 'restart_window'
             previous = stamp
-            if estimate is None:
-                self.emit('settle_reset', reason='visibility_lost')
-                return 'restart_window'
+            if estimate is None or self.pixels is None:
+                self.emit('settle_reset', reason='visibility_lost'); return 'restart_window'
             point = estimate.position_m
             if not placement_valid(point, self.observation.tip, self.config):
                 self.emit('settle_reset', reason='placement_or_hand_clearance')
+                if self.config.robust_observations: return 'restart_window'
                 self.recover('placement_drift', 'placement/support-height/hand-clearance criterion failed')
                 return 'regrasp'
-            if distance(point, anchor) > self.config.stability_m:
+            if any(distance(point, earlier) > self.config.stability_m for earlier in points):
                 self.emit('settle_reset', reason='observed_motion')
+                if self.config.robust_observations: return 'restart_window'
                 self.recover('placement_drift', 'RGB position changed during stability window')
                 return 'regrasp'
+            if (self.pixels.color, self.pixels.camera_ids, self.pixels.pixels) != signature:
+                self.emit('settle_reset', reason='motion_or_noise_ambiguous')
+                return 'restart_window'
+            points.append(point)
         self.deadline()
         self.stability_verified_s = round(self.observation.sensor_time_s-start, 6)
+        refs = {'estimate_id': self.bundle_id, 'anchor_estimate_id': self.bundle_id} if self.config.robust_observations else {}
         self.emit('stability_verified', duration_s=self.stability_verified_s, sensor_start_s=start,
-                  sensor_end_s=self.observation.sensor_time_s, position_m=self.visual.position_m)
+                  sensor_end_s=self.observation.sensor_time_s, position_m=self.visual.position_m,
+                  stability_basis='raw_rgb_per_frame', **refs)
         return 'stable'
 
     def execute_raw(self):
@@ -331,33 +349,21 @@ class Controller:
             self.held_offset = sub(lifted.position_m, self.observation.tip)
             self.emit('grasp_verified', position_m=lifted.position_m, tip_m=self.observation.tip, estimate_id=self.bundle_id)
             self.place_robust()
-            anchor = None; start = None; anchor_id = None
             while True:
-                resets = self.bundle_reset_count
                 estimated = self.acquire(precision=True)
                 point = estimated.position_m
                 if distance(point, self.observation.tip)+estimated.radius_m <= self.config.grasp_distance_m:
                     self.holding_confirmed = True; self.held_color = estimated.color
                     self.held_offset = sub(point, self.observation.tip)
-                    self.recover('release_not_verified', 'object remains near withdrawn hand'); self.place_robust(); anchor = None; continue
+                    self.recover('release_not_verified', 'object remains near withdrawn hand'); self.place_robust(); continue
                 # Act on confirmed displacement, not on a single noisy frame.
                 if distance(point, self.config.target)-estimated.radius_m-self.config.robust_absolute_floor_m > self.config.goal_tolerance_m:
                     self.recover('placement_drift', 'confident displacement outside target'); block = estimated; break
                 if not bounded_placement(estimated, self.observation.tip, self.config):
-                    anchor = None; self.emit('settle_reset', reason='uncertain_placement'); continue
-                if anchor is None or resets != self.bundle_reset_count:
-                    anchor = estimated; start = estimated.sensor_start_s; anchor_id = self.bundle_id
-                    self.phase = 'settling'
-                    self.emit('settle_started', anchor_m=point, sensor_start_s=start, estimate_id=anchor_id)
-                    continue
-                if not bounded_stability(anchor, estimated, self.config):
-                    self.emit('settle_reset', reason='bundle_motion_or_uncertainty'); anchor = None; continue
-                if estimated.sensor_end_s-start >= self.config.settle_s:
-                    self.deadline(); self.stability_verified_s = round(estimated.sensor_end_s-start, 6)
-                    self.emit('stability_verified', duration_s=self.stability_verified_s, sensor_start_s=start,
-                              sensor_end_s=estimated.sensor_end_s, position_m=point,
-                              estimate_id=self.bundle_id, anchor_estimate_id=anchor_id)
-                    return True
+                    self.emit('settle_reset', reason='uncertain_placement'); continue
+                if self.settle(self.visual) == 'stable': return True
+                # Missing/moving/ambiguous raw evidence opens a new window.
+                # Location bundles can guide recovery but never supply stability.
 
     def run(self):
         if self.finished: raise ValueError('controller can only run once')
@@ -389,7 +395,7 @@ class Controller:
             'feedback_level': self.backend.environment['feedback_level'], 'official_platform': False, 'official_score': None,
             'task': 'single_block_pick_place', 'success': success, 'elapsed_s': round(self.last_time-self.start_s, 6),
             'terminal_failure': terminal, 'failures': self.failures, 'stop_request_succeeded': stop_request_succeeded,
-            'physical_stop_verified': False, 'recoveries': self.recoveries, 'action_count': self.action_count,
+            'physical_stop_verified': False, 'physical_stability_verified': False, 'recoveries': self.recoveries, 'action_count': self.action_count,
             'stability_verified_s': self.stability_verified_s, 'started_in_configured_supply': self.started_in_supply,
             'final_visual_position_m': self.visual.position_m if self.visual else None,
             **({'final_robust_estimate_id': self.bundle_id} if self.config.robust_observations else {}),

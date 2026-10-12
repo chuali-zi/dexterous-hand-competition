@@ -1,4 +1,4 @@
-# 离线闭环证据契约 v4
+# 离线闭环证据契约 v5
 
 本页规定本项目内部数据与策略边界，不是官方SDK/API说明。当前只运行离线合成RGB，官方平台实测暂搁。本契约的强校验、恢复和回放准备不需要登录或实测。
 
@@ -36,9 +36,13 @@ submit/observe/status返回后及成功前重查总期限；动作期限从提�
 
 ## 静止RGB多帧估计
 
-实时观测包仍是schema2；新日志manifest为schema4，多帧采样策略见[噪声鲁棒性](noise-robustness.md)。`robust_observation`引用连续的原始观测序号，并记录均值像素、颜色、均值3D、每轴随机误差、有效样本数与捕获起止时间。动作/抓持/稳定事件引用具体estimate_id；稳定的anchor与最后窗口均须可重建。时间断档、缺图、时间分段突变或滚动丢掉未验证帧会重置稳定计时，不能跳过不利帧声称连续证据。
+实时观测包仍是schema2；新日志manifest为schema5，多帧采样策略见[噪声鲁棒性](noise-robustness.md)。`robust_observation`引用连续的原始观测序号，并记录均值像素、颜色、均值3D、每轴随机误差、有效样本数与捕获起止时间。动作/抓持事件引用具体estimate_id；稳定事件的多帧ID仅作定位注记，逐帧anchor/末帧必须可重建。时间断档、缺图、时间分段突变或滚动丢掉未验证帧会重置稳定计时，不能跳过不利帧声称连续证据。
 
-静止位置均值仅在误差余量下判定；搬运期间逐帧可见性与像素跟随，端点停稳后重验三维持有。复杂度仅为有界标准库计算，无训练/模型权重。schema4也能记录显式raw单帧对照；v1–v3只回放其原有证据能力。
+位置均值只用于定位与抓持候选；稳定证据见[逐帧稳定](motion-stability.md)，不用均值精度证明不运动。搬运期间逐帧可见性与像素跟随，端点重验三维持有。复杂度仅为有界标准库计算，无训练/模型权重。schema5也能记录显式raw单帧对照；v1–v4保留原有字段，但成功仍须通过当前逐帧稳定核验。
+
+## 稳定证据与定位分离
+
+schema5稳定事件声明stability_basis=raw_rgb_per_frame。窗口逐帧满足位置/高度/区域/手分离、捕获覆盖、任意两帧位移≤15mm，并要求目标颜色及像素中心不变；在噪声模型未经验证前，不扣除测量扰动以认证放稳。任一歧义重开计时。physical_stability_verified恒为false；成功只是离线观察条件，不证明接触/连续物理稳定。详情及完成率回落见[运动修复](motion-stability.md)。
 
 ## 接收时间与合法状态路径
 
@@ -48,7 +52,7 @@ submit/observe/status返回后及成功前重查总期限；动作期限从提�
 
 ## 记录与回放
 
-v4 `manifest.json`包含完整配置、相机、噪声参数、代码身份和复现命令；另存`config.json`，复现命令引用保存配置，防止自定义参数丢失。每条事件绑定实际manifest文件散列，并串联普通内容哈希；这些不是签名。
+v5 `manifest.json`包含完整配置、相机、噪声参数、代码身份和复现命令；另存`config.json`，复现命令引用保存配置，防止自定义参数丢失。每条事件绑定实际manifest文件散列，并串联普通内容哈希；这些不是签名。
 
 事件顶层为`index/kind/time_s/payload/previous_sha256/manifest_sha256/sha256`；kind与payload字段按代码中的白名单校验。必须有唯一最后result、对应停止事件；未知/重复/终止后事件、重用动作ID、重叠动作、无提交状态、晚到complete和无证据失败被拒绝。
 
@@ -56,9 +60,9 @@ v4 `manifest.json`包含完整配置、相机、噪声参数、代码身份和�
 
 ```bash
 python -m hand_competition.closed_loop validate-config configs/closed-loop.json
-python -m hand_competition.closed_loop run --config configs/closed-loop.json --output runs/my-v4
-python -m hand_competition.closed_loop replay runs/my-v4
-python -m hand_competition.closed_loop replay runs/my-v4 --expected-runtime-sha256 <可信外部源码指纹>
+python -m hand_competition.closed_loop run --config configs/closed-loop.json --output runs/my-v5
+python -m hand_competition.closed_loop replay runs/my-v5
+python -m hand_competition.closed_loop replay runs/my-v5 --expected-runtime-sha256 <可信外部源码指纹>
 ```
 
 可信源码指纹须来自调用者审查的提交/源码，不能仅从待验证manifest自己取值就称认证。v1只用于明确的历史日志回放，不进入实时观测门；旧记录没有机器人时间/生产者及manifest绑定，返回标志会体现缺口。

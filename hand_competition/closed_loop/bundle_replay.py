@@ -83,8 +83,3 @@ def placement(bundle, config):
             and distance(p, config.target)+radius <= config.goal_tolerance_m
             and abs(p[2]-config.table_center_height_m)+bundle['uncertainty_xyz_m'][2]+config.robust_absolute_floor_m <= config.table_height_tolerance_m
             and distance(p, bundle['tip'])-radius-config.robust_stationary_tip_m >= config.hand_separation_m)
-
-
-def stable(anchor, bundle, config):
-    radius = math.sqrt(math.fsum(a*a+b*b for a, b in zip(anchor['uncertainty_xyz_m'], bundle['uncertainty_xyz_m'])))
-    return distance(anchor['position_m'], bundle['position_m'])+radius+config.robust_difference_floor_m <= config.stability_m
