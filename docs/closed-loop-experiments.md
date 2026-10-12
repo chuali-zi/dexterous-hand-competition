@@ -90,6 +90,6 @@ python -m hand_competition.closed_loop preflight --template /path/to/exported/ag
 
 四类暂态故障12个案例从失败变为完成；这只证明当前合成场景族的恢复回归行为。混合总数6/42→18/42包含应停止负例，不是比赛成功率、获胜概率或现实泛化测量。整体本地CI **38项测试通过，60个文档相对链接、JSON及源锁结构检查通过**；远端Actions未执行。
 
-当前v5协议、配置与审查修复见[协议](protocol.md)及[离线加固](offline-hardening.md)。历史84试次不是新版本的复验结论。当前默认多帧观察、保守误差界及匹配/未见数据结果见[噪声鲁棒性](noise-robustness.md)。
+当前v5协议、配置与审查修复见[协议](protocol.md)及[离线加固](offline-hardening.md)。历史84试次不是新版本的复验结论。多帧定位的历史匹配/未见结果见[历史噪声研究](noise-robustness.md)；当前逐帧稳定及固定代码关闭结论以[最终验收](offline-acceptance.md)为准。
 
 当前稳定证据独立于定位统计，像素中心变化/运动噪声歧义不通过平均消除，详见[逐帧稳定修复](motion-stability.md)。

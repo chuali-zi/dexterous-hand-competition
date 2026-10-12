@@ -1,0 +1,144 @@
+{
+  "schema_version": 1,
+  "record_type": "parent_provided_independent_final_acceptance",
+  "reviewed_commit": "362e9a84d4585c4c58c86b5127c31156b38cd0cf",
+  "reviewed_runtime_tree_sha256": "f464c73696d97a234592fb923fd4c0b14b32a5049a9a453930b026d306d124c1",
+  "report_received_utc": "2026-10-12T13:10:19.023094+00:00",
+  "review_execution_date": "not specified in transferred report",
+  "report_source": "full independent final report transferred by parent; not independently executed in this documentation turn",
+  "full_report_file": "docs/evidence/independent-final-review.md",
+  "full_report_sha256": "3dab566182cb86a13467a5a004bb9ed32637277b8c9a1001152771faa6a962df",
+  "scope": "existing pure-offline synthetic RGB kinematic closed loop and record consistency; not competition/platform acceptance",
+  "acceptance_status": "passed",
+  "blocking_issues_in_accepted_scope": [],
+  "issues": {
+    "R1": {
+      "status": "closed",
+      "scope": "existing pure-offline scope",
+      "independently_revalidated": true
+    },
+    "R2": {
+      "status": "closed",
+      "scope": "existing pure-offline scope",
+      "independently_revalidated": true
+    },
+    "R3": {
+      "status": "closed",
+      "scope": "existing pure-offline scope",
+      "independently_revalidated": true
+    },
+    "R4": {
+      "status": "closed",
+      "scope": "existing pure-offline scope",
+      "independently_revalidated": true
+    },
+    "R5": {
+      "status": "closed",
+      "scope": "existing pure-offline scope",
+      "independently_revalidated": true
+    },
+    "R6": {
+      "status": "closed",
+      "scope": "existing pure-offline scope",
+      "independently_revalidated": true
+    },
+    "N1": {
+      "status": "closed",
+      "scope": "existing pure-offline scope",
+      "independently_revalidated": true
+    },
+    "M1": {
+      "status": "closed",
+      "scope": "existing pure-offline scope",
+      "independently_revalidated": true
+    },
+    "C1": {
+      "status": "closed",
+      "scope": "existing pure-offline scope",
+      "independently_revalidated": true
+    },
+    "C2": {
+      "status": "closed",
+      "scope": "existing pure-offline scope",
+      "independently_revalidated": true
+    }
+  },
+  "independent_validation": {
+    "python": "3.12.14",
+    "tests_passed": 73,
+    "relative_links_passed": 101,
+    "json_source_lock_passed": true,
+    "trials_rerun": 95,
+    "observations": 14526,
+    "successful_full_truth_windows_checked": 13,
+    "false_accepts_in_successful_windows": 0,
+    "matched_raw_successes": 6,
+    "matched_raw_trials": 18,
+    "matched_robust_successes": 6,
+    "matched_robust_trials": 18,
+    "previous_holdout_regression_successes": 0,
+    "previous_holdout_regression_trials": 12,
+    "motion_cases": 16,
+    "motion_successes": 0,
+    "invalid_path_variants_rejected": 20,
+    "positive_path_cases_passed": 12,
+    "truth_input_leakage_found": false,
+    "additional_motion_amplitudes_mm": [
+      22,
+      26
+    ],
+    "pending_positive_age_s": [
+      0.249,
+      0.25
+    ],
+    "rejected_age_s": [
+      0.2501,
+      0.3
+    ]
+  },
+  "reproduction_commands": [
+    "python scripts/check.py",
+    "python scripts/noise_validation.py --output /tmp/offline-review-362e9a8 --workers 2",
+    "python -m unittest discover -s tests -p test_replay_state_and_time.py -v",
+    "python -m unittest discover -s tests -p test_motion_stability.py -v",
+    "python -m unittest discover -s tests -p test_replay_residuals.py -v"
+  ],
+  "reproduction_preconditions": [
+    "checkout fixed reviewed commit",
+    "output directory must not exist"
+  ],
+  "verification_limits": {
+    "physical_stability_verified": false,
+    "physical_stop_verified": false,
+    "sensor_authenticity_verified": false,
+    "physical_action_execution_verified": false,
+    "official_platform": false,
+    "official_score": null
+  },
+  "real_platform_stage": "explicitly deferred by user; no repeat login/test request",
+  "offline_preparation_stage": "concluded",
+  "competition_engineering_complete": false,
+  "historical_status_records_preserved": true,
+  "supersedes_current_status_in": [
+    "docs/evidence/offline-hardening-validation.json",
+    "docs/evidence/noise-robustness-validation.json",
+    "docs/evidence/replay-state-time-validation.json",
+    "docs/evidence/motion-stability-validation.json",
+    "docs/evidence/replay-residuals-validation.json"
+  ],
+  "documentation_delivery_checks": {
+    "status": "passed",
+    "command": "python scripts/check.py",
+    "python": "3.12.14",
+    "tests_passed": 73,
+    "relative_links_passed": 115,
+    "json_source_lock_passed": true,
+    "runtime_fingerprint_unchanged": true,
+    "runtime_config_tests_scripts_unchanged": true,
+    "historical_validation_json_files_unchanged": 5,
+    "control_or_feature_changes": false,
+    "independent_95_trial_rerun_in_this_turn": false,
+    "remote_ci_executed": false
+  },
+  "this_turn_control_or_feature_changes": false
+}
