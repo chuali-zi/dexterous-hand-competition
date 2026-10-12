@@ -36,4 +36,3 @@ def normalize(path,events):
   e['sha256']=digest(canonical(e).encode());previous=e['sha256']
  (path/'events.jsonl').write_text(''.join(canonical(e)+'\n' for e in events))
  (path/'result.json').write_text(json.dumps(events[-1]['payload']['result']))
-

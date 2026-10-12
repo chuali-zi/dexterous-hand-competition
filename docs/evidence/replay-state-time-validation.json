@@ -3674,7 +3674,7 @@
     "script_fingerprints": {
       "scripts/noise_validation.py": "207e5fef3cd3a16ddb4b082b94aece4d37bc6ba743911abaa2c7287625054a04",
       "tests/test_replay_state_and_time.py": "b31127b4dd77e2681fee40fd31c7a635e8156d82cc6d52956163465f3ce6a55a",
-      "tests/replay_revision_fixtures.py": "c0aa211d803f8c7c62f643f5b1775c1339a4ee3cb9496fc130564c89f00f6079"
+      "tests/replay_revision_fixtures.py": "4b8d98d6063bed8abeb8922585b61dda63519751973c19367d438a1e0404e341"
     },
     "not_run": [
       "official platform",
@@ -3684,7 +3684,14 @@
       "remote CI"
     ],
     "historical_results_preserved": true,
-    "heldout_parameters_retuned": false
+    "heldout_parameters_retuned": false,
+    "nonruntime_fixture_formatting_after_tests": {
+      "path": "tests/replay_revision_fixtures.py",
+      "old_sha256": "c0aa211d803f8c7c62f643f5b1775c1339a4ee3cb9496fc130564c89f00f6079",
+      "new_sha256": "4b8d98d6063bed8abeb8922585b61dda63519751973c19367d438a1e0404e341",
+      "ast_equivalent": true,
+      "runtime_source_unchanged": true
+    }
   },
   "independent_closure_of_new_fix": "pending same reviewer; local tests are not independent approval",
   "recorded_utc": "2026-10-12T11:39:49.201779+00:00",
