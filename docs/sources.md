@@ -13,10 +13,10 @@
 | ID | 原始来源 | 版本/定位与本次访问结果 |
 |---|---|---|
 | O1 | [10月11日最新通知](https://robot.bistu.edu.cn/tzgg/3d95cef5dc594ecbbc11333770b5cbe0.html) | 父任务核实发布时间 2026-10-11 15:01；本次 web 不可访问，普通 HTTPS 请求代理返回 403 |
-| O2 | [演练手册](https://robot.bistu.edu.cn/docs/2026-10/780da6f7f1834fdcb7f13c226149662a.pdf) | 2026-10 路径；本次 web 不可访问；未获页码，不臆造 |
+| O2 | [演练手册](https://robot.bistu.edu.cn/docs/2026-10/780da6f7f1834fdcb7f13c226149662a.pdf) | 2026-10 路径；本环境 web 不可访问；后续父核补充共5页，第1页限定仿真、第5页复议条款，见精确证据表 |
 | O3 | [报名通知](https://robot.bistu.edu.cn/tzgg/ce6d4ae0373c4e5cb7aa84372e4d96e2.html) | 本次 web 超时；日期/资格摘录来自父任务 |
 | O4 | [教委方案](https://robot.bistu.edu.cn/docs/2026-09/f402c4be17fa4ca2ba45f1445abacd80.pdf) | 2026-09 路径；本次 web 不可访问，页码未获 |
-| O5 | [2026正式规则PDF](https://robot.bistu.edu.cn/docs/2026-09/7746a8e90714439cad8eea91355e0e06.pdf) | 灵巧操作印刷 pp.100–109；PDF物理 pp.102–111；本次 web 不可访问，HTTPS 代理 403。没有全文散列或逐条单页定位 |
+| O5 | [2026正式规则PDF](https://robot.bistu.edu.cn/docs/2026-09/7746a8e90714439cad8eea91355e0e06.pdf) | 灵巧操作印刷 pp.100–109；PDF物理 pp.102–111；本次 web 不可访问，HTTPS 代理 403。本环境没有全文散列；后续父核补充关键条款单页及短引文，见精确证据表 |
 | O6 | [LBot双臂机器人手册](https://www.rabokit.com/manual/lbot_dual_arm) / [公开只读数据接口](http://www.rabokit.com/v1/api/manual/docs/lbot_dual_arm) | 父任务读 2026-10-10 文档；本次网页不可访问，HTTP接口403；没有绕过限制 |
 | O7 | [腾讯问题表](https://docs.qq.com/sheet/DUmdlU3JJSkF6eWJu) | 本次 web 不可访问；父任务401。**未读到任何问答内容** |
 | O8 | [后续通知索引](https://robot.bistu.edu.cn/tzgg/index.html) | 作为后续复核入口；本次未读取索引内容，不声称无新通知 |
@@ -53,3 +53,14 @@ O6 的相关父任务文档 slug：`home`、`05-interface`、`06-sensors`、`14-
 | D1 | [OpenCV Camera Calibration and 3D Reconstruction](https://docs.opencv.org/4.13.0/d9/d0c/group__calib3d.html) | 官方 calib3d 文档与 R1 头文件中的 `solvePnP`、`calibrateCamera`、`calibrateHandEye` 接口 | 已读文档/声明，未安装/实测；4.x链接重定向到4.13.0 |
 
 论文 PDF 普通下载请求被本环境代理403拒绝；随后通过可用的 web 原始 arXiv HTML 读取关键章节。没有在仓库伪造 PDF 哈希。论文发表结果只说明作者设置，不作为 LBot/O6 或本赛性能证据。
+
+## 规则审计与原件再次复核（2026-10-12增补）
+
+[完整赛事要求报告](competition-requirements.md)已整合父任务转交的独立规则审计。读取主体必须区分：本环境此前失败不代表父任务没有读过原件；“审计原页/索引正文”指另一次审计的访问，不冒充本工作环境直接访问。
+
+- **B1 父核原件**：保留首轮已读PDF/平台文档事实。父任务原件读取者再次核对PDF及页面图像后，提供[11项精确页码、短引文与适用范围](evidence/official-excerpts.md)。届次为A印刷1/PDF3；自主定义印刷101/PDF103；装配物料印刷102/PDF104；装配次数/处罚/同分印刷104/PDF106；垒砖基础与颜色印刷107/PDF109；最终状态印刷108/PDF110；附表印刷109/PDF111；仿真手册B物理5复议48小时，B物理1限定仿真。没有本地原件，仍不填文件哈希。
+- **B2 审计索引正文**：O3报名通知，2026-09-11 09:04，“一”资格/人数/限额/特别推荐，“二”学校赛区报送/电子表公章/人员冻结/截止，“三”邮箱/命名/超额删除，“四”联系方式。独立审计取得索引正文但原页超时；本轮按转交结果整合，未重新宣称直读。
+- **B3 审计原页交叉印证**：[北京工商大学通知](https://caai.btbu.edu.cn/tzgg/f2513a151a5f4f75a272e61e80e754f9.htm)“四、报名方式及提交材料”支持盖章；[天津工业大学通知](https://jwc.tiangong.edu.cn/2026/0928/c1328a117927/page.htm)“三、参赛要求”支持共性队伍要求；[太原科技大学转载省赛通知](https://cxcy.tyust.edu.cn/info/1106/1252.htm)“决赛时间”印证11月7日。访问主体是独立审计，本环境未重复访问。这些学校截止不适用于本用户。
+- **O9 报名表原件**：[2026报名表XLS](https://robot.bistu.edu.cn/docs/2026-09/1c437a5fed2c4f1987364b86613a590b.xls)在独立审计未取得；未核字段/签章栏/命名完整格式，不虚构其内容。
+
+精确证据更新不覆盖开源项目源锁；[规则变更记录](evidence/rules-change-log.md)单独追踪适用范围与修订。用户已有学校背景是北京信息科技大学，实际本次参赛学校/队伍和报名状态待本人确认；不从其他高校通知推断用户资格或截止。

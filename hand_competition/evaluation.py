@@ -77,6 +77,8 @@ def evaluate(record):
             _number(item["stable_for_s"], "stable_for_s")
             if item["stable_for_s"] > record["elapsed_s"]:
                 raise ValueError("stable_for_s cannot exceed elapsed_s")
+            if item["color_awarded"] and not item["shape_awarded"]:
+                raise ValueError("color points require awarded shape points")
             if item["stable_valid"]:
                 if not item["released"] or item["stable_for_s"] < 3:
                     raise ValueError("stable_valid requires released and >=3s observed stability")
@@ -86,7 +88,8 @@ def evaluate(record):
             elif item["shape_awarded"] or item["color_awarded"]:
                 raise ValueError("an invalid block cannot carry awarded shape/color points")
         components = {"stable_base": base, "shape": shape, "color": color}
-        # Do not infer whether color requires shape; supplied awards are reviewed.
+        # Rule A p.107: color is checked only for blocks awarded shape points.
+        # Geometry, legal transport/support and violations remain reviewed labels.
         raw = base + shape + color
     elif task == "assembly":
         items = _items(record["final_state"], 6)

@@ -37,6 +37,13 @@ class EvaluationTests(unittest.TestCase):
         self.assertEqual(result['components'], {'stable_base': 30, 'shape': 10, 'color': 0})
         self.assertEqual(result['raw_score'], 40)
 
+    def test_color_requires_shape_under_verified_rule(self):
+        record = brick_record(1, shape=False, color=True)
+        with self.assertRaisesRegex(ValueError, "color points require"):
+            evaluate(record)
+        record["final_state"][0]["shape_awarded"] = True
+        self.assertEqual(evaluate(record)["raw_score"], 5)
+
     def test_collapse_uses_final_state_not_past_success(self):
         original = brick_record(shape=True, color=True)
         final = copy.deepcopy(original)

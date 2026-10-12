@@ -6,10 +6,10 @@
 
 公共字段必须完整且没有额外字段：`schema_version=1`、`run_id`、`task`（brick/assembly）、`control_mode`（autonomous/teleoperation）、`elapsed_s`、`evidence_kind`（synthetic_example/manual_review）、`evidence_ref`、`final_state`。未知判定先留在复盘记录，不能填成功。混合控制方式等待官方说明，不自动按自主计算。
 
-- 垒砖每块含唯一 `id`、`released`、`stable_for_s`、`stable_valid`、`shape_awarded`、`color_awarded`。有效块必须已释放且有至少3秒稳定标注；不满足则拒绝矛盾数据，不能把少于3秒默认加分。无效块的形状/颜色标记必须为false。字段表示复核人给出的计分标签，不是由程序认定的物理属性。颜色/形状耦合未确认，工具不推断；需在`evidence_ref`记录所用判定口径。
+- 垒砖每块含唯一 `id`、`released`、`stable_for_s`、`stable_valid`、`shape_awarded`、`color_awarded`。有效块必须已释放且有至少3秒稳定标注；不满足则拒绝矛盾数据，不能把少于3秒默认加分。无效块的形状/颜色标记必须为false。字段表示复核人给出的计分标签，不是由程序认定的物理属性。依据父核原件印刷107/PDF109，颜色分仅可给已有形状分的块；颜色true而形状false的矛盾标注现在拒绝。`stable_valid`是复核人对全部基础条件的综合标签：机器人从供应区合法搬入砌筑区、由允许的底板/桌面/稳定积木支撑、无机器人支撑、连续静置3秒且终局有效；人工违规形成及依赖其稳定的上层应标false。工具不自动验证区域、搬运来源、支撑或违规，只校验标签间及释放/时长的一致性。需在`evidence_ref`保存判定证据。
 - 装配每枚含唯一 `id`、`kind`（preset/loose）、`effective_inserted`。临时支持4预置+2散料口径；只接触应填false。“有效旋入”由复核人标注，程序没有扭矩、深度或接触判据。
 - 只对本次最终快照求和；不累加过程事件。没有列出的物体不加分，空列表为0。最多10块或4+2枚；未知字段、重复物体ID/JSON键、字符串布尔、NaN、负数等拒绝。耗时超过300秒属于当前工具不支持的输入而报错，**不是实现了官方超时处罚**。
-- 原始分 × 控制系数；输出固定含`official_judge: false`及证据类型，不排序正式名次，不实现重试次数或同分细则。
+- 原始分 × 控制系数；输出固定含`official_judge: false`及证据类型，不排序正式名次，不实现重试次数或同分细则。装配同分顺序已有原件依据，见[精确证据E-05](evidence/official-excerpts.md)；未实现排序不是规则完全未知。
 
 两个合成示例：垒砖8个稳定有效块，其中6形状、5颜色，原始/自主分 **24+6+5=35**；装配满分原始 **50**、遥操系数分 **25**。不是已跑平台成绩。
 
