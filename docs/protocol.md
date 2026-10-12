@@ -1,4 +1,4 @@
-# 离线闭环证据契约 v2
+# 离线闭环证据契约 v3
 
 本页规定本项目内部数据与策略边界，不是官方SDK/API说明。当前只运行离线合成RGB，官方平台实测暂搁。本契约的强校验、恢复和回放准备不需要登录或实测。
 
@@ -34,19 +34,25 @@
 
 submit/observe/status返回后及成功前重查总期限；动作期限从提交请求之前起算，先检查超时再接受complete，同时检查独立墙钟。无法返回/取消的未知SDK调用仍不受Python轮询强制中断；适配器必须真正有界，这里没有声称已实现该SDK能力。终止后同一个Controller不能重跑/再提交动作。
 
+## 静止RGB多帧估计
+
+实时观测包仍是schema2；新日志manifest为schema3，多帧采样策略见[噪声鲁棒性](noise-robustness.md)。`robust_observation`引用连续的原始观测序号，并记录均值像素、颜色、均值3D、每轴随机误差、有效样本数与捕获起止时间。动作/抓持/稳定事件引用具体estimate_id；稳定的anchor与最后窗口均须可重建。时间断档、缺图、时间分段突变或滚动丢掉未验证帧会重置稳定计时，不能跳过不利帧声称连续证据。
+
+静止位置均值仅在误差余量下判定；搬运期间逐帧可见性与像素跟随，端点停稳后重验三维持有。复杂度仅为有界标准库计算，无训练/模型权重。schema3也能记录显式raw单帧对照；v1/v2只回放其原有证据能力。
+
 ## 记录与回放
 
-v2 `manifest.json`包含完整配置、相机、噪声参数、代码身份和复现命令；另存`config.json`，复现命令引用保存配置，防止自定义参数丢失。每条事件绑定实际manifest文件散列，并串联普通内容哈希；这些不是签名。
+v3 `manifest.json`包含完整配置、相机、噪声参数、代码身份和复现命令；另存`config.json`，复现命令引用保存配置，防止自定义参数丢失。每条事件绑定实际manifest文件散列，并串联普通内容哈希；这些不是签名。
 
 事件顶层为`index/kind/time_s/payload/previous_sha256/manifest_sha256/sha256`；kind与payload字段按代码中的白名单校验。必须有唯一最后result、对应停止事件；未知/重复/终止后事件、重用动作ID、重叠动作、无提交状态、晚到complete和无证据失败被拒绝。
 
-回放不导入Controller，独立重建动作生命周期和成功语义：从close/lift顺序、抬升前后RGB高度与手块关系重建抓持，再核release、连续稳定样本和末端反馈。`grasp_verified`标签不能充当证明；与图像矛盾的标签也拒绝。返回标志分别表示视觉重算、控制记录一致性、manifest绑定、机器人时间检查；`sensor_authenticity_verified=false`、`physical_action_execution_verified=false`保持实际限度。
+回放不调用Controller或生产多帧估计器（入口模块仍导入Controller以支持run）；独立bundle_replay实现从原始RGB重算多帧统计，并独立重建动作生命周期和成功语义：从close/lift顺序、抬升前后RGB高度与手块关系重建抓持，再核release、连续稳定样本和末端反馈。`grasp_verified`标签不能充当证明；与图像矛盾的标签也拒绝。返回标志分别表示视觉重算、控制记录一致性、manifest绑定、机器人时间检查；`sensor_authenticity_verified=false`、`physical_action_execution_verified=false`保持实际限度。
 
 ```bash
 python -m hand_competition.closed_loop validate-config configs/closed-loop.json
-python -m hand_competition.closed_loop run --config configs/closed-loop.json --output runs/my-v2
-python -m hand_competition.closed_loop replay runs/my-v2
-python -m hand_competition.closed_loop replay runs/my-v2 --expected-runtime-sha256 <可信外部源码指纹>
+python -m hand_competition.closed_loop run --config configs/closed-loop.json --output runs/my-v3
+python -m hand_competition.closed_loop replay runs/my-v3
+python -m hand_competition.closed_loop replay runs/my-v3 --expected-runtime-sha256 <可信外部源码指纹>
 ```
 
 可信源码指纹须来自调用者审查的提交/源码，不能仅从待验证manifest自己取值就称认证。v1只用于明确的历史日志回放，不进入实时观测门；旧记录没有机器人时间/生产者及manifest绑定，返回标志会体现缺口。

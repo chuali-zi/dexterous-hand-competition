@@ -23,6 +23,13 @@ class VisionError(ValueError):
     pass
 
 
+@dataclass(frozen=True)
+class PixelObservation:
+    color: str
+    pixels: tuple
+    camera_ids: tuple
+
+
 def classify(r, g, b):
     if r > 150 and g < 100 and b < 100: return 'red'
     if g > 140 and r < 100 and b < 100: return 'green'
@@ -52,18 +59,24 @@ def components(frame, minimum_area=20):
     return result
 
 
-def estimate_single_block(observation, cameras, max_residual_m=0.02):
-    by_name = {camera.name: camera for camera in cameras}
+def observe_single_block_pixels(observation):
     if len(observation.frames) != 2: raise VisionError('single-block baseline requires two calibrated RGB views')
     found = [components(frame) for frame in observation.frames]
     if any(len(items) != 1 for items in found):
         raise VisionError('missing/ambiguous colored block; no motion target produced')
     first, second = found[0][0], found[1][0]
     if first.color != second.color: raise VisionError('stereo color correspondence mismatch')
+    return PixelObservation(first.color, (first.centroid, second.centroid),
+                            tuple(f.camera_id for f in observation.frames))
+
+
+def estimate_single_block(observation, cameras, max_residual_m=0.02, pixels=None):
+    by_name = {camera.name: camera for camera in cameras}
+    detected = pixels or observe_single_block_pixels(observation)
     try:
-        point, residual = triangulate(by_name[observation.frames[0].camera_id], first.centroid,
-                                      by_name[observation.frames[1].camera_id], second.centroid, max_residual_m)
+        point, residual = triangulate(by_name[detected.camera_ids[0]], detected.pixels[0],
+                                      by_name[detected.camera_ids[1]], detected.pixels[1], max_residual_m)
     except ValueError as error: raise VisionError(str(error)) from error
     if not (-0.4 <= point[0] <= 0.4 and 0.05 <= point[1] <= 0.75 and -0.02 <= point[2] <= 0.35):
         raise VisionError('visual estimate outside experiment bounds')
-    return VisualEstimate(point, first.color, residual, (first.centroid, second.centroid))
+    return VisualEstimate(point, detected.color, residual, detected.pixels)

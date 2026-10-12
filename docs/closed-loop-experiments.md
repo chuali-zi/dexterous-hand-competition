@@ -30,7 +30,7 @@ python -m hand_competition.closed_loop batch --seeds 0 1 2 --output runs/my-batc
 python scripts/check.py
 ```
 
-输出目录必须不存在，防止覆盖既有结果；换新目录可重跑。`batch`默认14个场景，包含正常、临时故障和必须停止的负例；这些不是同分布比赛试次，不把混合总成功率当竞技胜率。`--without-recovery`用于对照。
+输出目录必须不存在，防止覆盖既有结果；换新目录可重跑。`batch`当前默认17个场景，包含正常、临时故障和必须停止的负例；这些不是同分布比赛试次，不把混合总成功率当竞技胜率。`--without-recovery`用于对照。
 
 拿到经授权导出的实际模板后，可先只读审查：
 
@@ -90,4 +90,4 @@ python -m hand_competition.closed_loop preflight --template /path/to/exported/ag
 
 四类暂态故障12个案例从失败变为完成；这只证明当前合成场景族的恢复回归行为。混合总数6/42→18/42包含应停止负例，不是比赛成功率、获胜概率或现实泛化测量。整体本地CI **38项测试通过，60个文档相对链接、JSON及源锁结构检查通过**；远端Actions未执行。
 
-当前v2协议、配置与审查修复见[协议](protocol.md)及[离线加固](offline-hardening.md)。历史84试次不是新版本的复验结论。
+当前v3协议、配置与审查修复见[协议](protocol.md)及[离线加固](offline-hardening.md)。历史84试次不是新版本的复验结论。当前默认多帧观察、保守误差界及匹配/未见数据结果见[噪声鲁棒性](noise-robustness.md)。

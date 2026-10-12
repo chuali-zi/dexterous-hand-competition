@@ -18,6 +18,7 @@ def main():
     for cmd in (run, batches):
         cmd.add_argument('--config', help='strict JSON config overrides; saved in each trial')
         cmd.add_argument('--without-recovery', action='store_true')
+        cmd.add_argument('--raw-observations', action='store_true', help='legacy single-frame baseline')
         cmd.add_argument('--pixel-jitter', type=int, default=0)
         cmd.add_argument('--calibration-shift-mm', type=float, default=0)
     replay_cmd = sub.add_parser('replay'); replay_cmd.add_argument('directory'); replay_cmd.add_argument('--expected-runtime-sha256')
@@ -26,7 +27,8 @@ def main():
     args = parser.parse_args()
     try:
         if args.command in ('run', 'batch'):
-            config = Config.from_dict(load_json(args.config)) if args.config else Config()
+            config = Config.from_dict(load_json(args.config)) if args.config else Config(robust_observations=True)
+            if args.raw_observations: config = replace(config, robust_observations=False)
             if args.without_recovery: config = replace(config, recovery_enabled=False)
             noise = SensorNoise(args.pixel_jitter, args.calibration_shift_mm/1000)
             if args.command == 'run': result = run_trial(args.output, args.scenario, args.seed, config, noise)

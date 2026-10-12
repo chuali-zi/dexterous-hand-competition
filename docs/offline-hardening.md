@@ -15,7 +15,7 @@
 
 自审另发现并处理：配置目标/桌面高度不一致、过大的稳定容差、分数图像尺寸、未来包时间、机器人反馈缺独立时间/生产者、短维度导致IndexError、复现命令丢自定义配置、结果绝对时间与耗时混用、重复批次参数导致半途执行、终止后可再发动作。
 
-[协议v2](protocol.md)和[默认配置](../configs/closed-loop.json)描述强校验与阶段门。旧[84试次证据](evidence/closed-loop-validation.json)保持历史数据，不把它更新成新版本结果。新回归与噪声证据另记，避免混淆代码版本。
+[证据协议（含历史v2）](protocol.md)和[默认配置](../configs/closed-loop.json)描述强校验与阶段门。旧[84试次证据](evidence/closed-loop-validation.json)保持历史数据，不把它更新成新版本结果。新回归与噪声证据另记，避免混淆代码版本。
 
 ## 校准与噪声
 
@@ -41,3 +41,5 @@ python scripts/check.py
 - v1正常历史试次兼容回放通过，明确返回`manifest_bound=false, robot_timestamps_checked=false`，不伪造旧日志缺失的证据。
 
 [机器可读本地验证摘要](evidence/offline-hardening-validation.json)保存源文件指纹、全部反例结果、几何误差和逐试次噪声结果。**原审查R1–R6的最终关闭状态仍等待父任务独立复验**。
+
+本轮之后的静止多帧观察与匹配/未见/负例扫描见[噪声鲁棒性](noise-robustness.md)；这里的6/18和50项测试保持为9a991ef历史结果。原R1–R6仍等待父任务独立复验结论。

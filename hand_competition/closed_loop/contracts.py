@@ -196,6 +196,18 @@ class Config:
     max_observation_gap_s: float = 0.25
     stereo_residual_m: float = 0.02
     recovery_enabled: bool = True
+    robust_observations: bool = False
+    robust_min_samples: int = 9
+    robust_max_samples: int = 49
+    robust_max_uncertainty_m: float = 0.0075
+    robust_sigma_factor: float = 2.0
+    robust_pixel_span_px: float = 6.0
+    robust_stationary_tip_m: float = 0.003
+    robust_absolute_floor_m: float = 0.002
+    robust_difference_floor_m: float = 0.001
+    robust_tracking_pixel_px: float = 4.0
+    robust_change_sigma: float = 4.0
+    robust_change_floor_px: float = 0.5
     supply_xy: tuple = (-0.30, -0.05, 0.20, 0.60)
     build_xy: tuple = (0.05, 0.30, 0.20, 0.60)
     workspace: tuple = (-0.35, 0.35, 0.10, 0.65, 0.005, 0.30)
@@ -204,11 +216,17 @@ class Config:
         for name, size in (('target', 3), ('supply_xy', 4), ('build_xy', 4), ('workspace', 6)):
             object.__setattr__(self, name, vector(getattr(self, name), size, name))
         for item in fields(self):
-            if item.name not in ('target', 'supply_xy', 'build_xy', 'workspace', 'recovery_enabled'):
+            if item.name not in ('target', 'supply_xy', 'build_xy', 'workspace', 'recovery_enabled', 'robust_observations', 'robust_min_samples', 'robust_max_samples'):
                 value = getattr(self, item.name)
                 if not finite(value) or (value < 0 if item.name == 'max_sensor_skew_s' else value <= 0):
                     raise ValueError(f'{item.name}: expected finite positive value')
-        if type(self.recovery_enabled) is not bool: raise ValueError('recovery_enabled must be boolean')
+        if type(self.recovery_enabled) is not bool or type(self.robust_observations) is not bool:
+            raise ValueError('recovery_enabled/robust_observations must be boolean')
+        if (type(self.robust_min_samples) is not int or type(self.robust_max_samples) is not int
+                or not 3 <= self.robust_min_samples <= self.robust_max_samples <= 99):
+            raise ValueError('invalid robust sample counts')
+        if self.robust_max_uncertainty_m >= self.stability_m or self.robust_difference_floor_m >= self.stability_m:
+            raise ValueError('uncertainty budget cannot exceed stability criterion')
         for zone in (self.supply_xy, self.build_xy):
             if zone[0] >= zone[1] or zone[2] >= zone[3]: raise ValueError('invalid region ordering')
         if any(self.workspace[i] >= self.workspace[i+1] for i in (0, 2, 4)):

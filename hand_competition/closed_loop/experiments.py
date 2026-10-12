@@ -10,9 +10,10 @@ import re
 from .artifacts import Trace, canonical, digest, read_ppm, load_json, decode_json
 from .contracts import Config, ObservationGate, inside_xy, finite, PHASE_ACTIONS
 from .controller import Controller
-from .geometry import Camera, distance
+from .geometry import Camera, distance, sub, add
 from .synthetic import SyntheticBackend, SensorNoise, SCENARIOS
-from .vision import estimate_single_block, VisionError
+from .vision import estimate_single_block, observe_single_block_pixels, VisionError
+from . import bundle_replay
 
 
 def runtime_sources():
@@ -38,11 +39,11 @@ def code_identity():
 
 
 def run_trial(directory, scenario='nominal', seed=0, config=None, noise=None):
-    config = config or Config()
+    config = config or Config(robust_observations=True)
     if type(seed) is not int: raise ValueError('seed must be an integer')
     noise = noise or SensorNoise()
     backend = SyntheticBackend(scenario, seed, noise)
-    manifest = {'schema_version': 2, 'environment': backend.environment,
+    manifest = {'schema_version': 3, 'environment': backend.environment,
                 'producer': backend.producer, 'python': platform.python_version(),
                 'host': {'system': platform.system(), 'machine': platform.machine()},
                 'clock': '0.1s deterministic synthetic steps; independent wall deadline also enforced',
@@ -65,7 +66,7 @@ def batch(directory, scenarios, seeds, recovery_enabled=None, config=None, noise
     if (not isinstance(seeds, (tuple, list)) or not seeds or any(type(s) is not int for s in seeds)
             or len(set(seeds)) != len(seeds)):
         raise ValueError('batch seeds must be nonempty unique integers')
-    config = config or Config()
+    config = config or Config(robust_observations=True)
     if recovery_enabled is not None:
         config = replace(config, recovery_enabled=recovery_enabled)
     root = Path(directory); root.mkdir(parents=True, exist_ok=False)
@@ -123,15 +124,22 @@ PAYLOAD_FIELDS = {
     'backend_stopped': (set(), set()),
     'stop_request_succeeded': (set(), set()),
     'stop_request_failed': ({'error_type'}, set()),
+    'robust_observation': ({'estimate_id', 'sample_indices', 'position_m', 'uncertainty_xyz_m', 'color',
+                            'sensor_start_s', 'sensor_end_s', 'mean_pixels', 'effective_samples'}, set()),
+    'bundle_reset': ({'reason'}, set()),
     'result': ({'result'}, set()),
 }
 
 
 def validate_payload(kind, payload, version):
     required, optional = PAYLOAD_FIELDS[kind]
+    if version == 3:
+        required = required | {'action_submitted': {'estimate_id'}, 'grasp_verified': {'estimate_id'},
+                               'settle_started': {'estimate_id'},
+                               'stability_verified': {'estimate_id', 'anchor_estimate_id'}}.get(kind, set())
     if not required <= set(payload) or set(payload)-required-optional:
         raise ValueError('unknown/missing event payload fields')
-    if version == 2 and not (required | optional) <= set(payload):
+    if version >= 2 and not (required | optional) <= set(payload):
         raise ValueError('missing v2 event payload fields')
 
 def _replay(directory, expected_runtime_sha256=None):
@@ -143,7 +151,7 @@ def _replay(directory, expected_runtime_sha256=None):
     root = Path(directory)
     manifest = load_json(root/'manifest.json')
     version = manifest.get('schema_version')
-    if type(version) is not int or version not in (1, 2): raise ValueError('unsupported trace schema')
+    if type(version) is not int or version not in (1, 2, 3): raise ValueError('unsupported trace schema')
     if (manifest['environment'].get('official_platform') is not False
             or manifest['environment'].get('feedback_level') != 'synthetic_rgb_kinematic'):
         raise ValueError('this offline verifier only supports declared synthetic records')
@@ -153,16 +161,20 @@ def _replay(directory, expected_runtime_sha256=None):
         if manifest['code']['runtime_tree_sha256'] != expected_runtime_sha256:
             raise ValueError('runtime fingerprint differs from trusted expectation')
     config = Config.from_dict(manifest['config'])
+    robust = version == 3 and config.robust_observations
+    if config.robust_observations and not robust: raise ValueError('robust evidence requires trace v3')
     cameras = tuple(Camera(**value) for value in manifest['cameras'])
-    if version == 2 and canonical(load_json(root/'config.json')) != canonical(manifest['config']):
+    if version >= 2 and canonical(load_json(root/'config.json')) != canonical(manifest['config']):
         raise ValueError('recorded config differs from manifest')
     manifest_hash = digest((root/'manifest.json').read_bytes())
     gate = ObservationGate(cameras, manifest['producer'], config.max_observation_age_s,
                            config.max_sensor_skew_s, allow_legacy=version == 1, tip_bounds=config.workspace)
     previous = '0'*64; previous_time = -1.0; rejected = 0; final = None; trial_start = None
     samples = []; actions = {}; active = None; stability = None; grasps = []
+    bundles = {}; last_bundle = None; held_offset = None; held_color = None; settle_anchor = None
+    bundle_breaks = []; carry_errors = []; held_valid = False
     stop_events = []; terminal_events = []; failed_statuses = 0; motion_mismatches = 0
-    known_events = {'trial_started', 'observation', 'observation_rejected', 'action_submitted',
+    known_events = {'robust_observation', 'bundle_reset', 'trial_started', 'observation', 'observation_rejected', 'action_submitted',
                     'action_status', 'failure_detected', 'recovery_started', 'grasp_verified',
                     'settle_started', 'settle_reset', 'stability_verified', 'trial_stopped',
                     'backend_stopped', 'stop_request_succeeded', 'stop_request_failed', 'result'}
@@ -171,19 +183,19 @@ def _replay(directory, expected_runtime_sha256=None):
         if not isinstance(event, dict): raise ValueError('event must be an object')
         if final is not None: raise ValueError('events after final result')
         required = {'index', 'kind', 'time_s', 'payload', 'previous_sha256', 'sha256'}
-        if version == 2: required.add('manifest_sha256')
+        if version >= 2: required.add('manifest_sha256')
         if set(event) != required: raise ValueError('unknown/missing event fields')
         if final is not None: raise ValueError('events after final result')
         recorded_hash = event.pop('sha256')
         if type(event['index']) is not int or event['index'] != index or event['previous_sha256'] != previous:
             raise ValueError('broken event sequence/hash chain')
         if digest(canonical(event).encode()) != recorded_hash: raise ValueError('event content hash mismatch')
-        if version == 2 and event['manifest_sha256'] != manifest_hash: raise ValueError('manifest binding mismatch')
+        if version >= 2 and event['manifest_sha256'] != manifest_hash: raise ValueError('manifest binding mismatch')
         stamp = event['time_s']
         if not finite(stamp) or stamp < 0 or stamp < previous_time: raise ValueError('invalid event time ordering')
         previous = recorded_hash; previous_time = stamp; payload = event['payload']; kind = event['kind']
         if kind not in known_events or not isinstance(payload, dict): raise ValueError('unknown event kind/payload')
-        validate_payload(kind, payload, version)
+        validate_payload(kind, payload, version if robust else min(version, 2))
         if kind == 'trial_started':
             if trial_start is not None or payload.get('start_s') != stamp: raise ValueError('invalid trial start')
             trial_start = stamp
@@ -200,7 +212,9 @@ def _replay(directory, expected_runtime_sha256=None):
             observation = gate.accept({'schema_version': sensor_version, 'producer': payload['producer'],
                                        'calibration_id': payload['calibration_id'], 'time_s': stamp,
                                        'robot': payload['robot'], 'frames': frames}, stamp)
-            try: estimate = estimate_single_block(observation, cameras, config.stereo_residual_m)
+            try: pixels = observe_single_block_pixels(observation)
+            except VisionError: pixels = None
+            try: estimate = estimate_single_block(observation, cameras, config.stereo_residual_m, pixels)
             except VisionError:
                 estimate = None
                 if payload['visual_position_m'] is not None: raise ValueError('recorded estimate not reproducible')
@@ -211,10 +225,59 @@ def _replay(directory, expected_runtime_sha256=None):
                 raise ValueError('sensor time differs on replay')
             samples.append({'time_s': stamp, 'sensor_time_s': observation.sensor_time_s,
                             'point': estimate.position_m if estimate else None,
-                            'color': estimate.color if estimate else None, 'tip': observation.tip,
+                            'color': pixels.color if pixels else None, 'tip': observation.tip,
+                            'pixels': pixels.pixels if pixels else None, 'camera_ids': pixels.camera_ids if pixels else None,
                             'robot_timed': observation.robot_captured_s is not None})
+            if robust and active is not None and actions[active]['phase'] in ('target_transit', 'target_descent'):
+                if pixels is None or held_offset is None or pixels.color != held_color:
+                    carry_errors.append(index)
+                else:
+                    predicted = add(observation.tip, held_offset)
+                    if any(distance(tuple(pixel)+(0,), tuple(next(c for c in cameras if c.name == name).project(predicted))+(0,)) > config.robust_tracking_pixel_px
+                           for name, pixel in zip(pixels.camera_ids, pixels.pixels)):
+                        carry_errors.append(index)
+                if len(samples) > 1 and samples[-1]['sensor_time_s']-samples[-2]['sensor_time_s'] > config.max_observation_gap_s+1e-9:
+                    carry_errors.append(index)
+        elif kind == 'robust_observation':
+            if not robust or type(payload['estimate_id']) is not int or payload['estimate_id'] != index:
+                raise ValueError('invalid bundle id/schema')
+            value = bundle_replay.reconstruct(payload, samples, cameras, config)
+            value['event_index'] = index; bundles[index] = value; last_bundle = index
+            latest = next(reversed(actions.values()), None) if actions else None
+            if latest and latest['phase'] == 'lift' and latest['state'] == 'complete':
+                close = next((r for r in reversed(list(actions.values())) if r['phase'] == 'close' and r['state'] == 'complete'
+                              and r['end'] <= latest['start']), None)
+                before = bundles.get(close.get('estimate_id')) if close else None
+                if (before and value['sensor_start_s'] > latest['end'] and before['color'] == value['color']
+                        and abs(before['position_m'][2]-config.table_center_height_m)+before['uncertainty_xyz_m'][2] <= config.table_height_tolerance_m
+                        and value['position_m'][2]-before['position_m'][2]-value['uncertainty_xyz_m'][2]-before['uncertainty_xyz_m'][2] >= config.lift_min_m
+                        and bundle_replay.held(value, config)):
+                    grasps.append({'end': stamp, 'color': value['color']})
+                    held_valid = True; held_color = value['color']; held_offset = sub(value['position_m'], value['tip'])
+            elif latest and latest['phase'] in ('target_transit', 'target_descent') and latest['state'] == 'complete':
+                if value['sensor_start_s'] > latest['end'] and bundle_replay.held(value, config) and value['color'] == held_color:
+                    held_valid = True; held_offset = sub(value['position_m'], value['tip'])
+            elif latest and latest['phase'] == 'retreat' and bundle_replay.held(value, config):
+                # Release-stuck recovery is proved by new pixels near withdrawn hand.
+                held_valid = True; held_color = value['color']; held_offset = sub(value['position_m'], value['tip'])
+        elif kind == 'bundle_reset':
+            if not robust: raise ValueError('bundle reset in raw trace')
+            bundle_breaks.append(index)
+        elif kind == 'settle_started':
+            if robust:
+                anchor = bundles.get(payload['estimate_id'])
+                if (anchor is None or last_bundle != payload['estimate_id']
+                        or not bundle_replay.placement(anchor, config)
+                        or distance(payload['anchor_m'], anchor['position_m']) > 1e-9
+                        or payload['sensor_start_s'] != anchor['sensor_start_s']):
+                    raise ValueError('settle anchor contradicts RGB bundle')
+                settle_anchor = payload['estimate_id']
+        elif kind == 'settle_reset':
+            bundle_breaks.append(index); settle_anchor = None
         elif kind == 'grasp_verified':
-            if not samples or samples[-1]['point'] is None or distance(payload['position_m'], samples[-1]['point']) > 1e-9:
+            evidence = bundles.get(payload.get('estimate_id')) if robust else samples[-1] if samples else None
+            point = evidence['position_m'] if robust and evidence else evidence['point'] if evidence else None
+            if point is None or distance(payload['position_m'], point) > 1e-9:
                 raise ValueError('grasp label contradicts reconstructed RGB')
             if 'tip_m' in payload and distance(payload['tip_m'], samples[-1]['tip']) > 1e-9:
                 raise ValueError('grasp label contradicts measured hand')
@@ -243,7 +306,17 @@ def _replay(directory, expected_runtime_sha256=None):
                 if lateral > 1e-6 and min(target[2], tip[2]) < config.transit_min_height_m:
                     raise ValueError('low horizontal action in replay')
             elif action['target_m'] is not None: raise ValueError('non-motion action has target')
-            actions[action_id] = {'action': action, 'phase': payload['phase'], 'start': requested,
+            if robust:
+                reference = bundles.get(payload['estimate_id'])
+                if reference is None or payload['estimate_id'] != last_bundle:
+                    raise ValueError('action missing latest RGB bundle reference')
+                if payload['phase'] == 'close' and (reference['sensor_end_s'] != samples[-1]['sensor_time_s'] or not bundle_replay.held(reference, config)):
+                    raise ValueError('close lacks fresh conservative visual target')
+                if payload['phase'] in ('target_transit', 'target_descent', 'release') and not held_valid:
+                    raise ValueError('carrying/descent/release lacks reconstructed held proof')
+                if payload['phase'] == 'release' and distance(samples[-1]['tip'], config.target) > config.motion_completion_m:
+                    raise ValueError('release away from measured target')
+            actions[action_id] = {'estimate_id': payload.get('estimate_id'), 'action': action, 'phase': payload['phase'], 'start': requested,
                                   'state': 'pending', 'before': samples[-1]}
             active = action_id
         elif kind == 'action_status':
@@ -260,7 +333,9 @@ def _replay(directory, expected_runtime_sha256=None):
                     record['motion_verified'] = distance(samples[-1]['tip'], record['action']['target_m']) <= config.motion_completion_m
                     if not record['motion_verified']: motion_mismatches += 1
                 record['after'] = samples[-1]; record['end'] = stamp
-                if record['phase'] == 'lift' and record['action']['kind'] == 'move':
+                if robust and record['phase'] in ('target_transit', 'target_descent', 'release'):
+                    held_valid = False
+                if not robust and record['phase'] == 'lift' and record['action']['kind'] == 'move':
                     close = next((r for r in reversed(list(actions.values()))
                                   if r['phase'] == 'close' and r['action']['kind'] == 'grasp'
                                   and r['state'] == 'complete' and r['end'] <= record['start']), None)
@@ -277,7 +352,10 @@ def _replay(directory, expected_runtime_sha256=None):
             stop_events.append(kind)
             if active is not None:
                 actions[active]['state'] = 'stopped'; active = None
-        elif kind == 'stability_verified': stability = event
+        elif kind == 'stability_verified':
+            if robust and (settle_anchor != payload['anchor_estimate_id'] or last_bundle != payload['estimate_id']):
+                raise ValueError('stability references invalid/reset bundle window')
+            stability = event
         elif kind == 'result': final = payload['result']
         # grasp_verified labels are deliberately ignored as proof.
     if final is None: raise ValueError('incomplete trace: missing result')
@@ -309,14 +387,16 @@ def _replay(directory, expected_runtime_sha256=None):
             raise ValueError('motion rejection has no measured arrival mismatch')
         if terminal == 'actuator_failure' and not failed_statuses:
             raise ValueError('actuator failure has no failed action evidence')
-    if version == 2:
+    if robust and final.get('final_robust_estimate_id') != last_bundle: raise ValueError('final bundle reference differs')
+    if version >= 2:
         if trial_start is None or abs(previous_time-trial_start-final['elapsed_s']) > 1e-6:
             raise ValueError('result duration differs from event timeline')
         if final.get('trace_complete') is not True: raise ValueError('trace marked incomplete')
     if final['success']:
-        first_visible = next((s for s in samples if s['point'] is not None), None)
+        first_visible = next(iter(bundles.values()), None) if robust else next((s for s in samples if s['point'] is not None), None)
+        first_point = first_visible.get('position_m', first_visible.get('point')) if first_visible else None
         if (final.get('started_in_configured_supply') is not True or first_visible is None
-                or not inside_xy(first_visible['point'], config.supply_xy)):
+                or not inside_xy(first_point, config.supply_xy)):
             raise ValueError('success has no initial supply-zone evidence')
         if not grasps or stability is None: raise ValueError('successful record lacks grasp/stability evidence reconstructed from sensors/actions')
         if final.get('terminal_failure') is not None or final.get('stop_request_succeeded') is not True:
@@ -334,10 +414,28 @@ def _replay(directory, expected_runtime_sha256=None):
         window = [s for s in samples if start-1e-6 <= s['sensor_time_s'] <= end+1e-6]
         if not window or window[0]['sensor_time_s'] > start+1e-6 or window[-1]['sensor_time_s'] < end-1e-6:
             raise ValueError('stability evidence window incomplete')
+        if robust:
+            if carry_errors: raise ValueError('success ignores lost carried RGB evidence')
+            anchor_bundle = bundles[stability['payload']['anchor_estimate_id']]
+            end_bundle = bundles[stability['payload']['estimate_id']]
+            if start != anchor_bundle['sensor_start_s'] or end != end_bundle['sensor_end_s']:
+                raise ValueError('stability time differs from bundle capture times')
+            valid_bundles = [b for b in bundles.values() if anchor_bundle['event_index'] <= b['event_index'] <= end_bundle['event_index']]
+            if any(anchor_bundle['event_index'] < i < stability['index'] for i in bundle_breaks):
+                raise ValueError('stability window contains a reset')
+            covered = set()
+            for b in valid_bundles:
+                if not bundle_replay.placement(b, config) or not bundle_replay.stable(anchor_bundle, b, config):
+                    raise ValueError('bundle violates conservative placement/stability bounds')
+                covered.update(b['sample_indices'])
+            needed = {i for i, s in enumerate(samples) if start-1e-6 <= s['sensor_time_s'] <= end+1e-6}
+            if covered != needed: raise ValueError('stability bundles omit primary observations')
+            if distance(stability['payload']['position_m'], end_bundle['position_m']) > 1e-9:
+                raise ValueError('stability label contradicts RGB bundle')
         anchor = window[0]['point']
         for i, sample in enumerate(window):
             point = sample['point']; tip = sample['tip']
-            if (point is None or not inside_xy(point, config.build_xy)
+            if not robust and (point is None or not inside_xy(point, config.build_xy)
                     or abs(point[2]-config.table_center_height_m) > config.table_height_tolerance_m
                     or distance(point, config.target) > config.goal_tolerance_m
                     or distance(point, anchor) > config.stability_m
@@ -346,13 +444,14 @@ def _replay(directory, expected_runtime_sha256=None):
             if i and sample['sensor_time_s']-window[i-1]['sensor_time_s'] > config.max_observation_gap_s+1e-9:
                 raise ValueError('gap in continuous visual stability evidence')
     return {'feedback_level': manifest['environment']['feedback_level'], 'official_platform': False,
+            'bundles_recomputed': len(bundles), 'robust_observations': robust,
             'observations_recomputed': len(samples), 'rejected_observation_events': rejected,
             'actions_recorded': len(actions), 'grasp_evidence_reconstructed': len(grasps),
             'trace_verified': True, 'visual_evidence_recomputed': True,
             'control_record_consistent': True, 'sensor_authenticity_verified': False,
             'physical_action_execution_verified': False,
             'runtime_identity_checked': expected_runtime_sha256 is not None,
-            'manifest_bound': version == 2,
+            'manifest_bound': version >= 2,
             'robot_timestamps_checked': bool(samples) and all(s['robot_timed'] for s in samples),
             'evidence_contract': f'v{version}', 'recorded_success': final['success']}
 
