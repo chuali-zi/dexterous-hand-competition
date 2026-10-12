@@ -1,0 +1,84 @@
+{
+  "checked_utc": "2026-10-12T08:43:15+00:00",
+  "work_environment_readonly_checks": [
+    {
+      "url": "https://www.rabokit.com/manual/home",
+      "checked_utc": "2026-10-12T08:43:15.947744+00:00",
+      "error": "<urlopen error Tunnel connection failed: 403 Forbidden>"
+    },
+    {
+      "url": "http://www.rabokit.com/v1/api/manual/docs",
+      "checked_utc": "2026-10-12T08:43:15.948275+00:00",
+      "error": "HTTP Error 403: Forbidden"
+    },
+    {
+      "url": "http://www.rabokit.com/v1/api/manual/docs/lbot_dual_arm",
+      "checked_utc": "2026-10-12T08:43:15.948670+00:00",
+      "error": "HTTP Error 403: Forbidden"
+    },
+    {
+      "url": "http://www.rabokit.com/v1/api/manual/docs/dev_kit-agent-template",
+      "checked_utc": "2026-10-12T08:43:15.949177+00:00",
+      "error": "HTTP Error 403: Forbidden"
+    },
+    {
+      "url": "http://www.rabokit.com/v1/api/manual/docs/18-devenv",
+      "checked_utc": "2026-10-12T08:43:15.949646+00:00",
+      "error": "HTTP Error 403: Forbidden"
+    },
+    {
+      "url": "https://robot.bistu.edu.cn/docs/2026-10/780da6f7f1834fdcb7f13c226149662a.pdf",
+      "checked_utc": "2026-10-12T08:43:15.950326+00:00",
+      "error": "<urlopen error Tunnel connection failed: 403 Forbidden>"
+    }
+  ],
+  "fresh_browser_readonly_checks": [
+    {
+      "url": "https://www.rabokit.com/manual/home",
+      "checked_utc": "2026-10-12T08:44:02.015082+00:00",
+      "error": "Page.goto: net::ERR_TUNNEL_CONNECTION_FAILED at https://www.rabokit.com/manual/home"
+    },
+    {
+      "url": "http://www.rabokit.com/v1/api/manual/docs/dev_kit-agent-template",
+      "checked_utc": "2026-10-12T08:44:02.265068+00:00",
+      "status": 403,
+      "title": "",
+      "final_url": "http://www.rabokit.com/v1/api/manual/docs/dev_kit-agent-template",
+      "body_preview": "Domain forbidden"
+    },
+    {
+      "url": "http://www.rabokit.com/v1/api/manual/docs/lbot_dual_arm",
+      "checked_utc": "2026-10-12T08:44:02.460814+00:00",
+      "status": 403,
+      "title": "",
+      "final_url": "http://www.rabokit.com/v1/api/manual/docs/lbot_dual_arm",
+      "body_preview": "Domain forbidden"
+    }
+  ],
+  "credentials_inspected": false,
+  "official_app_opened": false,
+  "sdk_installed": false,
+  "parent_browser_findings": {
+    "date": "2026-10-12",
+    "reader": "parent_task_browser_worker",
+    "logged_in": false,
+    "public_home": "https://www.rabokit.com/square",
+    "login": "https://www.rabokit.com/login",
+    "login_methods": [
+      "WeChat login/registration may follow public account",
+      "phone password or SMS"
+    ],
+    "no_public_agent_system_source_link_found": true,
+    "runtime_may_start_on_opening_agent_editor": true,
+    "display_share_can_auto_start_simulation_and_default_agent": true,
+    "simulation_time_currently_not_billed_but_runtime_and_training_billed": true,
+    "references": [
+      "https://www.rabokit.com/manual/14-controller",
+      "https://www.rabokit.com/manual/19-power",
+      "https://www.rabokit.com/manual/15-simulation",
+      "https://www.rabokit.com/manual/03-scene-manage",
+      "https://www.rabokit.com/manual/dev_kit-agent-template"
+    ],
+    "evidence_level": "inherited_direct_browser_checks_not_new_reads_here"
+  }
+}

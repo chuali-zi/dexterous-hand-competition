@@ -1,6 +1,6 @@
 # 技术路线、选组建议与首周实验
 
-依据 [规则摘录](rules-matrix.md)、[原始项目](open-source.md) 和 [论文](papers.md)，以下均为工程建议，不是官方要求或已完成实验。
+依据 [规则摘录](rules-matrix.md)、[原始项目](open-source.md) 和 [论文](papers.md)，以下为工程建议。2026-10-12已推进[合成RGB闭环实验](closed-loop-experiments.md)、恢复/回放和批量诊断；下述官方平台实验仍待执行，不将合成结果当官方验证。
 
 ## 选组：先推荐仿真垒砖，再由条件验证决定
 
