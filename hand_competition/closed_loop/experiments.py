@@ -14,6 +14,7 @@ from .geometry import Camera, distance, sub, add
 from .synthetic import SyntheticBackend, SensorNoise, SCENARIOS
 from .vision import estimate_single_block, observe_single_block_pixels, VisionError
 from . import bundle_replay
+from .path_replay import PathVerifier
 
 
 def runtime_sources():
@@ -43,7 +44,7 @@ def run_trial(directory, scenario='nominal', seed=0, config=None, noise=None):
     if type(seed) is not int: raise ValueError('seed must be an integer')
     noise = noise or SensorNoise()
     backend = SyntheticBackend(scenario, seed, noise)
-    manifest = {'schema_version': 3, 'environment': backend.environment,
+    manifest = {'schema_version': 4, 'environment': backend.environment,
                 'producer': backend.producer, 'python': platform.python_version(),
                 'host': {'system': platform.system(), 'machine': platform.machine()},
                 'clock': '0.1s deterministic synthetic steps; independent wall deadline also enforced',
@@ -131,16 +132,19 @@ PAYLOAD_FIELDS = {
 }
 
 
-def validate_payload(kind, payload, version):
+def validate_payload(kind, payload, version, robust=False):
     required, optional = PAYLOAD_FIELDS[kind]
-    if version == 3:
+    if version >= 3 and robust:
         required = required | {'action_submitted': {'estimate_id'}, 'grasp_verified': {'estimate_id'},
                                'settle_started': {'estimate_id'},
                                'stability_verified': {'estimate_id', 'anchor_estimate_id'}}.get(kind, set())
+    # Original v2 optional fields are mandatory in v2+, but new timing fields
+    # remain optional in historical records. New writers always save both.
+    if version >= 2: required = required | optional
+    optional = optional | {'observation':{'packet_time_s','received_s'},'trial_stopped':{'deadline'}}.get(kind,set())
+    if version >= 4: required = required | {'observation':{'packet_time_s','received_s'},'trial_stopped':{'deadline'}}.get(kind,set())
     if not required <= set(payload) or set(payload)-required-optional:
         raise ValueError('unknown/missing event payload fields')
-    if version >= 2 and not (required | optional) <= set(payload):
-        raise ValueError('missing v2 event payload fields')
 
 def _replay(directory, expected_runtime_sha256=None):
     """Rebuild evidence from RGB, feedback and action ordering; no actions execute.
@@ -151,7 +155,7 @@ def _replay(directory, expected_runtime_sha256=None):
     root = Path(directory)
     manifest = load_json(root/'manifest.json')
     version = manifest.get('schema_version')
-    if type(version) is not int or version not in (1, 2, 3): raise ValueError('unsupported trace schema')
+    if type(version) is not int or version not in (1, 2, 3, 4): raise ValueError('unsupported trace schema')
     if (manifest['environment'].get('official_platform') is not False
             or manifest['environment'].get('feedback_level') != 'synthetic_rgb_kinematic'):
         raise ValueError('this offline verifier only supports declared synthetic records')
@@ -161,7 +165,7 @@ def _replay(directory, expected_runtime_sha256=None):
         if manifest['code']['runtime_tree_sha256'] != expected_runtime_sha256:
             raise ValueError('runtime fingerprint differs from trusted expectation')
     config = Config.from_dict(manifest['config'])
-    robust = version == 3 and config.robust_observations
+    robust = version >= 3 and config.robust_observations
     if config.robust_observations and not robust: raise ValueError('robust evidence requires trace v3')
     cameras = tuple(Camera(**value) for value in manifest['cameras'])
     if version >= 2 and canonical(load_json(root/'config.json')) != canonical(manifest['config']):
@@ -169,6 +173,7 @@ def _replay(directory, expected_runtime_sha256=None):
     manifest_hash = digest((root/'manifest.json').read_bytes())
     gate = ObservationGate(cameras, manifest['producer'], config.max_observation_age_s,
                            config.max_sensor_skew_s, allow_legacy=version == 1, tip_bounds=config.workspace)
+    path_verifier = PathVerifier(config,robust,cameras)
     previous = '0'*64; previous_time = -1.0; rejected = 0; final = None; trial_start = None
     samples = []; actions = {}; active = None; stability = None; grasps = []
     bundles = {}; last_bundle = None; held_offset = None; held_color = None; settle_anchor = None
@@ -195,7 +200,7 @@ def _replay(directory, expected_runtime_sha256=None):
         if not finite(stamp) or stamp < 0 or stamp < previous_time: raise ValueError('invalid event time ordering')
         previous = recorded_hash; previous_time = stamp; payload = event['payload']; kind = event['kind']
         if kind not in known_events or not isinstance(payload, dict): raise ValueError('unknown event kind/payload')
-        validate_payload(kind, payload, version if robust else min(version, 2))
+        validate_payload(kind, payload, version, robust)
         if kind == 'trial_started':
             if trial_start is not None or payload.get('start_s') != stamp: raise ValueError('invalid trial start')
             trial_start = stamp
@@ -209,8 +214,12 @@ def _replay(directory, expected_runtime_sha256=None):
                 values = {k: v for k, v in frame.items() if k not in ('file', 'file_sha256')}
                 values['rgb'] = pixels; frames.append(values)
             sensor_version = payload.get('observation_schema_version', 1)
+            has_receipt = 'packet_time_s' in payload or 'received_s' in payload
+            if has_receipt and (set(('packet_time_s','received_s'))-set(payload) or not finite(payload['received_s']) or payload['received_s']!=stamp):
+                raise ValueError('incomplete/inconsistent receipt timestamps')
+            packet_stamp=payload['packet_time_s'] if has_receipt else stamp
             observation = gate.accept({'schema_version': sensor_version, 'producer': payload['producer'],
-                                       'calibration_id': payload['calibration_id'], 'time_s': stamp,
+                                       'calibration_id': payload['calibration_id'], 'time_s': packet_stamp,
                                        'robot': payload['robot'], 'frames': frames}, stamp)
             try: pixels = observe_single_block_pixels(observation)
             except VisionError: pixels = None
@@ -223,7 +232,7 @@ def _replay(directory, expected_runtime_sha256=None):
                     raise ValueError('visual estimate differs on replay')
             if 'sensor_time_s' in payload and payload['sensor_time_s'] != observation.sensor_time_s:
                 raise ValueError('sensor time differs on replay')
-            samples.append({'time_s': stamp, 'sensor_time_s': observation.sensor_time_s,
+            samples.append({'index':len(samples),'time_s': stamp,'packet_time_s':packet_stamp,'receipt_timed':has_receipt, 'sensor_time_s': observation.sensor_time_s,
                             'point': estimate.position_m if estimate else None,
                             'color': pixels.color if pixels else None, 'tip': observation.tip,
                             'pixels': pixels.pixels if pixels else None, 'camera_ids': pixels.camera_ids if pixels else None,
@@ -248,14 +257,14 @@ def _replay(directory, expected_runtime_sha256=None):
                 close = next((r for r in reversed(list(actions.values())) if r['phase'] == 'close' and r['state'] == 'complete'
                               and r['end'] <= latest['start']), None)
                 before = bundles.get(close.get('estimate_id')) if close else None
-                if (before and value['sensor_start_s'] > latest['end'] and before['color'] == value['color']
+                if (before and value['sample_indices'][0] > latest['after']['index'] and before['color'] == value['color']
                         and abs(before['position_m'][2]-config.table_center_height_m)+before['uncertainty_xyz_m'][2] <= config.table_height_tolerance_m
                         and value['position_m'][2]-before['position_m'][2]-value['uncertainty_xyz_m'][2]-before['uncertainty_xyz_m'][2] >= config.lift_min_m
                         and bundle_replay.held(value, config)):
                     grasps.append({'end': stamp, 'color': value['color']})
                     held_valid = True; held_color = value['color']; held_offset = sub(value['position_m'], value['tip'])
             elif latest and latest['phase'] in ('target_transit', 'target_descent') and latest['state'] == 'complete':
-                if value['sensor_start_s'] > latest['end'] and bundle_replay.held(value, config) and value['color'] == held_color:
+                if value['sample_indices'][0] > latest['after']['index'] and bundle_replay.held(value, config) and value['color'] == held_color:
                     held_valid = True; held_offset = sub(value['position_m'], value['tip'])
             elif latest and latest['phase'] == 'retreat' and bundle_replay.held(value, config):
                 # Release-stuck recovery is proved by new pixels near withdrawn hand.
@@ -292,7 +301,7 @@ def _replay(directory, expected_runtime_sha256=None):
             requested = payload.get('requested_s', stamp)
             if not finite(requested) or not 0 <= requested <= stamp:
                 raise ValueError('invalid action request time')
-            if not samples or not 0 <= requested-samples[-1]['time_s'] <= config.max_observation_age_s:
+            if not samples or not 0 <= requested-samples[-1]['sensor_time_s'] <= config.max_observation_age_s:
                 raise ValueError('action without fresh feedback')
             if set(action) != {'kind', 'target_m'} or action['kind'] not in ('move', 'grasp', 'release'):
                 raise ValueError('invalid action contract')
@@ -326,7 +335,7 @@ def _replay(directory, expected_runtime_sha256=None):
             record = actions[action_id]
             if state == 'complete':
                 if stamp-record['start'] >= config.action_timeout_s: raise ValueError('late completion bypasses action deadline')
-                if not samples or samples[-1]['time_s'] < stamp-config.max_observation_age_s:
+                if not samples or samples[-1]['sensor_time_s'] < stamp-config.max_observation_age_s-1e-9:
                     raise ValueError('completion without fresh measured feedback')
                 record['motion_verified'] = True
                 if record['action']['kind'] == 'move':
@@ -357,6 +366,8 @@ def _replay(directory, expected_runtime_sha256=None):
                 raise ValueError('stability references invalid/reset bundle window')
             stability = event
         elif kind == 'result': final = payload['result']
+        path_verifier.accept(event,samples,bundles,actions)
+        if kind=='trial_stopped': path_verifier.terminal_payload={**payload,'_time_s':stamp}
         # grasp_verified labels are deliberately ignored as proof.
     if final is None: raise ValueError('incomplete trace: missing result')
     if final != load_json(root/'result.json'): raise ValueError('result file differs from event log')
@@ -408,7 +419,7 @@ def _replay(directory, expected_runtime_sha256=None):
         if (not finite(duration) or duration < config.settle_s or abs(end-start-duration) > 1e-6
                 or final['stability_verified_s'] != duration):
             raise ValueError('insufficient/inconsistent stability duration')
-        release = [r for r in actions.values() if r['action']['kind'] == 'release' and r.get('end', float('inf')) <= start]
+        release = [r for r in actions.values() if r['action']['kind'] == 'release' and r.get('after',{}).get('sensor_time_s',float('inf')) <= start]
         if not release or not any(g['end'] < release[-1]['start'] for g in grasps):
             raise ValueError('no release action after reconstructed grasp')
         window = [s for s in samples if start-1e-6 <= s['sensor_time_s'] <= end+1e-6]
@@ -443,12 +454,15 @@ def _replay(directory, expected_runtime_sha256=None):
                 raise ValueError('stability sample violates placement/height/hand-separation criterion')
             if i and sample['sensor_time_s']-window[i-1]['sensor_time_s'] > config.max_observation_gap_s+1e-9:
                 raise ValueError('gap in continuous visual stability evidence')
+    failure_proof, failure_limits = path_verifier.failure_cause(final,actions,rejected,trial_start,version)
     return {'feedback_level': manifest['environment']['feedback_level'], 'official_platform': False,
             'bundles_recomputed': len(bundles), 'robust_observations': robust,
             'observations_recomputed': len(samples), 'rejected_observation_events': rejected,
             'actions_recorded': len(actions), 'grasp_evidence_reconstructed': len(grasps),
             'trace_verified': True, 'visual_evidence_recomputed': True,
-            'control_record_consistent': True, 'sensor_authenticity_verified': False,
+            'control_record_consistent': failure_proof, 'failure_reason_reconstructed':failure_proof if not final['success'] else None,
+            'failure_reason_limitations':failure_limits, 'legal_path_reconstructed':True,
+            'receipt_timestamps_recorded': bool(samples) and all(s['receipt_timed'] for s in samples), 'sensor_authenticity_verified': False,
             'physical_action_execution_verified': False,
             'runtime_identity_checked': expected_runtime_sha256 is not None,
             'manifest_bound': version >= 2,

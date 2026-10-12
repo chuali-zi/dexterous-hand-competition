@@ -26,7 +26,7 @@ class Controller:
         self.recoveries = 0; self.started_in_supply = False; self.phase = 'initial'
         self.stability_verified_s = 0.0; self.start_s = 0.0; self.last_time = 0.0
         self.wall_start_s = time.monotonic(); self.action_count = 0; self.action_ids = set()
-        self.holding_confirmed = False; self.release_requested = False; self.finished = False
+        self.holding_confirmed = False; self.release_requested = False; self.finished = False; self.deadline_evidence = None
 
     def clock(self):
         try: now = self.backend.now()
@@ -37,9 +37,21 @@ class Controller:
         return now
 
     def deadline(self):
-        if (self.clock()-self.start_s >= self.config.trial_timeout_s or
-                time.monotonic()-self.wall_start_s >= self.config.wall_timeout_s):
+        elapsed = self.clock()-self.start_s; wall = time.monotonic()-self.wall_start_s
+        if elapsed >= self.config.trial_timeout_s or wall >= self.config.wall_timeout_s:
+            self.deadline_evidence = {'scope':'trial','backend_elapsed_s':elapsed,'wall_elapsed_s':wall,'action_id':None}
             raise TrialFailure('trial_timeout', 'experiment deadline reached')
+
+    def fresh_feedback(self):
+        if self.observation is None or self.last_time-self.observation.sensor_time_s > self.config.max_observation_age_s+1e-9:
+            self.emit('observation_rejected', error='measured feedback aged past control budget')
+            raise TrialFailure('invalid_observation','measured feedback aged past control budget')
+
+    def action_expired(self, started, wall_started, action_id):
+        elapsed=self.last_time-started; wall=time.monotonic()-wall_started
+        expired=elapsed>=self.config.action_timeout_s or wall>=self.config.action_timeout_s
+        if expired: self.deadline_evidence={'scope':'action','backend_elapsed_s':elapsed,'wall_elapsed_s':wall,'action_id':action_id}
+        return expired
 
     def emit(self, kind, **payload):
         try: self.trace.event(kind, self.last_time, **payload)
@@ -67,7 +79,7 @@ class Controller:
         if self.pixels is not None:
             self.sample = Sample(self.trace.observations, self.observation.sensor_time_s, self.observation.tip,
                                  self.pixels.camera_ids, self.pixels.pixels, self.pixels.color)
-        try: self.trace.observation(self.observation, self.visual, error=vision_error)
+        try: self.trace.observation(self.observation, self.visual, error=vision_error, received_s=self.last_time)
         except (OSError, ValueError) as error: raise TrialFailure('artifact_io_failure', type(error).__name__) from error
         return self.visual
 
@@ -95,7 +107,7 @@ class Controller:
             try: guard_move(self.observation.tip, target, self.config)
             except ValueError as error: raise TrialFailure('unsafe_waypoint', str(error)) from error
         action = Action(kind, target)
-        requested = self.clock(); wall_requested = time.monotonic()
+        requested = self.clock(); self.fresh_feedback(); wall_requested = time.monotonic()
         try: action_id = self.backend.submit(action)
         except Exception as error: raise TrialFailure('action_transport_failure', type(error).__name__) from error
         if not isinstance(action_id, str) or not action_id.strip() or action_id in self.action_ids:
@@ -107,24 +119,23 @@ class Controller:
                   requested_s=requested, grasp_success_inferred=False,
                   **({'estimate_id': self.bundle_id} if self.config.robust_observations else {}))
         self.deadline()
-        if self.last_time-started >= self.config.action_timeout_s or time.monotonic()-wall_requested >= self.config.action_timeout_s:
+        if self.action_expired(started, wall_requested, action_id):
             raise TrialFailure('action_timeout', f'{phase}: submit exceeded deadline')
         while True:
             previous_sensor = self.observation.sensor_time_s
             self.sense()
             # Timeout is checked before accepting a late "complete" response.
-            if (self.last_time-started >= self.config.action_timeout_s
-                    or time.monotonic()-wall_requested >= self.config.action_timeout_s):
+            if self.action_expired(started, wall_requested, action_id):
                 raise TrialFailure('action_timeout', f'{phase}: command exceeded deadline')
             try: status = self.backend.status(action_id)
             except Exception as error: raise TrialFailure('action_transport_failure', type(error).__name__) from error
             self.deadline()
-            if (self.last_time-started >= self.config.action_timeout_s
-                    or time.monotonic()-wall_requested >= self.config.action_timeout_s):
+            if self.action_expired(started, wall_requested, action_id):
                 raise TrialFailure('action_timeout', f'{phase}: status exceeded deadline')
             if (not isinstance(status, ActionStatus) or status.state not in ('pending', 'complete', 'failed')
                     or not isinstance(status.detail, str)):
                 raise TrialFailure('action_protocol_failure', 'invalid action status')
+            self.fresh_feedback()
             self.emit('action_status', action_id=action_id, state=status.state, detail=status.detail)
             if status.state == 'failed': raise TrialFailure('actuator_failure', status.detail)
             if phase in ('target_transit', 'target_descent'):
@@ -140,7 +151,7 @@ class Controller:
                         if sum((pixel[i]-expected[i])**2 for i in (0, 1))**0.5 > self.config.robust_tracking_pixel_px:
                             raise TrialFailure('carried_object_lost', 'RGB innovation inconsistent with observed held offset')
                 else:
-                    if self.visual is None:
+                    if self.visual is None or self.observation.sensor_time_s-previous_sensor > self.config.max_observation_gap_s+1e-9:
                         raise TrialFailure('carried_object_unobserved', 'lost RGB evidence while carrying')
                     if distance(self.visual.position_m, self.observation.tip) > self.config.grasp_distance_m:
                         raise TrialFailure('carried_object_lost', 'RGB object no longer tracks measured hand')
@@ -360,7 +371,7 @@ class Controller:
             detail = str(error) if isinstance(error, TrialFailure) else type(error).__name__
             failure = {'category': terminal, 'phase': self.phase, 'detail': detail}
             if not self.failures or self.failures[-1] != failure: self.failures.append(failure)
-            try: self.emit('trial_stopped', category=terminal, detail=detail)
+            try: self.emit('trial_stopped', category=terminal, detail=detail, deadline=self.deadline_evidence if terminal in ('trial_timeout','action_timeout') else None)
             except TrialFailure: pass
         finally:
             try:

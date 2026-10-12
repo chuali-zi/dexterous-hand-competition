@@ -96,7 +96,10 @@ class ReviewerRegressionTests(unittest.TestCase):
                     result, backend = run_custom(path, cls)
                     self.assertFalse(result['success']); self.assertEqual(result['terminal_failure'], category)
                     self.assertEqual(backend.stop_count, 1); self.assertTrue((path/'result.json').exists())
-                    self.assertTrue(replay(path)['control_record_consistent'])
+                    verified=replay(path)
+                    self.assertTrue(verified['trace_verified'])
+                    self.assertEqual(verified['control_record_consistent'],cls is not InvalidStatus)
+                    if cls is InvalidStatus: self.assertFalse(verified['failure_reason_reconstructed'])
                     if cls is OccludedTransit:
                         events = [json.loads(line) for line in (path/'events.jsonl').read_text().splitlines()]
                         phases = [e['payload']['phase'] for e in events if e['kind'] == 'action_submitted']
@@ -177,7 +180,7 @@ class ReviewerRegressionTests(unittest.TestCase):
             kept = [e for e in events if e['kind'] in ('trial_started', 'observation', 'stop_request_succeeded', 'result')]
             kept[-1]['payload']['result']['action_count'] = 0
             rehash(path, kept)
-            with self.assertRaisesRegex(ValueError, 'terminal failure evidence'): replay(path)
+            with self.assertRaisesRegex(ValueError, 'terminal failure evidence|preceding success/failure terminal'): replay(path)
 
     def test_carry_slip_is_detected_before_descent(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -186,7 +186,7 @@ class ExperimentTests(unittest.TestCase):
                 event['sha256'] = digest(canonical(event).encode()); previous = event['sha256']
             (path/'events.jsonl').write_text(''.join(canonical(e)+'\n' for e in events))
             (path/'result.json').write_text(json.dumps(result))
-            with self.assertRaisesRegex(ValueError, 'lacks grasp/stability'): replay(path)
+            with self.assertRaisesRegex(ValueError, 'lacks grasp/stability|failed/nonstable path'): replay(path)
 
     def test_aborted_fault_is_counted_once(self):
         with tempfile.TemporaryDirectory() as directory:

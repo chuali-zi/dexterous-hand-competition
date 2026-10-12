@@ -21,7 +21,8 @@
 | [答疑问题](docs/questions.md) | 按得分/失格风险排序的待确认项 |
 | [离线加固与审查](docs/offline-hardening.md) | 审查反例、修复、本地验证与待独立复验 |
 | [噪声鲁棒性](docs/noise-robustness.md) | 单帧失败根因、多帧估计、匹配对照、未见夹具及限制 |
-| [证据协议v3](docs/protocol.md) | 时间/来源/schema、阶段门、配置和重建回放 |
+| [回放状态/时间修复](docs/replay-state-time.md) | 独立复验状态、完整控制路径、真实缓存包时间与失败依据 |
+| [证据协议v4](docs/protocol.md) | 时间/来源/schema、阶段门、配置和重建回放 |
 | [闭环实验](docs/closed-loop-experiments.md) | 自动执行、RGB后验、恢复、回放、批量评估与反馈层级 |
 | [官方接入交接](docs/platform-access.md) | 实际访问、登录/费用边界、所需模板与最小人工步骤 |
 | [离线评估说明](docs/offline-evaluation.md) | 非官方记分、最终状态、日志格式与示例 |

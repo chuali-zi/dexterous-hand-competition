@@ -60,7 +60,7 @@ class Trace:
         self._stream.write(canonical(event)+'\n'); self._stream.flush()
         self._previous = event['sha256']; self.count += 1
 
-    def observation(self, observation, estimate=None, error=None):
+    def observation(self, observation, estimate=None, error=None, received_s=None):
         frames = []
         for frame in observation.frames:
             name = f'frames/{self.observations:05}-{frame.camera_id}.ppm'
@@ -75,7 +75,9 @@ class Trace:
             version = 2
             robot.update(producer=observation.robot_producer, captured_s=observation.robot_captured_s,
                          sequence=observation.robot_sequence)
-        self.event('observation', observation.time_s, producer=self.producer,
+        timing = {} if received_s is None else {'packet_time_s': observation.time_s, 'received_s': received_s}
+        if self.version >= 4 and received_s is None: raise ValueError('receipt timestamp required')
+        self.event('observation', observation.time_s if received_s is None else received_s, producer=self.producer, **timing,
                    observation_schema_version=version, sensor_time_s=observation.sensor_time_s,
                    calibration_id=observation.calibration_id, frames=frames, robot=robot,
                    visual_position_m=estimate.position_m if estimate else None,

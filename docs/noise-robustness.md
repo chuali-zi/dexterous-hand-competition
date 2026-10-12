@@ -66,3 +66,5 @@ python -m hand_competition.closed_loop run --raw-observations --pixel-jitter 1 -
 原独立审查R1–R6的新关闭状态尚未收到；本轮新增估计/回放也待独立审查。没有把本地测试当作独立审查批准。
 
 结果以[本轮机器可读证据](evidence/noise-robustness-validation.json)及[验证记录](validation.md)为准。原始PPM和完整链式日志留在本地忽略目录`runs/`，可按脚本重跑；未提交摄像头实拍、官方运行记录或大文件权重。
+
+父任务后续转交独立复验，R4回放路径与新增N1时间问题需继续处理；[当前修复记录](replay-state-time.md)另存。此页79例/a5a2源码与3/12等结果保持b947d9e历史版本，不替换为新代码实测。
