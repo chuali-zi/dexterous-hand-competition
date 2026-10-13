@@ -1,0 +1,308 @@
+{
+  "schema_version": 1,
+  "recorded_utc": "2026-10-13T04:13:59.767548+00:00",
+  "runtime_code": {
+    "git_commit": "86e12ae0f264b2aea7ac7852c05bd77be827bedd",
+    "dirty_tree": true,
+    "runtime_files": {
+      "__init__.py": "c97b2ee03a290716010891846cea5fbe0edf07f763f94e96e49d341e9e04098a",
+      "__main__.py": "c981c7cdc98ab848875589af36674311c62a5db11ca7535fb6b01addbe558634",
+      "closed_loop/__init__.py": "f52f2011888ef1f4584bffe3de9923feb5111ead3752cda93a9bb43879bf518d",
+      "closed_loop/__main__.py": "8a9745582fe5b69b343e8d76db3c3ec0dacc9797932332fe43f5ae351c4779c7",
+      "closed_loop/artifacts.py": "4cc05035d90c80d42ed80a591869e9d977fd6f9c318129db6005739732cbee60",
+      "closed_loop/bundle_replay.py": "ffc57d49d742c55bb034aefd16e2b918d56839e1bfa31ff2b21b1e819ac0f956",
+      "closed_loop/contracts.py": "23606372b9bc0d092ff65f25879b081a3bfd52f0e5497c160737b34f43973cfe",
+      "closed_loop/controller.py": "fc1520cbbbb78cec171b5066b9b3a4ebb061a4d3bce849842b45d3d87c71e520",
+      "closed_loop/experiments.py": "b550125226805f54cecf5c98eabe758b38a3d8fdba90df2a7418cf84e410971e",
+      "closed_loop/geometry.py": "ff30a70f3e32ba0ac6d6fe4f2307d4cf73117169d89dc73b0476eca996a7a009",
+      "closed_loop/path_replay.py": "c74b1d7bd96696fa000c46545fb275273e9a29e4407eeb4cff92c47ae1179a6f",
+      "closed_loop/preflight.py": "98f80d6278ee5f9f928f632bafdf7b4a3d2151f7df386a4574f9a0f247b191ff",
+      "closed_loop/robust.py": "79e74d064b5ac673e0bef51c680d8b7a01830af95d32c39631c715a73992ebfa",
+      "closed_loop/synthetic.py": "e5f7d790f357b2fa12d9296767278e14be2e6fe371db83d6f73c6174ce4d83eb",
+      "closed_loop/vision.py": "0fcaeaeb323fc82a11283e3f78d557e90c4cb56df01e284952d6856a3797f8cb",
+      "evaluation.py": "9a439d30dc366dc3a0de2aa45186a8f070382c30b42a3c2c5a81176b245f4613",
+      "multi_block/__init__.py": "7b62e369ab7bf5f2041c3c2e0462a69fcdfb67954ce6959200bed9d9b3867884",
+      "multi_block/__main__.py": "0c6e271e6388f9f53de91d25d5b10596f383b69580ba99c920c0eb18841058dc",
+      "multi_block/perception.py": "2f4cfde658e4c91bb7a2056a7bc19f51ae00895809e57afd694954ae459525ca",
+      "multi_block/planning.py": "45dc5511b066e04724e5a351760f51df11a5a25763cb480cc6152c4cee82236d",
+      "multi_block/proxy_geometry.py": "b9686edb7cdbb804559598a692ac2ad65daea8964466a7a92500d018fe121759",
+      "multi_block/records.py": "e59887254206e51003f25a7a117e89c8f9abd686fb27a9df1465bf0ea67b8f2a",
+      "multi_block/session.py": "a2720f81a0608bdba84eb58b9a7c12dddb621aaf389e0f86272f4492ea3d4ab9",
+      "multi_block/tracking.py": "b42d268dd915e82c772191f0a8a46adaad6821694ba1c5455388cdfa5da10c9c"
+    },
+    "runtime_tree_sha256": "113ce5c0792124237cffaa52067358c91c7e13e346d8626536bda9e192ca274f"
+  },
+  "audit_kind": "existing read-only planning boundary and local readiness; no new controller/import protocol",
+  "denials": [
+    {
+      "case": "before_any_observation",
+      "outcome": "denied",
+      "exception": "NotImplementedError",
+      "reason": "multi-block robot execution/official SDK mapping is not implemented",
+      "local_callback_invocations": 0,
+      "session_terminated": false
+    },
+    {
+      "case": "live_conditional_candidate",
+      "outcome": "denied",
+      "exception": "NotImplementedError",
+      "reason": "multi-block robot execution/official SDK mapping is not implemented",
+      "local_callback_invocations": 0,
+      "session_terminated": false
+    },
+    {
+      "case": "forged_all_verification_flags_true",
+      "outcome": "denied",
+      "exception": "NotImplementedError",
+      "reason": "multi-block robot execution/official SDK mapping is not implemented",
+      "local_callback_invocations": 0,
+      "session_terminated": false
+    },
+    {
+      "case": "after_explicit_stop",
+      "outcome": "denied",
+      "exception": "NotImplementedError",
+      "reason": "multi-block robot execution/official SDK mapping is not implemented",
+      "local_callback_invocations": 0,
+      "session_terminated": true
+    },
+    {
+      "case": "after_input_rejection_terminal",
+      "outcome": "denied",
+      "exception": "NotImplementedError",
+      "reason": "multi-block robot execution/official SDK mapping is not implemented",
+      "local_callback_invocations": 0,
+      "session_terminated": true
+    }
+  ],
+  "denial_cases": 5,
+  "local_callback_invocations": 0,
+  "observations_for_candidate": 32,
+  "candidate_observed": {
+    "kind": "candidate",
+    "candidate": {
+      "source_track_id": "local-0001",
+      "source_color": "red",
+      "source_center_m": [
+        -0.1999999999999999,
+        -0.11999999999999994,
+        0.025000000000000577
+      ],
+      "target_slot_id": "layer-0-slot-0",
+      "target_center_m": [
+        0.08,
+        0.0,
+        0.025
+      ],
+      "required_support_slots": [],
+      "observation_captured_s": 3.2,
+      "support_proxy_check": {
+        "valid": true,
+        "reason": null,
+        "support_fraction": 1.0,
+        "top_plane_errors_m": []
+      }
+    },
+    "geometric_occupancy": {},
+    "geometrically_supported_slots": [],
+    "remaining_slots": [
+      "layer-0-slot-0",
+      "layer-0-slot-1",
+      "layer-0-slot-2",
+      "layer-0-slot-3",
+      "layer-1-slot-0",
+      "layer-1-slot-1",
+      "layer-1-slot-2",
+      "layer-2-slot-0",
+      "layer-2-slot-1",
+      "layer-3-slot-0"
+    ],
+    "blocked": {
+      "layer-1-slot-0": "support_dependency_missing",
+      "layer-1-slot-1": "support_dependency_missing",
+      "layer-1-slot-2": "support_dependency_missing",
+      "layer-2-slot-0": "support_dependency_missing",
+      "layer-2-slot-1": "support_dependency_missing",
+      "layer-3-slot-0": "support_dependency_missing"
+    },
+    "support_proxy_checks": {
+      "layer-0-slot-0": {
+        "valid": true,
+        "reason": null,
+        "support_fraction": 1.0,
+        "top_plane_errors_m": []
+      },
+      "layer-0-slot-1": {
+        "valid": true,
+        "reason": null,
+        "support_fraction": 1.0,
+        "top_plane_errors_m": []
+      },
+      "layer-0-slot-2": {
+        "valid": true,
+        "reason": null,
+        "support_fraction": 1.0,
+        "top_plane_errors_m": []
+      },
+      "layer-0-slot-3": {
+        "valid": true,
+        "reason": null,
+        "support_fraction": 1.0,
+        "top_plane_errors_m": []
+      }
+    },
+    "unresolved_space_count": 0,
+    "geometric_epsilon_m": 1e-09,
+    "official_score": null,
+    "robot_actions_executed": 0,
+    "execution_available": false,
+    "physical_support_verified": false,
+    "robot_collision_verified": false,
+    "collision_scope": "axis_aligned_block_proxy_and_vertical_descent_column_only",
+    "transport_provenance_verified": false,
+    "correspondence_authenticity_verified": false,
+    "physical_component_completeness_verified": false
+  },
+  "environment": {
+    "python": "3.12.14",
+    "modules": {
+      "rabo_robolib": {
+        "available": false,
+        "origin": null
+      },
+      "rabo_robocap": {
+        "available": false,
+        "origin": null
+      },
+      "rclpy": {
+        "available": false,
+        "origin": null
+      },
+      "cv2": {
+        "available": false,
+        "origin": null
+      },
+      "playwright": {
+        "available": true,
+        "origin": "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/playwright/__init__.py"
+      }
+    },
+    "executables": {
+      "chromium": "/usr/bin/chromium",
+      "ros2": null,
+      "docker": "/usr/local/bin/docker"
+    },
+    "official_platform_verified": false,
+    "sdk_initialized": false,
+    "note": "No credentials/cookies inspected. Availability does not establish permission or free execution."
+  },
+  "sdk_modules_imported": {
+    "rabo_robolib": false,
+    "rabo_robocap": false,
+    "rclpy": false
+  },
+  "all_reviewed_code_config_script_test_files_unchanged": 45,
+  "local_asset_search": {
+    "scope": "rg non-hidden, non-ignored workspace files; no credential/session inspection",
+    "patterns": [
+      "*agent_system*",
+      "*rabo*",
+      "*.urdf",
+      "*.xacro",
+      "*.bag",
+      "*.mcap",
+      "camera_info*",
+      "package.xml",
+      "metadata.yaml"
+    ],
+    "matches": [],
+    "limits": "filename search is not an origin/permission audit; no actual official template/data supplied"
+  },
+  "public_access_attempts": [
+    {
+      "url": "https://robot.bistu.edu.cn/tzgg/index.html",
+      "transport": "urllib default environment network/proxy configuration",
+      "error_type": "URLError",
+      "error": "<urlopen error Tunnel connection failed: 403 Forbidden>",
+      "contents_independently_read": false
+    },
+    {
+      "url": "https://robot.bistu.edu.cn/tzgg/3d95cef5dc594ecbbc11333770b5cbe0.html",
+      "transport": "urllib default environment network/proxy configuration",
+      "error_type": "URLError",
+      "error": "<urlopen error Tunnel connection failed: 403 Forbidden>",
+      "contents_independently_read": false
+    },
+    {
+      "url": "http://www.rabokit.com/v1/api/manual/docs/lbot_dual_arm",
+      "transport": "urllib default environment network/proxy configuration",
+      "http_status": 403,
+      "error": "HTTP Error 403: Forbidden",
+      "contents_independently_read": false
+    }
+  ],
+  "audit_script_sha256": "d0a703218202b7253b09db1b0d58ebdbac8a830d46eba8d3f7c26afb7d6d401c",
+  "official_platform_opened": false,
+  "sdk_initialized": false,
+  "robot_actions_executed": 0,
+  "physical_stop_verified": false,
+  "official_score": null,
+  "scope_limit": "Only this public planning-session API is denied; no sandbox/security/physical-stop proof. Fake callback is local instrumentation, not an SDK.",
+  "local_run_provenance": {
+    "source_artifact": "runs/readiness-final/audit.json",
+    "source_artifact_sha256": "917b163cd90bd888dfb65f49d4a5199f8cd91aa885352ca265dfc4fd7b19b64c",
+    "console_log_sha256": "6ce48237fc7ebfe05927667dbab8d51b3e6a0c8f2a0fb5901b8b4a22a2bfadb4",
+    "command": "python scripts/readiness_audit.py --output runs/readiness-final --check-public-sources",
+    "algorithm_scope_extension": false,
+    "reused_fixture": "reviewed normal source marker; no new scene or scoring claim"
+  },
+  "web_tool_access_attempts": [
+    {
+      "url": "https://robot.bistu.edu.cn/tzgg/index.html",
+      "outcome": "timeout fetching; no contents"
+    },
+    {
+      "url": "https://robot.bistu.edu.cn/tzgg/3d95cef5dc594ecbbc11333770b5cbe0.html",
+      "outcome": "timeout fetching; no contents"
+    },
+    {
+      "url": "https://www.rabokit.com/manual/lbot_dual_arm",
+      "outcome": "not accessible via tool; no contents"
+    }
+  ],
+  "stop_basis": {
+    "code_defect_in_accepted_scope": false,
+    "minimum_inputs": [
+      "versioned official fixed scene attachment or original link",
+      "identified actual agent_system source/dependency export"
+    ],
+    "continue_offline_when_available": "AST/interface/allowed-input diff without executing imported source",
+    "repeat_login_or_paid_run_request": false,
+    "missing_actual_evidence": [
+      "actual official template/version",
+      "actual camera calibration and legitimate observation definitions",
+      "measured robot state and completion/cancel/stop semantics",
+      "physical task feedback"
+    ],
+    "cannot_infer_scene_unpublished_from_network_error": true
+  },
+  "default_no_network_run": {
+    "command": "python scripts/readiness_audit.py --output runs/readiness-default-check",
+    "public_access_attempts": 0,
+    "denials": 5,
+    "callbacks": 0,
+    "source_artifact_sha256": "1502ee49a787a162c941bb76ba755b8fb0b24e178119481963ebdb9609ab5c00",
+    "console_log_sha256": "6aea066a5245c1f792a9e3296be77e7e77087d8b9afe1dbfd65bffbb5e3f2d58"
+  },
+  "delivery_checks": {
+    "status": "passed",
+    "command": "python scripts/check.py",
+    "tests_passed": 99,
+    "relative_links_passed": 150,
+    "json_source_lock_passed": true,
+    "log_sha256": "d0d4f8b47e83dd695ceb1555b946a41874b3ac78014a3fee11fc9ad0fbe0fe10",
+    "accepted_runtime_fingerprint_unchanged": true,
+    "all_45_reviewed_code_config_script_test_files_unchanged": true,
+    "full_16_trial_scan_rerun": false
+  }
+}

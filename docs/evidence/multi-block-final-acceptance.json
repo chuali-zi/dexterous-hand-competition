@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "record_type": "parent_provided_independent_multi_block_acceptance",
+  "reviewed_commit": "86e12ae0f264b2aea7ac7852c05bd77be827bedd",
+  "reviewed_runtime_tree_sha256": "113ce5c0792124237cffaa52067358c91c7e13e346d8626536bda9e192ca274f",
+  "recorded_utc": "2026-10-13T04:18:28.799046+00:00",
+  "review_execution_time": "not specified in transferred summary",
+  "report_source_thread": "01a118c3-aa4f-7117-b9ed-4f96bb5d30d0",
+  "report_source": "parent-transferred independent review summary; not independently run in this delivery turn",
+  "transferred_summary_file": "docs/evidence/multi-block-independent-review.md",
+  "transferred_summary_sha256": "3072bad4cf9bdd9944d2ffc517d4ff5330d248889e48c1661335480fbba0bbfd",
+  "full_review_script_and_24_case_parameters_received": false,
+  "scope": "declared offline complete rectangular marker and axis-aligned block proxy planning only",
+  "acceptance_status": "passed",
+  "blocking_issues_in_accepted_scope": [],
+  "issues": {
+    "MB1": {
+      "status": "closed",
+      "independently_revalidated": true,
+      "scope": "declared offline marker/block proxy scope"
+    },
+    "MB2": {
+      "status": "closed",
+      "independently_revalidated": true,
+      "scope": "declared offline marker/block proxy scope"
+    },
+    "MB3": {
+      "status": "closed",
+      "independently_revalidated": true,
+      "scope": "declared offline marker/block proxy scope"
+    }
+  },
+  "independent_validation": {
+    "tests_passed": 99,
+    "relative_links_passed": 131,
+    "json_source_lock_passed": true,
+    "saved_trials_consistent": 16,
+    "observations_consistent": 960,
+    "additional_independent_nearby_positive_cases_passed": 24,
+    "additional_case_parameters": "not provided; do not invent or mix into local unit-test count",
+    "original_code_config_script_test_files_unchanged": 31,
+    "original_historical_validation_json_files_unchanged": 6
+  },
+  "observational_equivalence": {
+    "conditional_candidate_may_exist": true,
+    "counted_as_negative_rejection_success": false,
+    "correspondence_authenticity_verified": false,
+    "physical_component_completeness_verified": false,
+    "execution_available": false
+  },
+  "verification_limits": {
+    "physical_support_verified": false,
+    "robot_collision_verified": false,
+    "transport_provenance_verified": false,
+    "sensor_authenticity_verified": false,
+    "physical_stop_verified": false,
+    "robot_execution_verified": false,
+    "official_platform": false,
+    "official_score": null,
+    "real_robot_execution_authorized": false
+  },
+  "historical_records_preserved": true,
+  "supersedes_current_status_in": [
+    "docs/evidence/multi-block-review-validation.json"
+  ],
+  "new_delivery": {
+    "reviewed_controller_config_tests_scripts_modified": false,
+    "new_local_readiness_audit_script": "scripts/readiness_audit.py",
+    "new_audit_script_in_independent_algorithm_acceptance": false,
+    "new_robot_controller_or_official_protocol": false,
+    "full_16_trial_scan_rerun_in_this_turn": false,
+    "official_platform_opened": false,
+    "sdk_initialized": false,
+    "robot_actions_executed": 0,
+    "documentation_delivery_checks": {
+      "status": "passed",
+      "command": "python scripts/check.py",
+      "tests_passed": 99,
+      "relative_links_passed": 150,
+      "json_source_lock_passed": true,
+      "log_sha256": "d0d4f8b47e83dd695ceb1555b946a41874b3ac78014a3fee11fc9ad0fbe0fe10",
+      "accepted_runtime_fingerprint_unchanged": true,
+      "all_45_reviewed_code_config_script_test_files_unchanged": true,
+      "full_16_trial_scan_rerun": false
+    }
+  },
+  "next_stage": "actual scene/template source needed for useful static interface and allowed-input audit; login/paid execution remain deferred",
+  "competition_engineering_complete": false
+}
