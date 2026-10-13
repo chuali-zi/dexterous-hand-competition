@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "planning": {
+    "block_size_m": [
+      0.05,
+      0.05,
+      0.05
+    ],
+    "workspace": [
+      -0.4,
+      0.4,
+      -0.25,
+      0.25,
+      0.0,
+      0.4
+    ],
+    "supply_xy": [
+      -0.35,
+      -0.03,
+      -0.2,
+      0.2
+    ],
+    "build_xy": [
+      0.03,
+      0.34,
+      -0.2,
+      0.2
+    ],
+    "base_anchor_m": [
+      0.08,
+      0.0,
+      0.025
+    ],
+    "layer_counts": [
+      4,
+      3,
+      2,
+      1
+    ],
+    "layer_colors": [
+      "red",
+      "yellow",
+      "blue",
+      "green"
+    ],
+    "pitch_x_m": 0.06,
+    "clearance_m": 0.005,
+    "target_xy_tolerance_m": 0.008,
+    "target_z_tolerance_m": 0.008,
+    "source_height_tolerance_m": 0.008,
+    "observed_unchanged_s": 3.0,
+    "association_radius_m": 0.02,
+    "max_observation_gap_s": 0.25,
+    "max_observation_age_s": 0.25,
+    "max_sensor_skew_s": 0.03,
+    "hand_clearance_m": 0.08,
+    "session_budget_s": 300.0,
+    "min_support_fraction": 0.7,
+    "official_scene_confirmed": false,
+    "material_dimensions_source": "illustrative_fixture_assumption_not_official"
+  },
+  "vision": {
+    "workspace": [
+      -0.4,
+      0.4,
+      -0.25,
+      0.25,
+      0.01,
+      0.4
+    ],
+    "max_residual_m": 0.003,
+    "min_area_px": 20,
+    "max_objects": 10,
+    "max_same_color": 4
+  }
+}
