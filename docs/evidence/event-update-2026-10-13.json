@@ -1,0 +1,132 @@
+{
+  "schema_version": 1,
+  "record_type": "date_only_event_maintenance",
+  "recorded_utc": "2026-10-13T11:40:50.246125+00:00",
+  "baseline_commit": "6737dc8fec78e9ff731a13dc3ccd7c359dd43c33",
+  "report_source_thread": "01a118c3-aa4f-7117-b9ed-4f96bb5d30d0",
+  "fact_source": "parent-verified official update transferred in task; local original-page reading blocked",
+  "evidence_grade": "B inherited primary-source facts",
+  "source_notice": {
+    "id": "O10",
+    "url": "https://robot.bistu.edu.cn/tzgg/b13ac6deec9c497d99bb0c05ddee9ba8.html",
+    "displayed_publication_time_from_parent": "2026-10-13 15:23",
+    "title_verbatim": null,
+    "original_page_read_locally": false,
+    "html_sha256": null,
+    "verbatim_excerpt_received": false,
+    "excerpt_requested_from_parent": true,
+    "timezone_explicit_in_notice": "not independently determined"
+  },
+  "timezone_interpretation": "Asia/Shanghai for domestic competition; not claimed as an explicit notice timezone",
+  "changes": [
+    {
+      "id": "DT-01",
+      "field": "final_date",
+      "old": "2026-11-07",
+      "new": "2026-11-14",
+      "old_status": "superseded",
+      "source_id": "O10"
+    },
+    {
+      "id": "DT-02",
+      "field": "registration_deadline",
+      "existing": "2026-10-26T17:00:00+08:00",
+      "change": "registration cutoff date unchanged",
+      "date_unchanged_source_id": "O10",
+      "hour_source_id": "O3 existing parent-verified registration evidence",
+      "hour_repeated_in_new_notice": "not claimed"
+    },
+    {
+      "id": "DT-03",
+      "field": "first_online_QA",
+      "existing": "2026-10-13T20:00:00+08:00",
+      "meeting_number": "474-645-560",
+      "notice_url": "https://robot.bistu.edu.cn/tzgg/3d95cef5dc594ecbbc11333770b5cbe0.html",
+      "livestream_url": "https://meeting.tencent.com/l/GkiFvA6gq8KR",
+      "source": "parent reaffirms existing O1; livestream address parent-transferred",
+      "reminder_sent_this_turn": false,
+      "joined_or_watched": false
+    },
+    {
+      "id": "DT-04",
+      "field": "fixed_scene_publication",
+      "state": "requires post-QA refinement and review; exact publication time unknown",
+      "guaranteed_same_evening": false,
+      "guaranteed_at_QA_start": false
+    }
+  ],
+  "unchanged_or_unknown": {
+    "work_code_config_share_deadline": "still unconfirmed; no inferred extension",
+    "school_cutoff_or_extra_registration": "not inferred",
+    "actual_team_or_group": "not inferred or selected",
+    "qualification_and_quota": "not inferred"
+  },
+  "direct_access_attempts": [
+    {
+      "tool": "web",
+      "url": "https://robot.bistu.edu.cn/tzgg/b13ac6deec9c497d99bb0c05ddee9ba8.html",
+      "outcome": "not accessible via tool"
+    },
+    {
+      "tool": "urllib existing environment network/proxy",
+      "url": "https://robot.bistu.edu.cn/tzgg/b13ac6deec9c497d99bb0c05ddee9ba8.html",
+      "outcome": "Tunnel connection failed: 403 Forbidden"
+    },
+    {
+      "tool": "web",
+      "url": "https://robot.bistu.edu.cn/tzgg/3d95cef5dc594ecbbc11333770b5cbe0.html",
+      "outcome": "timeout fetching"
+    },
+    {
+      "tool": "web",
+      "url": "https://robot.bistu.edu.cn/tzgg/index.html",
+      "outcome": "timeout fetching"
+    },
+    {
+      "tool": "urllib existing environment network/proxy",
+      "url": "https://robot.bistu.edu.cn/tzgg/index.html",
+      "outcome": "Tunnel connection failed: 403 Forbidden"
+    },
+    {
+      "tool": "urllib existing environment network/proxy",
+      "url": "http://www.rabokit.com/v1/api/manual/docs",
+      "outcome": "HTTP 403 Forbidden"
+    }
+  ],
+  "new_material_check": {
+    "versioned_official_fixed_scene_obtained": false,
+    "identified_actual_agent_system_template_obtained": false,
+    "relevant_primary_original_from_search_obtained": false,
+    "complete_site_listing_read": false,
+    "can_conclude_no_official_material_published": false,
+    "coverage_limit": "notice index and public manual directory unavailable; no authenticated app/shared engineering/stream/FAQ inspection",
+    "existing_real_data_readiness_gate": "unchanged; no new actionable template/scene obtained locally"
+  },
+  "artifact": "docs/event-updates.md",
+  "artifact_sha256": "8db1bf5cdeb1813c4e80f7b37214e2cc813d5a8faac2189574da6a6461e612ef",
+  "verification": {
+    "static_checks": {
+      "status": "passed",
+      "relative_markdown_links": 163,
+      "json": "passed",
+      "current_and_superseded_dates": "passed",
+      "all_preexisting_code_config_scripts_tests_unchanged": 46,
+      "all_preexisting_evidence_json_unchanged": 13,
+      "accepted_runtime_fingerprint_unchanged": true,
+      "git_diff_check": "passed"
+    },
+    "algorithm_tests_rerun": false,
+    "offline_robot_trials_rerun": false,
+    "prior_99_tests_source": "earlier accepted engineering/delivery turns, not this date-only maintenance"
+  },
+  "actions": {
+    "controller_or_configuration_modified": false,
+    "sdk_initialized": false,
+    "official_application_opened": false,
+    "robot_actions_executed": 0,
+    "paid_environment_started": false,
+    "reminders_sent": false,
+    "registration_or_submission": false,
+    "network_or_security_settings_modified": false
+  }
+}

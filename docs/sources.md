@@ -1,6 +1,6 @@
 # 来源清单与证据等级
 
-检索/读取日期：**2026-10-12**。工作区 UTC 时间约 05:56 起，对应北京时间 13:56 起。日期不代表官方规则在今天重新发布。
+初始检索/读取日期：**2026-10-12**。工作区 UTC 时间约 05:56 起，对应北京时间 13:56 起。2026-10-13另增日程改期维护，详见[赛事更新](event-updates.md)。维护日期不代表官方规则全文重新发布。
 
 - **A：本次直接读取**原始仓库 README、许可及所列源码；或作者论文 HTML 的方法/接口/实验/限制章节。代码未执行，论文实验未复现。
 - **B：父任务已核实摘录**。官方站点在本环境无法访问，依赖委托输入，不能声称独立核实全文。
@@ -12,7 +12,7 @@
 
 | ID | 原始来源 | 版本/定位与本次访问结果 |
 |---|---|---|
-| O1 | [10月11日最新通知](https://robot.bistu.edu.cn/tzgg/3d95cef5dc594ecbbc11333770b5cbe0.html) | 父任务核实发布时间 2026-10-11 15:01；本次 web 不可访问，普通 HTTPS 请求代理返回 403 |
+| O1 | [10月11日演练与答疑通知](https://robot.bistu.edu.cn/tzgg/3d95cef5dc594ecbbc11333770b5cbe0.html) | 父任务核实发布时间 2026-10-11 15:01；本次 web 不可访问，普通 HTTPS 请求代理返回 403；不是10月13日之后的“最新通知”标签 |
 | O2 | [演练手册](https://robot.bistu.edu.cn/docs/2026-10/780da6f7f1834fdcb7f13c226149662a.pdf) | 2026-10 路径；本环境 web 不可访问；后续父核补充共5页，第1页限定仿真、第5页复议条款，见精确证据表 |
 | O3 | [报名通知](https://robot.bistu.edu.cn/tzgg/ce6d4ae0373c4e5cb7aa84372e4d96e2.html) | 本次 web 超时；日期/资格摘录来自父任务 |
 | O4 | [教委方案](https://robot.bistu.edu.cn/docs/2026-09/f402c4be17fa4ca2ba45f1445abacd80.pdf) | 2026-09 路径；本次 web 不可访问，页码未获 |
@@ -20,6 +20,8 @@
 | O6 | [LBot双臂机器人手册](https://www.rabokit.com/manual/lbot_dual_arm) / [公开只读数据接口](http://www.rabokit.com/v1/api/manual/docs/lbot_dual_arm) | 父任务读 2026-10-10 文档；本次网页不可访问，HTTP接口403；没有绕过限制 |
 | O7 | [腾讯问题表](https://docs.qq.com/sheet/DUmdlU3JJSkF6eWJu) | 本次 web 不可访问；父任务401。**未读到任何问答内容** |
 | O8 | [后续通知索引](https://robot.bistu.edu.cn/tzgg/index.html) | 作为后续复核入口；本次未读取索引内容，不声称无新通知 |
+| O10 | [10月13日决赛改期公告](https://robot.bistu.edu.cn/tzgg/b13ac6deec9c497d99bb0c05ddee9ba8.html) | 父任务核实页面显示2026-10-13 15:23，决赛改为11月14日、报名截止日期不变；本环境web不可取得，普通HTTPS隧道403；全文与页面哈希未取得，证据等级B |
+| O11 | [首次答疑官方直播入口](https://meeting.tencent.com/l/GkiFvA6gq8KR) | 父任务转交；10月13日20:00、腾讯会议474-645-560仍依据O1；本轮仅记录入口，未进入/观看直播 |
 
 O6 的相关父任务文档 slug：`home`、`05-interface`、`06-sensors`、`14-controller`、`dev_kit-agent-template`、`rabo_dev_kit`、`18-devenv`、`19-power`。页面与公开接口路径分别为 `https://www.rabokit.com/manual/{slug}` 和 `http://www.rabokit.com/v1/api/manual/docs/{slug}`，目录接口为 `http://www.rabokit.com/v1/api/manual/docs`。本次未逐一读取，不把这些路径当作平台控制 API。
 
@@ -60,7 +62,7 @@ O6 的相关父任务文档 slug：`home`、`05-interface`、`06-sensors`、`14-
 
 - **B1 父核原件**：保留首轮已读PDF/平台文档事实。父任务原件读取者再次核对PDF及页面图像后，提供[11项精确页码、短引文与适用范围](evidence/official-excerpts.md)。届次为A印刷1/PDF3；自主定义印刷101/PDF103；装配物料印刷102/PDF104；装配次数/处罚/同分印刷104/PDF106；垒砖基础与颜色印刷107/PDF109；最终状态印刷108/PDF110；附表印刷109/PDF111；仿真手册B物理5复议48小时，B物理1限定仿真。没有本地原件，仍不填文件哈希。
 - **B2 审计索引正文**：O3报名通知，2026-09-11 09:04，“一”资格/人数/限额/特别推荐，“二”学校赛区报送/电子表公章/人员冻结/截止，“三”邮箱/命名/超额删除，“四”联系方式。独立审计取得索引正文但原页超时；本轮按转交结果整合，未重新宣称直读。
-- **B3 审计原页交叉印证**：[北京工商大学通知](https://caai.btbu.edu.cn/tzgg/f2513a151a5f4f75a272e61e80e754f9.htm)“四、报名方式及提交材料”支持盖章；[天津工业大学通知](https://jwc.tiangong.edu.cn/2026/0928/c1328a117927/page.htm)“三、参赛要求”支持共性队伍要求；[太原科技大学转载省赛通知](https://cxcy.tyust.edu.cn/info/1106/1252.htm)“决赛时间”印证11月7日。访问主体是独立审计，本环境未重复访问。这些学校截止不适用于本用户。
+- **B3 审计原页交叉印证**：[北京工商大学通知](https://caai.btbu.edu.cn/tzgg/f2513a151a5f4f75a272e61e80e754f9.htm)“四、报名方式及提交材料”支持盖章；[天津工业大学通知](https://jwc.tiangong.edu.cn/2026/0928/c1328a117927/page.htm)“三、参赛要求”支持共性队伍要求；[太原科技大学转载省赛通知](https://cxcy.tyust.edu.cn/info/1106/1252.htm)“决赛时间”印证原定11月7日，现已被O10改期公告替代。访问主体是独立审计，本环境未重复访问。这些学校截止不适用于本用户。
 - **O9 报名表原件**：[2026报名表XLS](https://robot.bistu.edu.cn/docs/2026-09/1c437a5fed2c4f1987364b86613a590b.xls)在独立审计未取得；未核字段/签章栏/命名完整格式，不虚构其内容。
 
 精确证据更新不覆盖开源项目源锁；[规则变更记录](evidence/rules-change-log.md)单独追踪适用范围与修订。用户已有学校背景是北京信息科技大学，实际本次参赛学校/队伍和报名状态待本人确认；不从其他高校通知推断用户资格或截止。
