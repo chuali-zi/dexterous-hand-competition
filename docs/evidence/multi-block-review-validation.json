@@ -1,0 +1,2563 @@
+{
+  "schema_version": 1,
+  "recorded_date": "2026-10-13",
+  "environment": "cloud workspace; Python 3.12.14",
+  "reviewed_commit": "0de824e24e5aa835eb721c7f5b598d5d5cd0722e",
+  "review_provenance": "parent-transferred MB1-MB3 summary; review thread not directly read here; independent equations locally reproduced",
+  "review_thread": "01a12f64-a3c5-71f6-b7b7-fbf3260f30fd",
+  "review_turn": "01a1331d-c362-747a-a922-cb0550b8496c",
+  "code": {
+    "git_commit": "0de824e24e5aa835eb721c7f5b598d5d5cd0722e",
+    "dirty_tree": true,
+    "runtime_files": {
+      "__init__.py": "c97b2ee03a290716010891846cea5fbe0edf07f763f94e96e49d341e9e04098a",
+      "__main__.py": "c981c7cdc98ab848875589af36674311c62a5db11ca7535fb6b01addbe558634",
+      "closed_loop/__init__.py": "f52f2011888ef1f4584bffe3de9923feb5111ead3752cda93a9bb43879bf518d",
+      "closed_loop/__main__.py": "8a9745582fe5b69b343e8d76db3c3ec0dacc9797932332fe43f5ae351c4779c7",
+      "closed_loop/artifacts.py": "4cc05035d90c80d42ed80a591869e9d977fd6f9c318129db6005739732cbee60",
+      "closed_loop/bundle_replay.py": "ffc57d49d742c55bb034aefd16e2b918d56839e1bfa31ff2b21b1e819ac0f956",
+      "closed_loop/contracts.py": "23606372b9bc0d092ff65f25879b081a3bfd52f0e5497c160737b34f43973cfe",
+      "closed_loop/controller.py": "fc1520cbbbb78cec171b5066b9b3a4ebb061a4d3bce849842b45d3d87c71e520",
+      "closed_loop/experiments.py": "b550125226805f54cecf5c98eabe758b38a3d8fdba90df2a7418cf84e410971e",
+      "closed_loop/geometry.py": "ff30a70f3e32ba0ac6d6fe4f2307d4cf73117169d89dc73b0476eca996a7a009",
+      "closed_loop/path_replay.py": "c74b1d7bd96696fa000c46545fb275273e9a29e4407eeb4cff92c47ae1179a6f",
+      "closed_loop/preflight.py": "98f80d6278ee5f9f928f632bafdf7b4a3d2151f7df386a4574f9a0f247b191ff",
+      "closed_loop/robust.py": "79e74d064b5ac673e0bef51c680d8b7a01830af95d32c39631c715a73992ebfa",
+      "closed_loop/synthetic.py": "e5f7d790f357b2fa12d9296767278e14be2e6fe371db83d6f73c6174ce4d83eb",
+      "closed_loop/vision.py": "0fcaeaeb323fc82a11283e3f78d557e90c4cb56df01e284952d6856a3797f8cb",
+      "evaluation.py": "9a439d30dc366dc3a0de2aa45186a8f070382c30b42a3c2c5a81176b245f4613",
+      "multi_block/__init__.py": "7b62e369ab7bf5f2041c3c2e0462a69fcdfb67954ce6959200bed9d9b3867884",
+      "multi_block/__main__.py": "0c6e271e6388f9f53de91d25d5b10596f383b69580ba99c920c0eb18841058dc",
+      "multi_block/perception.py": "2f4cfde658e4c91bb7a2056a7bc19f51ae00895809e57afd694954ae459525ca",
+      "multi_block/planning.py": "45dc5511b066e04724e5a351760f51df11a5a25763cb480cc6152c4cee82236d",
+      "multi_block/proxy_geometry.py": "b9686edb7cdbb804559598a692ac2ad65daea8964466a7a92500d018fe121759",
+      "multi_block/records.py": "e59887254206e51003f25a7a117e89c8f9abd686fb27a9df1465bf0ea67b8f2a",
+      "multi_block/session.py": "a2720f81a0608bdba84eb58b9a7c12dddb621aaf389e0f86272f4492ea3d4ab9",
+      "multi_block/tracking.py": "b42d268dd915e82c772191f0a8a46adaad6821694ba1c5455388cdfa5da10c9c"
+    },
+    "runtime_tree_sha256": "113ce5c0792124237cffaa52067358c91c7e13e346d8626536bda9e192ca274f"
+  },
+  "modified_or_added_source_sha256": {
+    "configs/multi-block.json": "b87c78cb64c2254f0cc75381ae83036cc16627427afce9d585633d7d2742c4ce",
+    "hand_competition/multi_block/perception.py": "2f4cfde658e4c91bb7a2056a7bc19f51ae00895809e57afd694954ae459525ca",
+    "hand_competition/multi_block/planning.py": "45dc5511b066e04724e5a351760f51df11a5a25763cb480cc6152c4cee82236d",
+    "hand_competition/multi_block/proxy_geometry.py": "b9686edb7cdbb804559598a692ac2ad65daea8964466a7a92500d018fe121759",
+    "hand_competition/multi_block/records.py": "e59887254206e51003f25a7a117e89c8f9abd686fb27a9df1465bf0ea67b8f2a",
+    "hand_competition/multi_block/session.py": "a2720f81a0608bdba84eb58b9a7c12dddb621aaf389e0f86272f4492ea3d4ab9",
+    "scripts/multi_block_review_validation.py": "c557c201ba28fed23e2a3406380a1da6cf51c301c8962f0f34e376611ec7b610",
+    "scripts/multi_block_validation.py": "c91f49d92872f1f237477b4aa95bdebaed3d828c158412ab666e6f782d9a65ba",
+    "tests/test_multi_block.py": "4acd881f428b392b39a5ad019bee82d4b4547635a0a665c4ed45ebb47be227ed",
+    "tests/test_multi_block_review.py": "559bd29cdcebff0fced32bace51c436ea5cdd7747bac14ad732858725e992045"
+  },
+  "baseline_immutability": {
+    "accepted_code": "362e9a84d4585c4c58c86b5127c31156b38cd0cf",
+    "code_config_script_test_files_compared": 31,
+    "changed": [],
+    "historical_validation_records_compared": [
+      "docs/evidence/closed-loop-validation.json",
+      "docs/evidence/motion-stability-validation.json",
+      "docs/evidence/noise-robustness-validation.json",
+      "docs/evidence/offline-hardening-validation.json",
+      "docs/evidence/replay-residuals-validation.json",
+      "docs/evidence/replay-state-time-validation.json"
+    ],
+    "changed_records": [],
+    "initial_multi_block_evidence_unchanged_from": "0de824e"
+  },
+  "official_platform": false,
+  "official_score": null,
+  "robot_actions_executed": 0,
+  "physical_support_verified": false,
+  "robot_collision_verified": false,
+  "transport_provenance_verified": false,
+  "sensor_authenticity_verified": false,
+  "correspondence_authenticity_verified": false,
+  "physical_component_completeness_verified": false,
+  "independent_post_fix_review": "pending; no claim of independent closure for MB1-MB3",
+  "red_before_fix": {
+    "production_commit": "0de824e",
+    "runtime_tree_sha256": "0f9a2708819e547064f69520a6f88c08f8d33867c04ef37828302068e928eddf",
+    "tests_run": 5,
+    "unexpected_candidate_failures": 4,
+    "normal_case_tests_passed": 1,
+    "log_sha256": "6fa5b3ca54538634b0881425f0694f80fd7f2c533bfccab86ddfbd365d93d94e",
+    "scope": "first five independent reviewer tests before production changes; additional characterization tests added later"
+  },
+  "tests": {
+    "expanded_multi_block_tests": 26,
+    "expanded_tests_passed": 26,
+    "expanded_log_sha256": "d3f2da3ebeba10e80c644ded8331067ce2be7a3f0e7e75775c2cd315454e94b9",
+    "all_suite": {
+      "tests_run": 99,
+      "passed": 99,
+      "relative_markdown_links": 131,
+      "json_and_source_lock": "passed",
+      "log_sha256": "c0f75923ff67158b572aa383bf388bdd26d849347673ab16b894a4130e04e41b"
+    },
+    "dependency_oracle_presence_subsets": 1024,
+    "record_schema": 2,
+    "schema1": "historical pre-MB logs rejected by current replay; use original SHA",
+    "cli": {
+      "MB1_observations_recomputed": 32,
+      "MB2_and_normal_supports_cross_process_replay": "passed",
+      "blueprint_slots": 10,
+      "original_schema1_rejected": true
+    }
+  },
+  "fixes": {
+    "MB1": "all unresolved colored components, including sub-minimum-area pixels, retain conservative whole-workspace unknown-space evidence and block candidates",
+    "MB2": "actual clipped rectangle-union support fraction, every parent contact height, table contact, all-block final AABB intersections and validated support-only descent exemptions",
+    "MB3": "complete 11x11 rectangle silhouette/121px area/fill/border/centroid gate under an explicit offline marker assumption; no waiting/averaging/residual-based completeness inference"
+  },
+  "thresholds": {
+    "target_xy_tolerance_m": 0.008,
+    "target_z_tolerance_m": 0.008,
+    "source_height_tolerance_m": 0.008,
+    "min_support_fraction": 0.7,
+    "observed_unchanged_s": 3.0,
+    "unchanged_from_initial": true,
+    "geometry_epsilon_m": 1e-09,
+    "epsilon_purpose": "floating equality only; not physical/sensor/official tolerance",
+    "component_model": "offline_full_rectangle_11px_v1"
+  },
+  "reviewer_scan": {
+    "trials": 9,
+    "observations": 288,
+    "negative_cases": 6,
+    "all_negative_frames_without_candidate": true,
+    "normal_cases": 2,
+    "normal_final_candidates_preserved": true,
+    "unresolved_observational_equivalence_characterization": 1,
+    "report_sha256": "36aee01ad06785206eb11cdfef1ac3328d2ff49b21c2b71b8e615bec653542af",
+    "rows": [
+      {
+        "case": "MB1-unmatched-blue",
+        "expectation": "reject",
+        "assertions_passed": true,
+        "result": {
+          "feedback_level": "offline_multi_block_planning",
+          "official_platform": false,
+          "official_score": null,
+          "robot_actions_executed": 0,
+          "observations": 32,
+          "stop_reason": "fixture_complete",
+          "geometric_goal_count": 0,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "last_snapshot": {
+          "tracks": [
+            {
+              "track_id": "local-0001",
+              "color": "red",
+              "center_m": [
+                -0.1999999999999999,
+                -0.11999999999999994,
+                0.025000000000000577
+              ],
+              "pixels": [
+                [
+                  216.0,
+                  240.0
+                ],
+                [
+                  136.0,
+                  240.0
+                ]
+              ],
+              "camera_ids": [
+                "left",
+                "right"
+              ],
+              "captured_s": 3.2,
+              "consecutive_frames": 32,
+              "unchanged_since_s": 0.1,
+              "robot_clear": true
+            }
+          ],
+          "perception_issues": [
+            "blue:view_count_mismatch"
+          ],
+          "tracking_issues": [],
+          "spatial_uncertainties": [
+            {
+              "reason": "blue:view_count_mismatch",
+              "bounds_m": [
+                -0.4,
+                0.4,
+                -0.25,
+                0.25,
+                0.01,
+                0.4
+              ],
+              "component_evidence": [
+                {
+                  "camera_id": "left",
+                  "color": "blue",
+                  "centroid": [
+                    339.0,
+                    192.0
+                  ],
+                  "area": 121,
+                  "bounds": [
+                    334,
+                    344,
+                    187,
+                    197
+                  ]
+                }
+              ]
+            }
+          ],
+          "retired_local_ids": [],
+          "decision": {
+            "kind": "wait_or_blocked",
+            "candidate": null,
+            "geometric_occupancy": {},
+            "geometrically_supported_slots": [],
+            "remaining_slots": [
+              "layer-0-slot-0",
+              "layer-0-slot-1",
+              "layer-0-slot-2",
+              "layer-0-slot-3",
+              "layer-1-slot-0",
+              "layer-1-slot-1",
+              "layer-1-slot-2",
+              "layer-2-slot-0",
+              "layer-2-slot-1",
+              "layer-3-slot-0"
+            ],
+            "blocked": {
+              "layer-0-slot-0": "unlocalized_visual_obstacle",
+              "layer-0-slot-1": "unlocalized_visual_obstacle",
+              "layer-0-slot-2": "unlocalized_visual_obstacle",
+              "layer-0-slot-3": "unlocalized_visual_obstacle",
+              "layer-1-slot-0": "unlocalized_visual_obstacle",
+              "layer-1-slot-1": "unlocalized_visual_obstacle",
+              "layer-1-slot-2": "unlocalized_visual_obstacle",
+              "layer-2-slot-0": "unlocalized_visual_obstacle",
+              "layer-2-slot-1": "unlocalized_visual_obstacle",
+              "layer-3-slot-0": "unlocalized_visual_obstacle"
+            },
+            "support_proxy_checks": {},
+            "unresolved_space_count": 1,
+            "geometric_epsilon_m": 1e-09,
+            "official_score": null,
+            "robot_actions_executed": 0,
+            "execution_available": false,
+            "physical_support_verified": false,
+            "robot_collision_verified": false,
+            "collision_scope": "axis_aligned_block_proxy_and_vertical_descent_column_only",
+            "transport_provenance_verified": false,
+            "correspondence_authenticity_verified": false,
+            "physical_component_completeness_verified": false
+          }
+        },
+        "candidate_observations": 0,
+        "replay": {
+          "record_verified": true,
+          "rgb_planning_recomputed": 32,
+          "deterministic_production_recompute": true,
+          "independent_algorithm_correctness_verified": false,
+          "rejection_reason_reconstructed": null,
+          "robot_actions_executed": 0,
+          "official_score": null,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "evaluator_only_scene": [
+          [
+            "red",
+            [
+              -0.2,
+              -0.12,
+              0.025
+            ]
+          ],
+          [
+            "blue",
+            [
+              0.08,
+              0.0,
+              0.15
+            ]
+          ]
+        ],
+        "evaluator_visibility_and_crop": {
+          "visibility": [
+            [
+              true,
+              true
+            ],
+            [
+              true,
+              false
+            ]
+          ]
+        },
+        "artifact_sha256": {
+          "manifest.json": "4ef2fd8634fb5f493cf6771b435cd7aded09d8a71fe6da1a7f3c6d5850d0aeef",
+          "events.jsonl": "ca574f8d55ccec1e02d8a7312c387133c42787befbf83fd019abf97ce12542c9",
+          "result.json": "e48ed73fe9cb76ea7f3b304be493d911f14cf1372acd0936cce2283ba40843ec"
+        }
+      },
+      {
+        "case": "MB2-footprint-50percent",
+        "expectation": "reject",
+        "assertions_passed": true,
+        "result": {
+          "feedback_level": "offline_multi_block_planning",
+          "official_platform": false,
+          "official_score": null,
+          "robot_actions_executed": 0,
+          "observations": 32,
+          "stop_reason": "fixture_complete",
+          "geometric_goal_count": 2,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "last_snapshot": {
+          "tracks": [
+            {
+              "track_id": "local-0001",
+              "color": "red",
+              "center_m": [
+                0.07249999999999956,
+                0.0,
+                0.025000000000005962
+              ],
+              "pixels": [
+                [
+                  325.0,
+                  192.0
+                ],
+                [
+                  245.0,
+                  192.0
+                ]
+              ],
+              "camera_ids": [
+                "left",
+                "right"
+              ],
+              "captured_s": 3.2,
+              "consecutive_frames": 32,
+              "unchanged_since_s": 0.1,
+              "robot_clear": true
+            },
+            {
+              "track_id": "local-0002",
+              "color": "red",
+              "center_m": [
+                0.14750000000000055,
+                0.0,
+                0.024999999999996414
+              ],
+              "pixels": [
+                [
+                  355.0,
+                  192.0
+                ],
+                [
+                  275.0,
+                  192.0
+                ]
+              ],
+              "camera_ids": [
+                "left",
+                "right"
+              ],
+              "captured_s": 3.2,
+              "consecutive_frames": 32,
+              "unchanged_since_s": 0.1,
+              "robot_clear": true
+            },
+            {
+              "track_id": "local-0003",
+              "color": "yellow",
+              "center_m": [
+                -0.1999999999999999,
+                -0.11999999999999994,
+                0.025000000000000577
+              ],
+              "pixels": [
+                [
+                  216.0,
+                  240.0
+                ],
+                [
+                  136.0,
+                  240.0
+                ]
+              ],
+              "camera_ids": [
+                "left",
+                "right"
+              ],
+              "captured_s": 3.2,
+              "consecutive_frames": 32,
+              "unchanged_since_s": 0.1,
+              "robot_clear": true
+            }
+          ],
+          "perception_issues": [],
+          "tracking_issues": [],
+          "spatial_uncertainties": [],
+          "retired_local_ids": [],
+          "decision": {
+            "kind": "wait_or_blocked",
+            "candidate": null,
+            "geometric_occupancy": {
+              "layer-0-slot-0": "local-0001",
+              "layer-0-slot-1": "local-0002"
+            },
+            "geometrically_supported_slots": [
+              "layer-0-slot-0",
+              "layer-0-slot-1"
+            ],
+            "remaining_slots": [
+              "layer-0-slot-2",
+              "layer-0-slot-3",
+              "layer-1-slot-0",
+              "layer-1-slot-1",
+              "layer-1-slot-2",
+              "layer-2-slot-0",
+              "layer-2-slot-1",
+              "layer-3-slot-0"
+            ],
+            "blocked": {
+              "layer-0-slot-2": "occupied_target_or_descent_column",
+              "layer-0-slot-3": "no_current_confirmed_clear_source",
+              "layer-1-slot-0": "actual_support_union_insufficient",
+              "layer-1-slot-1": "support_dependency_missing",
+              "layer-1-slot-2": "support_dependency_missing",
+              "layer-2-slot-0": "support_dependency_missing",
+              "layer-2-slot-1": "support_dependency_missing",
+              "layer-3-slot-0": "support_dependency_missing"
+            },
+            "support_proxy_checks": {
+              "layer-0-slot-0": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 1.0,
+                "top_plane_errors_m": []
+              },
+              "layer-0-slot-1": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 1.0,
+                "top_plane_errors_m": []
+              },
+              "layer-0-slot-2": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 1.0,
+                "top_plane_errors_m": []
+              },
+              "layer-0-slot-3": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 1.0,
+                "top_plane_errors_m": []
+              },
+              "layer-1-slot-0": {
+                "valid": false,
+                "reason": "actual_support_union_insufficient",
+                "support_fraction": 0.4999999999999804,
+                "top_plane_errors_m": [
+                  5.953570969552402e-15,
+                  -3.594347042223944e-15
+                ]
+              }
+            },
+            "unresolved_space_count": 0,
+            "geometric_epsilon_m": 1e-09,
+            "official_score": null,
+            "robot_actions_executed": 0,
+            "execution_available": false,
+            "physical_support_verified": false,
+            "robot_collision_verified": false,
+            "collision_scope": "axis_aligned_block_proxy_and_vertical_descent_column_only",
+            "transport_provenance_verified": false,
+            "correspondence_authenticity_verified": false,
+            "physical_component_completeness_verified": false
+          }
+        },
+        "candidate_observations": 0,
+        "replay": {
+          "record_verified": true,
+          "rgb_planning_recomputed": 32,
+          "deterministic_production_recompute": true,
+          "independent_algorithm_correctness_verified": false,
+          "rejection_reason_reconstructed": null,
+          "robot_actions_executed": 0,
+          "official_score": null,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "evaluator_only_scene": [
+          [
+            "red",
+            [
+              0.0725,
+              0.0,
+              0.025
+            ]
+          ],
+          [
+            "red",
+            [
+              0.1475,
+              0.0,
+              0.025
+            ]
+          ],
+          [
+            "yellow",
+            [
+              -0.2,
+              -0.12,
+              0.025
+            ]
+          ]
+        ],
+        "evaluator_visibility_and_crop": {},
+        "artifact_sha256": {
+          "manifest.json": "4ef2fd8634fb5f493cf6771b435cd7aded09d8a71fe6da1a7f3c6d5850d0aeef",
+          "events.jsonl": "5d8a173fba1218c9275cc789d5151ba8d7cb2e5c4ca3ddbd8888d9f593776d2b",
+          "result.json": "8755d815cdd96f5aa74f09973a0d2fc27b6284f462834532513b22bac8cd8c87"
+        }
+      },
+      {
+        "case": "MB2-elevated-support",
+        "expectation": "reject",
+        "assertions_passed": true,
+        "result": {
+          "feedback_level": "offline_multi_block_planning",
+          "official_platform": false,
+          "official_score": null,
+          "robot_actions_executed": 0,
+          "observations": 32,
+          "stop_reason": "fixture_complete",
+          "geometric_goal_count": 0,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "last_snapshot": {
+          "tracks": [
+            {
+              "track_id": "local-0001",
+              "color": "red",
+              "center_m": [
+                0.08062015503875981,
+                0.0,
+                0.03255813953488251
+              ],
+              "pixels": [
+                [
+                  353.0,
+                  192.0
+                ],
+                [
+                  224.0,
+                  192.0
+                ]
+              ],
+              "camera_ids": [
+                "left",
+                "right"
+              ],
+              "captured_s": 3.2,
+              "consecutive_frames": 32,
+              "unchanged_since_s": 0.1,
+              "robot_clear": true
+            },
+            {
+              "track_id": "local-0002",
+              "color": "red",
+              "center_m": [
+                0.14015503875969054,
+                0.0,
+                0.03255813953487935
+              ],
+              "pixels": [
+                [
+                  377.0,
+                  192.0
+                ],
+                [
+                  248.0,
+                  192.0
+                ]
+              ],
+              "camera_ids": [
+                "left",
+                "right"
+              ],
+              "captured_s": 3.2,
+              "consecutive_frames": 32,
+              "unchanged_since_s": 0.1,
+              "robot_clear": true
+            },
+            {
+              "track_id": "local-0003",
+              "color": "yellow",
+              "center_m": [
+                -0.19999999999999957,
+                -0.11999999999999975,
+                0.025000000000002187
+              ],
+              "pixels": [
+                [
+                  240.0,
+                  240.0
+                ],
+                [
+                  112.0,
+                  240.0
+                ]
+              ],
+              "camera_ids": [
+                "left",
+                "right"
+              ],
+              "captured_s": 3.2,
+              "consecutive_frames": 32,
+              "unchanged_since_s": 0.1,
+              "robot_clear": true
+            }
+          ],
+          "perception_issues": [],
+          "tracking_issues": [],
+          "spatial_uncertainties": [],
+          "retired_local_ids": [],
+          "decision": {
+            "kind": "wait_or_blocked",
+            "candidate": null,
+            "geometric_occupancy": {
+              "layer-0-slot-0": "local-0001",
+              "layer-0-slot-1": "local-0002"
+            },
+            "geometrically_supported_slots": [],
+            "remaining_slots": [
+              "layer-0-slot-0",
+              "layer-0-slot-1",
+              "layer-0-slot-2",
+              "layer-0-slot-3",
+              "layer-1-slot-0",
+              "layer-1-slot-1",
+              "layer-1-slot-2",
+              "layer-2-slot-0",
+              "layer-2-slot-1",
+              "layer-3-slot-0"
+            ],
+            "blocked": {
+              "layer-0-slot-0": "table_contact_height_mismatch",
+              "layer-0-slot-1": "table_contact_height_mismatch",
+              "layer-0-slot-2": "occupied_target_or_descent_column",
+              "layer-0-slot-3": "no_current_confirmed_clear_source",
+              "layer-1-slot-0": "support_dependency_missing",
+              "layer-1-slot-1": "support_dependency_missing",
+              "layer-1-slot-2": "support_dependency_missing",
+              "layer-2-slot-0": "support_dependency_missing",
+              "layer-2-slot-1": "support_dependency_missing",
+              "layer-3-slot-0": "support_dependency_missing"
+            },
+            "support_proxy_checks": {
+              "layer-0-slot-0": {
+                "valid": false,
+                "reason": "table_contact_height_mismatch",
+                "support_fraction": 0.0,
+                "top_plane_errors_m": []
+              },
+              "layer-0-slot-1": {
+                "valid": false,
+                "reason": "table_contact_height_mismatch",
+                "support_fraction": 0.0,
+                "top_plane_errors_m": []
+              },
+              "layer-0-slot-2": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 1.0,
+                "top_plane_errors_m": []
+              },
+              "layer-0-slot-3": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 1.0,
+                "top_plane_errors_m": []
+              }
+            },
+            "unresolved_space_count": 0,
+            "geometric_epsilon_m": 1e-09,
+            "official_score": null,
+            "robot_actions_executed": 0,
+            "execution_available": false,
+            "physical_support_verified": false,
+            "robot_collision_verified": false,
+            "collision_scope": "axis_aligned_block_proxy_and_vertical_descent_column_only",
+            "transport_provenance_verified": false,
+            "correspondence_authenticity_verified": false,
+            "physical_component_completeness_verified": false
+          }
+        },
+        "candidate_observations": 0,
+        "replay": {
+          "record_verified": true,
+          "rgb_planning_recomputed": 32,
+          "deterministic_production_recompute": true,
+          "independent_algorithm_correctness_verified": false,
+          "rejection_reason_reconstructed": null,
+          "robot_actions_executed": 0,
+          "official_score": null,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "evaluator_only_scene": [
+          [
+            "red",
+            [
+              0.08,
+              0.0,
+              0.0325
+            ]
+          ],
+          [
+            "red",
+            [
+              0.14,
+              0.0,
+              0.0325
+            ]
+          ],
+          [
+            "yellow",
+            [
+              -0.2,
+              -0.12,
+              0.025
+            ]
+          ]
+        ],
+        "evaluator_visibility_and_crop": {},
+        "artifact_sha256": {
+          "manifest.json": "c9c36e41154da4ad30a6f8e81564f8cbe832f7dee9a1a6efbb43f8119b630f7c",
+          "events.jsonl": "852ae8c7c44219da8883508b52725d667845a850955dc88f22a953d07c76a00a",
+          "result.json": "e48ed73fe9cb76ea7f3b304be493d911f14cf1372acd0936cce2283ba40843ec"
+        }
+      },
+      {
+        "case": "MB3-asymmetric-clipping",
+        "expectation": "reject",
+        "assertions_passed": true,
+        "result": {
+          "feedback_level": "offline_multi_block_planning",
+          "official_platform": false,
+          "official_score": null,
+          "robot_actions_executed": 0,
+          "observations": 32,
+          "stop_reason": "fixture_complete",
+          "geometric_goal_count": 0,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "last_snapshot": {
+          "tracks": [],
+          "perception_issues": [
+            "red:component_incomplete"
+          ],
+          "tracking_issues": [],
+          "spatial_uncertainties": [
+            {
+              "reason": "red:component_incomplete",
+              "bounds_m": [
+                -0.4,
+                0.4,
+                -0.25,
+                0.25,
+                0.01,
+                0.4
+              ],
+              "component_evidence": [
+                {
+                  "camera_id": "left",
+                  "color": "red",
+                  "centroid": [
+                    216.0,
+                    242.0
+                  ],
+                  "area": 99,
+                  "bounds": [
+                    212,
+                    220,
+                    237,
+                    247
+                  ]
+                },
+                {
+                  "camera_id": "right",
+                  "color": "red",
+                  "centroid": [
+                    136.0,
+                    242.0
+                  ],
+                  "area": 33,
+                  "bounds": [
+                    135,
+                    137,
+                    237,
+                    247
+                  ]
+                }
+              ]
+            }
+          ],
+          "retired_local_ids": [],
+          "decision": {
+            "kind": "wait_or_blocked",
+            "candidate": null,
+            "geometric_occupancy": {},
+            "geometrically_supported_slots": [],
+            "remaining_slots": [
+              "layer-0-slot-0",
+              "layer-0-slot-1",
+              "layer-0-slot-2",
+              "layer-0-slot-3",
+              "layer-1-slot-0",
+              "layer-1-slot-1",
+              "layer-1-slot-2",
+              "layer-2-slot-0",
+              "layer-2-slot-1",
+              "layer-3-slot-0"
+            ],
+            "blocked": {
+              "layer-0-slot-0": "unlocalized_visual_obstacle",
+              "layer-0-slot-1": "unlocalized_visual_obstacle",
+              "layer-0-slot-2": "unlocalized_visual_obstacle",
+              "layer-0-slot-3": "unlocalized_visual_obstacle",
+              "layer-1-slot-0": "unlocalized_visual_obstacle",
+              "layer-1-slot-1": "unlocalized_visual_obstacle",
+              "layer-1-slot-2": "unlocalized_visual_obstacle",
+              "layer-2-slot-0": "unlocalized_visual_obstacle",
+              "layer-2-slot-1": "unlocalized_visual_obstacle",
+              "layer-3-slot-0": "unlocalized_visual_obstacle"
+            },
+            "support_proxy_checks": {},
+            "unresolved_space_count": 1,
+            "geometric_epsilon_m": 1e-09,
+            "official_score": null,
+            "robot_actions_executed": 0,
+            "execution_available": false,
+            "physical_support_verified": false,
+            "robot_collision_verified": false,
+            "collision_scope": "axis_aligned_block_proxy_and_vertical_descent_column_only",
+            "transport_provenance_verified": false,
+            "correspondence_authenticity_verified": false,
+            "physical_component_completeness_verified": false
+          }
+        },
+        "candidate_observations": 0,
+        "replay": {
+          "record_verified": true,
+          "rgb_planning_recomputed": 32,
+          "deterministic_production_recompute": true,
+          "independent_algorithm_correctness_verified": false,
+          "rejection_reason_reconstructed": null,
+          "robot_actions_executed": 0,
+          "official_score": null,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "evaluator_only_scene": [
+          [
+            "red",
+            [
+              -0.2,
+              -0.12,
+              0.06
+            ]
+          ]
+        ],
+        "evaluator_visibility_and_crop": {
+          "crop_left": [
+            [
+              2
+            ],
+            [
+              8
+            ]
+          ]
+        },
+        "artifact_sha256": {
+          "manifest.json": "4ef2fd8634fb5f493cf6771b435cd7aded09d8a71fe6da1a7f3c6d5850d0aeef",
+          "events.jsonl": "238c69f2a6f0f13043915c10ee8ecce5218c684de8214bb33e28e5065867c44f",
+          "result.json": "e48ed73fe9cb76ea7f3b304be493d911f14cf1372acd0936cce2283ba40843ec"
+        }
+      },
+      {
+        "case": "MB3-symmetric-clipping",
+        "expectation": "reject",
+        "assertions_passed": true,
+        "result": {
+          "feedback_level": "offline_multi_block_planning",
+          "official_platform": false,
+          "official_score": null,
+          "robot_actions_executed": 0,
+          "observations": 32,
+          "stop_reason": "fixture_complete",
+          "geometric_goal_count": 0,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "last_snapshot": {
+          "tracks": [],
+          "perception_issues": [
+            "red:component_incomplete"
+          ],
+          "tracking_issues": [],
+          "spatial_uncertainties": [
+            {
+              "reason": "red:component_incomplete",
+              "bounds_m": [
+                -0.4,
+                0.4,
+                -0.25,
+                0.25,
+                0.01,
+                0.4
+              ],
+              "component_evidence": [
+                {
+                  "camera_id": "left",
+                  "color": "red",
+                  "centroid": [
+                    217.0,
+                    240.0
+                  ],
+                  "area": 99,
+                  "bounds": [
+                    213,
+                    221,
+                    235,
+                    245
+                  ]
+                },
+                {
+                  "camera_id": "right",
+                  "color": "red",
+                  "centroid": [
+                    137.0,
+                    240.0
+                  ],
+                  "area": 99,
+                  "bounds": [
+                    133,
+                    141,
+                    235,
+                    245
+                  ]
+                }
+              ]
+            }
+          ],
+          "retired_local_ids": [],
+          "decision": {
+            "kind": "wait_or_blocked",
+            "candidate": null,
+            "geometric_occupancy": {},
+            "geometrically_supported_slots": [],
+            "remaining_slots": [
+              "layer-0-slot-0",
+              "layer-0-slot-1",
+              "layer-0-slot-2",
+              "layer-0-slot-3",
+              "layer-1-slot-0",
+              "layer-1-slot-1",
+              "layer-1-slot-2",
+              "layer-2-slot-0",
+              "layer-2-slot-1",
+              "layer-3-slot-0"
+            ],
+            "blocked": {
+              "layer-0-slot-0": "unlocalized_visual_obstacle",
+              "layer-0-slot-1": "unlocalized_visual_obstacle",
+              "layer-0-slot-2": "unlocalized_visual_obstacle",
+              "layer-0-slot-3": "unlocalized_visual_obstacle",
+              "layer-1-slot-0": "unlocalized_visual_obstacle",
+              "layer-1-slot-1": "unlocalized_visual_obstacle",
+              "layer-1-slot-2": "unlocalized_visual_obstacle",
+              "layer-2-slot-0": "unlocalized_visual_obstacle",
+              "layer-2-slot-1": "unlocalized_visual_obstacle",
+              "layer-3-slot-0": "unlocalized_visual_obstacle"
+            },
+            "support_proxy_checks": {},
+            "unresolved_space_count": 1,
+            "geometric_epsilon_m": 1e-09,
+            "official_score": null,
+            "robot_actions_executed": 0,
+            "execution_available": false,
+            "physical_support_verified": false,
+            "robot_collision_verified": false,
+            "collision_scope": "axis_aligned_block_proxy_and_vertical_descent_column_only",
+            "transport_provenance_verified": false,
+            "correspondence_authenticity_verified": false,
+            "physical_component_completeness_verified": false
+          }
+        },
+        "candidate_observations": 0,
+        "replay": {
+          "record_verified": true,
+          "rgb_planning_recomputed": 32,
+          "deterministic_production_recompute": true,
+          "independent_algorithm_correctness_verified": false,
+          "rejection_reason_reconstructed": null,
+          "robot_actions_executed": 0,
+          "official_score": null,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "evaluator_only_scene": [
+          [
+            "red",
+            [
+              -0.2,
+              -0.12,
+              0.025
+            ]
+          ]
+        ],
+        "evaluator_visibility_and_crop": {
+          "crop_left": [
+            [
+              2
+            ],
+            [
+              2
+            ]
+          ]
+        },
+        "artifact_sha256": {
+          "manifest.json": "4ef2fd8634fb5f493cf6771b435cd7aded09d8a71fe6da1a7f3c6d5850d0aeef",
+          "events.jsonl": "f1a51d6c488d3756447506f9c4118b4f78e025cfcbdc6b3a80f10a4eb72c8899",
+          "result.json": "e48ed73fe9cb76ea7f3b304be493d911f14cf1372acd0936cce2283ba40843ec"
+        }
+      },
+      {
+        "case": "tiny-unmatched-obstacle",
+        "expectation": "reject",
+        "assertions_passed": true,
+        "result": {
+          "feedback_level": "offline_multi_block_planning",
+          "official_platform": false,
+          "official_score": null,
+          "robot_actions_executed": 0,
+          "observations": 32,
+          "stop_reason": "fixture_complete",
+          "geometric_goal_count": 0,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "last_snapshot": {
+          "tracks": [
+            {
+              "track_id": "local-0001",
+              "color": "red",
+              "center_m": [
+                -0.1999999999999999,
+                -0.11999999999999994,
+                0.025000000000000577
+              ],
+              "pixels": [
+                [
+                  216.0,
+                  240.0
+                ],
+                [
+                  136.0,
+                  240.0
+                ]
+              ],
+              "camera_ids": [
+                "left",
+                "right"
+              ],
+              "captured_s": 3.2,
+              "consecutive_frames": 32,
+              "unchanged_since_s": 0.1,
+              "robot_clear": true
+            }
+          ],
+          "perception_issues": [
+            "blue:view_count_mismatch"
+          ],
+          "tracking_issues": [],
+          "spatial_uncertainties": [
+            {
+              "reason": "blue:view_count_mismatch",
+              "bounds_m": [
+                -0.4,
+                0.4,
+                -0.25,
+                0.25,
+                0.01,
+                0.4
+              ],
+              "component_evidence": [
+                {
+                  "camera_id": "left",
+                  "color": "blue",
+                  "centroid": [
+                    328.0,
+                    192.0
+                  ],
+                  "area": 1,
+                  "bounds": [
+                    328,
+                    328,
+                    192,
+                    192
+                  ]
+                }
+              ]
+            }
+          ],
+          "retired_local_ids": [],
+          "decision": {
+            "kind": "wait_or_blocked",
+            "candidate": null,
+            "geometric_occupancy": {},
+            "geometrically_supported_slots": [],
+            "remaining_slots": [
+              "layer-0-slot-0",
+              "layer-0-slot-1",
+              "layer-0-slot-2",
+              "layer-0-slot-3",
+              "layer-1-slot-0",
+              "layer-1-slot-1",
+              "layer-1-slot-2",
+              "layer-2-slot-0",
+              "layer-2-slot-1",
+              "layer-3-slot-0"
+            ],
+            "blocked": {
+              "layer-0-slot-0": "unlocalized_visual_obstacle",
+              "layer-0-slot-1": "unlocalized_visual_obstacle",
+              "layer-0-slot-2": "unlocalized_visual_obstacle",
+              "layer-0-slot-3": "unlocalized_visual_obstacle",
+              "layer-1-slot-0": "unlocalized_visual_obstacle",
+              "layer-1-slot-1": "unlocalized_visual_obstacle",
+              "layer-1-slot-2": "unlocalized_visual_obstacle",
+              "layer-2-slot-0": "unlocalized_visual_obstacle",
+              "layer-2-slot-1": "unlocalized_visual_obstacle",
+              "layer-3-slot-0": "unlocalized_visual_obstacle"
+            },
+            "support_proxy_checks": {},
+            "unresolved_space_count": 1,
+            "geometric_epsilon_m": 1e-09,
+            "official_score": null,
+            "robot_actions_executed": 0,
+            "execution_available": false,
+            "physical_support_verified": false,
+            "robot_collision_verified": false,
+            "collision_scope": "axis_aligned_block_proxy_and_vertical_descent_column_only",
+            "transport_provenance_verified": false,
+            "correspondence_authenticity_verified": false,
+            "physical_component_completeness_verified": false
+          }
+        },
+        "candidate_observations": 0,
+        "replay": {
+          "record_verified": true,
+          "rgb_planning_recomputed": 32,
+          "deterministic_production_recompute": true,
+          "independent_algorithm_correctness_verified": false,
+          "rejection_reason_reconstructed": null,
+          "robot_actions_executed": 0,
+          "official_score": null,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "evaluator_only_scene": [
+          [
+            "red",
+            [
+              -0.2,
+              -0.12,
+              0.025
+            ]
+          ]
+        ],
+        "evaluator_visibility_and_crop": {
+          "tiny_blue_pixel": true
+        },
+        "artifact_sha256": {
+          "manifest.json": "4ef2fd8634fb5f493cf6771b435cd7aded09d8a71fe6da1a7f3c6d5850d0aeef",
+          "events.jsonl": "f955b342ccdb2f78d222ffaa1919184bb9fbc0175779b6489921bb391aacf0bb",
+          "result.json": "e48ed73fe9cb76ea7f3b304be493d911f14cf1372acd0936cce2283ba40843ec"
+        }
+      },
+      {
+        "case": "normal-source",
+        "expectation": "layer-0-slot-0",
+        "assertions_passed": true,
+        "result": {
+          "feedback_level": "offline_multi_block_planning",
+          "official_platform": false,
+          "official_score": null,
+          "robot_actions_executed": 0,
+          "observations": 32,
+          "stop_reason": "fixture_complete",
+          "geometric_goal_count": 0,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "last_snapshot": {
+          "tracks": [
+            {
+              "track_id": "local-0001",
+              "color": "red",
+              "center_m": [
+                -0.1999999999999999,
+                -0.11999999999999994,
+                0.025000000000000577
+              ],
+              "pixels": [
+                [
+                  216.0,
+                  240.0
+                ],
+                [
+                  136.0,
+                  240.0
+                ]
+              ],
+              "camera_ids": [
+                "left",
+                "right"
+              ],
+              "captured_s": 3.2,
+              "consecutive_frames": 32,
+              "unchanged_since_s": 0.1,
+              "robot_clear": true
+            }
+          ],
+          "perception_issues": [],
+          "tracking_issues": [],
+          "spatial_uncertainties": [],
+          "retired_local_ids": [],
+          "decision": {
+            "kind": "candidate",
+            "candidate": {
+              "source_track_id": "local-0001",
+              "source_color": "red",
+              "source_center_m": [
+                -0.1999999999999999,
+                -0.11999999999999994,
+                0.025000000000000577
+              ],
+              "target_slot_id": "layer-0-slot-0",
+              "target_center_m": [
+                0.08,
+                0.0,
+                0.025
+              ],
+              "required_support_slots": [],
+              "observation_captured_s": 3.2,
+              "support_proxy_check": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 1.0,
+                "top_plane_errors_m": []
+              }
+            },
+            "geometric_occupancy": {},
+            "geometrically_supported_slots": [],
+            "remaining_slots": [
+              "layer-0-slot-0",
+              "layer-0-slot-1",
+              "layer-0-slot-2",
+              "layer-0-slot-3",
+              "layer-1-slot-0",
+              "layer-1-slot-1",
+              "layer-1-slot-2",
+              "layer-2-slot-0",
+              "layer-2-slot-1",
+              "layer-3-slot-0"
+            ],
+            "blocked": {
+              "layer-1-slot-0": "support_dependency_missing",
+              "layer-1-slot-1": "support_dependency_missing",
+              "layer-1-slot-2": "support_dependency_missing",
+              "layer-2-slot-0": "support_dependency_missing",
+              "layer-2-slot-1": "support_dependency_missing",
+              "layer-3-slot-0": "support_dependency_missing"
+            },
+            "support_proxy_checks": {
+              "layer-0-slot-0": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 1.0,
+                "top_plane_errors_m": []
+              },
+              "layer-0-slot-1": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 1.0,
+                "top_plane_errors_m": []
+              },
+              "layer-0-slot-2": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 1.0,
+                "top_plane_errors_m": []
+              },
+              "layer-0-slot-3": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 1.0,
+                "top_plane_errors_m": []
+              }
+            },
+            "unresolved_space_count": 0,
+            "geometric_epsilon_m": 1e-09,
+            "official_score": null,
+            "robot_actions_executed": 0,
+            "execution_available": false,
+            "physical_support_verified": false,
+            "robot_collision_verified": false,
+            "collision_scope": "axis_aligned_block_proxy_and_vertical_descent_column_only",
+            "transport_provenance_verified": false,
+            "correspondence_authenticity_verified": false,
+            "physical_component_completeness_verified": false
+          }
+        },
+        "candidate_observations": 2,
+        "replay": {
+          "record_verified": true,
+          "rgb_planning_recomputed": 32,
+          "deterministic_production_recompute": true,
+          "independent_algorithm_correctness_verified": false,
+          "rejection_reason_reconstructed": null,
+          "robot_actions_executed": 0,
+          "official_score": null,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "evaluator_only_scene": [
+          [
+            "red",
+            [
+              -0.2,
+              -0.12,
+              0.025
+            ]
+          ]
+        ],
+        "evaluator_visibility_and_crop": {},
+        "artifact_sha256": {
+          "manifest.json": "4ef2fd8634fb5f493cf6771b435cd7aded09d8a71fe6da1a7f3c6d5850d0aeef",
+          "events.jsonl": "89f8e777891c4994e500d8a06eaa6fdbf16ecb17fe7a57e85b829961d1dd706d",
+          "result.json": "e48ed73fe9cb76ea7f3b304be493d911f14cf1372acd0936cce2283ba40843ec"
+        }
+      },
+      {
+        "case": "normal-supports",
+        "expectation": "layer-1-slot-0",
+        "assertions_passed": true,
+        "result": {
+          "feedback_level": "offline_multi_block_planning",
+          "official_platform": false,
+          "official_score": null,
+          "robot_actions_executed": 0,
+          "observations": 32,
+          "stop_reason": "fixture_complete",
+          "geometric_goal_count": 2,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "last_snapshot": {
+          "tracks": [
+            {
+              "track_id": "local-0001",
+              "color": "red",
+              "center_m": [
+                0.08000000000000006,
+                0.0,
+                0.024999999999999356
+              ],
+              "pixels": [
+                [
+                  328.0,
+                  192.0
+                ],
+                [
+                  248.0,
+                  192.0
+                ]
+              ],
+              "camera_ids": [
+                "left",
+                "right"
+              ],
+              "captured_s": 3.2,
+              "consecutive_frames": 32,
+              "unchanged_since_s": 0.1,
+              "robot_clear": true
+            },
+            {
+              "track_id": "local-0002",
+              "color": "red",
+              "center_m": [
+                0.13999999999999913,
+                0.0,
+                0.02500000000000624
+              ],
+              "pixels": [
+                [
+                  352.0,
+                  192.0
+                ],
+                [
+                  272.0,
+                  192.0
+                ]
+              ],
+              "camera_ids": [
+                "left",
+                "right"
+              ],
+              "captured_s": 3.2,
+              "consecutive_frames": 32,
+              "unchanged_since_s": 0.1,
+              "robot_clear": true
+            },
+            {
+              "track_id": "local-0003",
+              "color": "yellow",
+              "center_m": [
+                -0.1999999999999999,
+                -0.11999999999999994,
+                0.025000000000000577
+              ],
+              "pixels": [
+                [
+                  216.0,
+                  240.0
+                ],
+                [
+                  136.0,
+                  240.0
+                ]
+              ],
+              "camera_ids": [
+                "left",
+                "right"
+              ],
+              "captured_s": 3.2,
+              "consecutive_frames": 32,
+              "unchanged_since_s": 0.1,
+              "robot_clear": true
+            }
+          ],
+          "perception_issues": [],
+          "tracking_issues": [],
+          "spatial_uncertainties": [],
+          "retired_local_ids": [],
+          "decision": {
+            "kind": "candidate",
+            "candidate": {
+              "source_track_id": "local-0003",
+              "source_color": "yellow",
+              "source_center_m": [
+                -0.1999999999999999,
+                -0.11999999999999994,
+                0.025000000000000577
+              ],
+              "target_slot_id": "layer-1-slot-0",
+              "target_center_m": [
+                0.11,
+                0.0,
+                0.07500000000000001
+              ],
+              "required_support_slots": [
+                "layer-0-slot-0",
+                "layer-0-slot-1"
+              ],
+              "observation_captured_s": 3.2,
+              "support_proxy_check": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 0.8000000000000189,
+                "top_plane_errors_m": [
+                  -6.522560269672795e-16,
+                  6.231126725708691e-15
+                ]
+              }
+            },
+            "geometric_occupancy": {
+              "layer-0-slot-0": "local-0001",
+              "layer-0-slot-1": "local-0002"
+            },
+            "geometrically_supported_slots": [
+              "layer-0-slot-0",
+              "layer-0-slot-1"
+            ],
+            "remaining_slots": [
+              "layer-0-slot-2",
+              "layer-0-slot-3",
+              "layer-1-slot-0",
+              "layer-1-slot-1",
+              "layer-1-slot-2",
+              "layer-2-slot-0",
+              "layer-2-slot-1",
+              "layer-3-slot-0"
+            ],
+            "blocked": {
+              "layer-0-slot-2": "no_current_confirmed_clear_source",
+              "layer-0-slot-3": "no_current_confirmed_clear_source",
+              "layer-1-slot-1": "support_dependency_missing",
+              "layer-1-slot-2": "support_dependency_missing",
+              "layer-2-slot-0": "support_dependency_missing",
+              "layer-2-slot-1": "support_dependency_missing",
+              "layer-3-slot-0": "support_dependency_missing"
+            },
+            "support_proxy_checks": {
+              "layer-0-slot-0": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 1.0,
+                "top_plane_errors_m": []
+              },
+              "layer-0-slot-1": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 1.0,
+                "top_plane_errors_m": []
+              },
+              "layer-0-slot-2": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 1.0,
+                "top_plane_errors_m": []
+              },
+              "layer-0-slot-3": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 1.0,
+                "top_plane_errors_m": []
+              },
+              "layer-1-slot-0": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 0.8000000000000189,
+                "top_plane_errors_m": [
+                  -6.522560269672795e-16,
+                  6.231126725708691e-15
+                ]
+              }
+            },
+            "unresolved_space_count": 0,
+            "geometric_epsilon_m": 1e-09,
+            "official_score": null,
+            "robot_actions_executed": 0,
+            "execution_available": false,
+            "physical_support_verified": false,
+            "robot_collision_verified": false,
+            "collision_scope": "axis_aligned_block_proxy_and_vertical_descent_column_only",
+            "transport_provenance_verified": false,
+            "correspondence_authenticity_verified": false,
+            "physical_component_completeness_verified": false
+          }
+        },
+        "candidate_observations": 2,
+        "replay": {
+          "record_verified": true,
+          "rgb_planning_recomputed": 32,
+          "deterministic_production_recompute": true,
+          "independent_algorithm_correctness_verified": false,
+          "rejection_reason_reconstructed": null,
+          "robot_actions_executed": 0,
+          "official_score": null,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "evaluator_only_scene": [
+          [
+            "red",
+            [
+              0.08,
+              0.0,
+              0.025
+            ]
+          ],
+          [
+            "red",
+            [
+              0.14,
+              0.0,
+              0.025
+            ]
+          ],
+          [
+            "yellow",
+            [
+              -0.2,
+              -0.12,
+              0.025
+            ]
+          ]
+        ],
+        "evaluator_visibility_and_crop": {},
+        "artifact_sha256": {
+          "manifest.json": "4ef2fd8634fb5f493cf6771b435cd7aded09d8a71fe6da1a7f3c6d5850d0aeef",
+          "events.jsonl": "cbe2bc82321bac367b8b9ccc0c7d6ae74c4d3240bf44de57bff182229071ea46",
+          "result.json": "8755d815cdd96f5aa74f09973a0d2fc27b6284f462834532513b22bac8cd8c87"
+        }
+      },
+      {
+        "case": "indistinguishable-different-objects",
+        "expectation": "unauthenticated_conditional_hypothesis",
+        "assertions_passed": true,
+        "result": {
+          "feedback_level": "offline_multi_block_planning",
+          "official_platform": false,
+          "official_score": null,
+          "robot_actions_executed": 0,
+          "observations": 32,
+          "stop_reason": "fixture_complete",
+          "geometric_goal_count": 0,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "last_snapshot": {
+          "tracks": [
+            {
+              "track_id": "local-0001",
+              "color": "red",
+              "center_m": [
+                -0.2000000000000003,
+                -0.12500000000000017,
+                0.024999999999998634
+              ],
+              "pixels": [
+                [
+                  216.0,
+                  242.0
+                ],
+                [
+                  136.0,
+                  242.0
+                ]
+              ],
+              "camera_ids": [
+                "left",
+                "right"
+              ],
+              "captured_s": 3.2,
+              "consecutive_frames": 32,
+              "unchanged_since_s": 0.1,
+              "robot_clear": true
+            }
+          ],
+          "perception_issues": [],
+          "tracking_issues": [],
+          "spatial_uncertainties": [],
+          "retired_local_ids": [],
+          "decision": {
+            "kind": "candidate",
+            "candidate": {
+              "source_track_id": "local-0001",
+              "source_color": "red",
+              "source_center_m": [
+                -0.2000000000000003,
+                -0.12500000000000017,
+                0.024999999999998634
+              ],
+              "target_slot_id": "layer-0-slot-0",
+              "target_center_m": [
+                0.08,
+                0.0,
+                0.025
+              ],
+              "required_support_slots": [],
+              "observation_captured_s": 3.2,
+              "support_proxy_check": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 1.0,
+                "top_plane_errors_m": []
+              }
+            },
+            "geometric_occupancy": {},
+            "geometrically_supported_slots": [],
+            "remaining_slots": [
+              "layer-0-slot-0",
+              "layer-0-slot-1",
+              "layer-0-slot-2",
+              "layer-0-slot-3",
+              "layer-1-slot-0",
+              "layer-1-slot-1",
+              "layer-1-slot-2",
+              "layer-2-slot-0",
+              "layer-2-slot-1",
+              "layer-3-slot-0"
+            ],
+            "blocked": {
+              "layer-1-slot-0": "support_dependency_missing",
+              "layer-1-slot-1": "support_dependency_missing",
+              "layer-1-slot-2": "support_dependency_missing",
+              "layer-2-slot-0": "support_dependency_missing",
+              "layer-2-slot-1": "support_dependency_missing",
+              "layer-3-slot-0": "support_dependency_missing"
+            },
+            "support_proxy_checks": {
+              "layer-0-slot-0": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 1.0,
+                "top_plane_errors_m": []
+              },
+              "layer-0-slot-1": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 1.0,
+                "top_plane_errors_m": []
+              },
+              "layer-0-slot-2": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 1.0,
+                "top_plane_errors_m": []
+              },
+              "layer-0-slot-3": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 1.0,
+                "top_plane_errors_m": []
+              }
+            },
+            "unresolved_space_count": 0,
+            "geometric_epsilon_m": 1e-09,
+            "official_score": null,
+            "robot_actions_executed": 0,
+            "execution_available": false,
+            "physical_support_verified": false,
+            "robot_collision_verified": false,
+            "collision_scope": "axis_aligned_block_proxy_and_vertical_descent_column_only",
+            "transport_provenance_verified": false,
+            "correspondence_authenticity_verified": false,
+            "physical_component_completeness_verified": false
+          }
+        },
+        "candidate_observations": 2,
+        "replay": {
+          "record_verified": true,
+          "rgb_planning_recomputed": 32,
+          "deterministic_production_recompute": true,
+          "independent_algorithm_correctness_verified": false,
+          "rejection_reason_reconstructed": null,
+          "robot_actions_executed": 0,
+          "official_score": null,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "evaluator_only_scene": [
+          [
+            "red",
+            [
+              -0.1964102564102564,
+              -0.12051282051282051,
+              0.06
+            ]
+          ],
+          [
+            "red",
+            [
+              -0.15230769230769228,
+              -0.10512820512820513,
+              0.18
+            ]
+          ]
+        ],
+        "evaluator_visibility_and_crop": {
+          "visibility": [
+            [
+              true,
+              false
+            ],
+            [
+              false,
+              true
+            ]
+          ]
+        },
+        "artifact_sha256": {
+          "manifest.json": "4ef2fd8634fb5f493cf6771b435cd7aded09d8a71fe6da1a7f3c6d5850d0aeef",
+          "events.jsonl": "ae7bd3cc851df880de9f3c34d6920ae0fecda4a9a1ffd13941b13bde7504f43e",
+          "result.json": "e48ed73fe9cb76ea7f3b304be493d911f14cf1372acd0936cce2283ba40843ec"
+        }
+      }
+    ]
+  },
+  "post_fix_original_scan": {
+    "trials": 7,
+    "observations": 672,
+    "all_records_recomputed": true,
+    "report_sha256": "02057cfdd480dd2acb19e7293e098ba488488d7cbe843d06d8887b3074cadc56",
+    "rows": [
+      {
+        "case": "progress-seed-0",
+        "split": "regression; includes earlier seen supply holdouts, no new generalization claim",
+        "observations": 160,
+        "stages": [
+          {
+            "stage": "supply",
+            "tracks": 10,
+            "decision_kind": "candidate",
+            "candidate": {
+              "source_track_id": "local-0004",
+              "source_color": "red",
+              "source_center_m": [
+                -0.11999999999999898,
+                -0.04999999999999957,
+                0.025000000000008404
+              ],
+              "target_slot_id": "layer-0-slot-0",
+              "target_center_m": [
+                0.08,
+                0.0,
+                0.025
+              ],
+              "required_support_slots": [],
+              "observation_captured_s": 3.2,
+              "support_proxy_check": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 1.0,
+                "top_plane_errors_m": []
+              }
+            },
+            "geometrically_supported_slots": [],
+            "unresolved_space_count": 0,
+            "perception_issues": [],
+            "tracking_issues": []
+          },
+          {
+            "stage": "base",
+            "tracks": 10,
+            "decision_kind": "candidate",
+            "candidate": {
+              "source_track_id": "local-0007",
+              "source_color": "yellow",
+              "source_center_m": [
+                -0.11999999999999898,
+                0.04999999999999957,
+                0.025000000000008404
+              ],
+              "target_slot_id": "layer-1-slot-0",
+              "target_center_m": [
+                0.11,
+                0.0,
+                0.07500000000000001
+              ],
+              "required_support_slots": [
+                "layer-0-slot-0",
+                "layer-0-slot-1"
+              ],
+              "observation_captured_s": 6.4,
+              "support_proxy_check": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 0.8000000000000189,
+                "top_plane_errors_m": [
+                  -6.522560269672795e-16,
+                  6.231126725708691e-15
+                ]
+              }
+            },
+            "geometrically_supported_slots": [
+              "layer-0-slot-0",
+              "layer-0-slot-1",
+              "layer-0-slot-2",
+              "layer-0-slot-3"
+            ],
+            "unresolved_space_count": 0,
+            "perception_issues": [],
+            "tracking_issues": []
+          },
+          {
+            "stage": "two_layers",
+            "tracks": 6,
+            "decision_kind": "wait_or_blocked",
+            "candidate": null,
+            "geometrically_supported_slots": [],
+            "unresolved_space_count": 1,
+            "perception_issues": [
+              "red:component_incomplete"
+            ],
+            "tracking_issues": []
+          },
+          {
+            "stage": "all_geometric_slots",
+            "tracks": 1,
+            "decision_kind": "wait_or_blocked",
+            "candidate": null,
+            "geometrically_supported_slots": [],
+            "unresolved_space_count": 3,
+            "perception_issues": [
+              "red:component_incomplete",
+              "yellow:component_incomplete",
+              "blue:component_incomplete"
+            ],
+            "tracking_issues": []
+          },
+          {
+            "stage": "branch_removed",
+            "tracks": 3,
+            "decision_kind": "wait_or_blocked",
+            "candidate": null,
+            "geometrically_supported_slots": [],
+            "unresolved_space_count": 2,
+            "perception_issues": [
+              "red:component_incomplete",
+              "yellow:component_incomplete"
+            ],
+            "tracking_issues": []
+          }
+        ],
+        "result": {
+          "feedback_level": "offline_multi_block_planning",
+          "official_platform": false,
+          "official_score": null,
+          "robot_actions_executed": 0,
+          "observations": 160,
+          "stop_reason": "fixture_complete",
+          "geometric_goal_count": 0,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "replay": {
+          "record_verified": true,
+          "rgb_planning_recomputed": 160,
+          "deterministic_production_recompute": true,
+          "independent_algorithm_correctness_verified": false,
+          "rejection_reason_reconstructed": null,
+          "robot_actions_executed": 0,
+          "official_score": null,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "artifact_sha256": {
+          "manifest.json": "f8daf37705f71e60ea192eacb26bd14194ab1bb1f9b244aaa409375d26353bdf",
+          "events.jsonl": "47b625d142d4829a32edaa3b5ab1e20e20f3a63458a030cdcb07e4b3a22027a8",
+          "result.json": "19b331a8f05ee449da37c96fc8362dc97a465b489d870e36e8bc0b3b16b17eb6"
+        }
+      },
+      {
+        "case": "progress-seed-17",
+        "split": "regression; includes earlier seen supply holdouts, no new generalization claim",
+        "observations": 160,
+        "stages": [
+          {
+            "stage": "supply",
+            "tracks": 10,
+            "decision_kind": "candidate",
+            "candidate": {
+              "source_track_id": "local-0004",
+              "source_color": "red",
+              "source_center_m": [
+                -0.11999999999999898,
+                0.04999999999999957,
+                0.025000000000008404
+              ],
+              "target_slot_id": "layer-0-slot-0",
+              "target_center_m": [
+                0.08,
+                0.0,
+                0.025
+              ],
+              "required_support_slots": [],
+              "observation_captured_s": 3.2,
+              "support_proxy_check": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 1.0,
+                "top_plane_errors_m": []
+              }
+            },
+            "geometrically_supported_slots": [],
+            "unresolved_space_count": 0,
+            "perception_issues": [],
+            "tracking_issues": []
+          },
+          {
+            "stage": "base",
+            "tracks": 10,
+            "decision_kind": "candidate",
+            "candidate": {
+              "source_track_id": "local-0007",
+              "source_color": "yellow",
+              "source_center_m": [
+                -0.12000000000000036,
+                0.15000000000000047,
+                0.02499999999999708
+              ],
+              "target_slot_id": "layer-1-slot-0",
+              "target_center_m": [
+                0.11,
+                0.0,
+                0.07500000000000001
+              ],
+              "required_support_slots": [
+                "layer-0-slot-0",
+                "layer-0-slot-1"
+              ],
+              "observation_captured_s": 6.4,
+              "support_proxy_check": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 0.8000000000000189,
+                "top_plane_errors_m": [
+                  -6.522560269672795e-16,
+                  6.231126725708691e-15
+                ]
+              }
+            },
+            "geometrically_supported_slots": [
+              "layer-0-slot-0",
+              "layer-0-slot-1",
+              "layer-0-slot-2",
+              "layer-0-slot-3"
+            ],
+            "unresolved_space_count": 0,
+            "perception_issues": [],
+            "tracking_issues": []
+          },
+          {
+            "stage": "two_layers",
+            "tracks": 6,
+            "decision_kind": "wait_or_blocked",
+            "candidate": null,
+            "geometrically_supported_slots": [],
+            "unresolved_space_count": 1,
+            "perception_issues": [
+              "red:component_incomplete"
+            ],
+            "tracking_issues": []
+          },
+          {
+            "stage": "all_geometric_slots",
+            "tracks": 1,
+            "decision_kind": "wait_or_blocked",
+            "candidate": null,
+            "geometrically_supported_slots": [],
+            "unresolved_space_count": 3,
+            "perception_issues": [
+              "red:component_incomplete",
+              "yellow:component_incomplete",
+              "blue:component_incomplete"
+            ],
+            "tracking_issues": []
+          },
+          {
+            "stage": "branch_removed",
+            "tracks": 3,
+            "decision_kind": "wait_or_blocked",
+            "candidate": null,
+            "geometrically_supported_slots": [],
+            "unresolved_space_count": 2,
+            "perception_issues": [
+              "red:component_incomplete",
+              "yellow:component_incomplete"
+            ],
+            "tracking_issues": []
+          }
+        ],
+        "result": {
+          "feedback_level": "offline_multi_block_planning",
+          "official_platform": false,
+          "official_score": null,
+          "robot_actions_executed": 0,
+          "observations": 160,
+          "stop_reason": "fixture_complete",
+          "geometric_goal_count": 0,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "replay": {
+          "record_verified": true,
+          "rgb_planning_recomputed": 160,
+          "deterministic_production_recompute": true,
+          "independent_algorithm_correctness_verified": false,
+          "rejection_reason_reconstructed": null,
+          "robot_actions_executed": 0,
+          "official_score": null,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "artifact_sha256": {
+          "manifest.json": "744307dd836e5cd939945ed3d270ac60e0dad16214fd55b771c2832c029f48a3",
+          "events.jsonl": "22236172736f6d78edbd8e78da36e525c45860f12f07a32c6fecf0aac0e4af27",
+          "result.json": "19b331a8f05ee449da37c96fc8362dc97a465b489d870e36e8bc0b3b16b17eb6"
+        }
+      },
+      {
+        "case": "progress-seed-101",
+        "split": "regression; includes earlier seen supply holdouts, no new generalization claim",
+        "observations": 160,
+        "stages": [
+          {
+            "stage": "supply",
+            "tracks": 10,
+            "decision_kind": "candidate",
+            "candidate": {
+              "source_track_id": "local-0004",
+              "source_color": "red",
+              "source_center_m": [
+                -0.11999999999999898,
+                0.04999999999999957,
+                0.025000000000008404
+              ],
+              "target_slot_id": "layer-0-slot-0",
+              "target_center_m": [
+                0.08,
+                0.0,
+                0.025
+              ],
+              "required_support_slots": [],
+              "observation_captured_s": 3.2,
+              "support_proxy_check": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 1.0,
+                "top_plane_errors_m": []
+              }
+            },
+            "geometrically_supported_slots": [],
+            "unresolved_space_count": 0,
+            "perception_issues": [],
+            "tracking_issues": []
+          },
+          {
+            "stage": "base",
+            "tracks": 10,
+            "decision_kind": "candidate",
+            "candidate": {
+              "source_track_id": "local-0007",
+              "source_color": "yellow",
+              "source_center_m": [
+                -0.12000000000000036,
+                0.15000000000000047,
+                0.02499999999999708
+              ],
+              "target_slot_id": "layer-1-slot-0",
+              "target_center_m": [
+                0.11,
+                0.0,
+                0.07500000000000001
+              ],
+              "required_support_slots": [
+                "layer-0-slot-0",
+                "layer-0-slot-1"
+              ],
+              "observation_captured_s": 6.4,
+              "support_proxy_check": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 0.8000000000000189,
+                "top_plane_errors_m": [
+                  -6.522560269672795e-16,
+                  6.231126725708691e-15
+                ]
+              }
+            },
+            "geometrically_supported_slots": [
+              "layer-0-slot-0",
+              "layer-0-slot-1",
+              "layer-0-slot-2",
+              "layer-0-slot-3"
+            ],
+            "unresolved_space_count": 0,
+            "perception_issues": [],
+            "tracking_issues": []
+          },
+          {
+            "stage": "two_layers",
+            "tracks": 6,
+            "decision_kind": "wait_or_blocked",
+            "candidate": null,
+            "geometrically_supported_slots": [],
+            "unresolved_space_count": 1,
+            "perception_issues": [
+              "red:component_incomplete"
+            ],
+            "tracking_issues": []
+          },
+          {
+            "stage": "all_geometric_slots",
+            "tracks": 1,
+            "decision_kind": "wait_or_blocked",
+            "candidate": null,
+            "geometrically_supported_slots": [],
+            "unresolved_space_count": 3,
+            "perception_issues": [
+              "red:component_incomplete",
+              "yellow:component_incomplete",
+              "blue:component_incomplete"
+            ],
+            "tracking_issues": []
+          },
+          {
+            "stage": "branch_removed",
+            "tracks": 3,
+            "decision_kind": "wait_or_blocked",
+            "candidate": null,
+            "geometrically_supported_slots": [],
+            "unresolved_space_count": 2,
+            "perception_issues": [
+              "red:component_incomplete",
+              "yellow:component_incomplete"
+            ],
+            "tracking_issues": []
+          }
+        ],
+        "result": {
+          "feedback_level": "offline_multi_block_planning",
+          "official_platform": false,
+          "official_score": null,
+          "robot_actions_executed": 0,
+          "observations": 160,
+          "stop_reason": "fixture_complete",
+          "geometric_goal_count": 0,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "replay": {
+          "record_verified": true,
+          "rgb_planning_recomputed": 160,
+          "deterministic_production_recompute": true,
+          "independent_algorithm_correctness_verified": false,
+          "rejection_reason_reconstructed": null,
+          "robot_actions_executed": 0,
+          "official_score": null,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "artifact_sha256": {
+          "manifest.json": "63092d9fa775771440500f84dfd2791d8046caa6799e01681c122b7d8e798722",
+          "events.jsonl": "b5a31ac4e04a76552343530e96a99a067186457d5363cda329b01c199ae2ee32",
+          "result.json": "19b331a8f05ee449da37c96fc8362dc97a465b489d870e36e8bc0b3b16b17eb6"
+        }
+      },
+      {
+        "case": "occlusion",
+        "split": "regression; includes earlier seen supply holdouts, no new generalization claim",
+        "observations": 96,
+        "stages": [
+          {
+            "stage": "supply",
+            "tracks": 10,
+            "decision_kind": "candidate",
+            "candidate": {
+              "source_track_id": "local-0004",
+              "source_color": "red",
+              "source_center_m": [
+                -0.11999999999999898,
+                -0.04999999999999957,
+                0.025000000000008404
+              ],
+              "target_slot_id": "layer-0-slot-0",
+              "target_center_m": [
+                0.08,
+                0.0,
+                0.025
+              ],
+              "required_support_slots": [],
+              "observation_captured_s": 3.2,
+              "support_proxy_check": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 1.0,
+                "top_plane_errors_m": []
+              }
+            },
+            "geometrically_supported_slots": [],
+            "unresolved_space_count": 0,
+            "perception_issues": [],
+            "tracking_issues": []
+          },
+          {
+            "stage": "red_hidden_in_one_view",
+            "tracks": 6,
+            "decision_kind": "wait_or_blocked",
+            "candidate": null,
+            "geometrically_supported_slots": [],
+            "unresolved_space_count": 1,
+            "perception_issues": [
+              "red:view_count_mismatch"
+            ],
+            "tracking_issues": []
+          },
+          {
+            "stage": "reacquired",
+            "tracks": 10,
+            "decision_kind": "candidate",
+            "candidate": {
+              "source_track_id": "local-0014",
+              "source_color": "red",
+              "source_center_m": [
+                -0.11999999999999898,
+                -0.04999999999999957,
+                0.025000000000008404
+              ],
+              "target_slot_id": "layer-0-slot-0",
+              "target_center_m": [
+                0.08,
+                0.0,
+                0.025
+              ],
+              "required_support_slots": [],
+              "observation_captured_s": 9.6,
+              "support_proxy_check": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 1.0,
+                "top_plane_errors_m": []
+              }
+            },
+            "geometrically_supported_slots": [],
+            "unresolved_space_count": 0,
+            "perception_issues": [],
+            "tracking_issues": []
+          }
+        ],
+        "result": {
+          "feedback_level": "offline_multi_block_planning",
+          "official_platform": false,
+          "official_score": null,
+          "robot_actions_executed": 0,
+          "observations": 96,
+          "stop_reason": "fixture_complete",
+          "geometric_goal_count": 0,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "replay": {
+          "record_verified": true,
+          "rgb_planning_recomputed": 96,
+          "deterministic_production_recompute": true,
+          "independent_algorithm_correctness_verified": false,
+          "rejection_reason_reconstructed": null,
+          "robot_actions_executed": 0,
+          "official_score": null,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "artifact_sha256": {
+          "manifest.json": "f8daf37705f71e60ea192eacb26bd14194ab1bb1f9b244aaa409375d26353bdf",
+          "events.jsonl": "0eb7986943280bb4ad036701b92f62107a4f3353b4735f702166dd94b9901c15",
+          "result.json": "37a0b4cbe8c89459fcef43fef2d993a05a2052774af44a5f5d846a5505795b91"
+        }
+      },
+      {
+        "case": "jitter-1px",
+        "split": "regression; includes earlier seen supply holdouts, no new generalization claim",
+        "observations": 32,
+        "stages": [
+          {
+            "stage": "noisy_supply",
+            "tracks": 1,
+            "decision_kind": "wait_or_blocked",
+            "candidate": null,
+            "geometrically_supported_slots": [],
+            "unresolved_space_count": 3,
+            "perception_issues": [
+              "red:no_geometric_bijection",
+              "yellow:no_geometric_bijection",
+              "blue:no_geometric_bijection"
+            ],
+            "tracking_issues": []
+          }
+        ],
+        "result": {
+          "feedback_level": "offline_multi_block_planning",
+          "official_platform": false,
+          "official_score": null,
+          "robot_actions_executed": 0,
+          "observations": 32,
+          "stop_reason": "fixture_complete",
+          "geometric_goal_count": 0,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "replay": {
+          "record_verified": true,
+          "rgb_planning_recomputed": 32,
+          "deterministic_production_recompute": true,
+          "independent_algorithm_correctness_verified": false,
+          "rejection_reason_reconstructed": null,
+          "robot_actions_executed": 0,
+          "official_score": null,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "artifact_sha256": {
+          "manifest.json": "e33bf3ca9990d105c1beca4ebdea9054ddafbb438a470f18391322dee845b37c",
+          "events.jsonl": "a2fd5dbfdd3ad36676085e031fce89d1516a150f4dd366991a0b888df3a1116b",
+          "result.json": "e48ed73fe9cb76ea7f3b304be493d911f14cf1372acd0936cce2283ba40843ec"
+        }
+      },
+      {
+        "case": "heldout-supply-207",
+        "split": "regression; includes earlier seen supply holdouts, no new generalization claim",
+        "observations": 32,
+        "stages": [
+          {
+            "stage": "heldout_supply",
+            "tracks": 10,
+            "decision_kind": "candidate",
+            "candidate": {
+              "source_track_id": "local-0004",
+              "source_color": "red",
+              "source_center_m": [
+                -0.11999999999999983,
+                0.14857142857142835,
+                0.02857142857143008
+              ],
+              "target_slot_id": "layer-0-slot-0",
+              "target_center_m": [
+                0.08,
+                0.0,
+                0.025
+              ],
+              "required_support_slots": [],
+              "observation_captured_s": 3.2,
+              "support_proxy_check": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 1.0,
+                "top_plane_errors_m": []
+              }
+            },
+            "geometrically_supported_slots": [],
+            "unresolved_space_count": 0,
+            "perception_issues": [],
+            "tracking_issues": []
+          }
+        ],
+        "result": {
+          "feedback_level": "offline_multi_block_planning",
+          "official_platform": false,
+          "official_score": null,
+          "robot_actions_executed": 0,
+          "observations": 32,
+          "stop_reason": "fixture_complete",
+          "geometric_goal_count": 0,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "replay": {
+          "record_verified": true,
+          "rgb_planning_recomputed": 32,
+          "deterministic_production_recompute": true,
+          "independent_algorithm_correctness_verified": false,
+          "rejection_reason_reconstructed": null,
+          "robot_actions_executed": 0,
+          "official_score": null,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "artifact_sha256": {
+          "manifest.json": "25fccd2b9412028564171b44f77d15eabf9f876dcf286b71c6e0daa5ef54972a",
+          "events.jsonl": "077ff1fc2bddee6d89f76b19ff1bd84be3edc0454ec8cd055486607504de587a",
+          "result.json": "e48ed73fe9cb76ea7f3b304be493d911f14cf1372acd0936cce2283ba40843ec"
+        }
+      },
+      {
+        "case": "heldout-supply-509",
+        "split": "regression; includes earlier seen supply holdouts, no new generalization claim",
+        "observations": 32,
+        "stages": [
+          {
+            "stage": "heldout_supply",
+            "tracks": 10,
+            "decision_kind": "candidate",
+            "candidate": {
+              "source_track_id": "local-0003",
+              "source_color": "red",
+              "source_center_m": [
+                -0.12109090909090763,
+                -0.05018181818181758,
+                0.018181818181830067
+              ],
+              "target_slot_id": "layer-0-slot-0",
+              "target_center_m": [
+                0.08,
+                0.0,
+                0.025
+              ],
+              "required_support_slots": [],
+              "observation_captured_s": 3.2,
+              "support_proxy_check": {
+                "valid": true,
+                "reason": null,
+                "support_fraction": 1.0,
+                "top_plane_errors_m": []
+              }
+            },
+            "geometrically_supported_slots": [],
+            "unresolved_space_count": 0,
+            "perception_issues": [],
+            "tracking_issues": []
+          }
+        ],
+        "result": {
+          "feedback_level": "offline_multi_block_planning",
+          "official_platform": false,
+          "official_score": null,
+          "robot_actions_executed": 0,
+          "observations": 32,
+          "stop_reason": "fixture_complete",
+          "geometric_goal_count": 0,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "replay": {
+          "record_verified": true,
+          "rgb_planning_recomputed": 32,
+          "deterministic_production_recompute": true,
+          "independent_algorithm_correctness_verified": false,
+          "rejection_reason_reconstructed": null,
+          "robot_actions_executed": 0,
+          "official_score": null,
+          "physical_support_verified": false,
+          "sensor_authenticity_verified": false
+        },
+        "artifact_sha256": {
+          "manifest.json": "8ea7a5e2b14d464e3a2e1f30d8c1b5994dcfbf2fd9ca526e25d8c75228f09522",
+          "events.jsonl": "1e50aeb41286da9bdee8384ed5ca398474f0053c3a073ce0799d5e3a16722f0f",
+          "result.json": "e48ed73fe9cb76ea7f3b304be493d911f14cf1372acd0936cce2283ba40843ec"
+        }
+      }
+    ]
+  },
+  "total": {
+    "trials": 16,
+    "observations": 960,
+    "all_records_recomputed": true,
+    "robot_actions": 0
+  },
+  "remaining_limits": [
+    "Different physical same-color objects can yield byte-identical complete RGB; conditional geometry candidates still cannot authenticate correspondence.",
+    "11px silhouette is a synthetic marker assumption, not a real cube/camera/occlusion model.",
+    "Axis-aligned assumed block dimensions/contact planes do not verify physical support, arm collision, grasp height, or official scoring.",
+    "Simultaneously invisible or unclassified obstacles are not certified absent."
+  ],
+  "reproduce": [
+    "python -m unittest discover -s tests -p \"test_multi_block*.py\" -v",
+    "python scripts/multi_block_review_validation.py --output runs/new-review-regressions",
+    "python scripts/multi_block_validation.py --output runs/new-post-review-scan",
+    "python scripts/check.py"
+  ]
+}

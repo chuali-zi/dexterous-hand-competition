@@ -10,6 +10,8 @@ from .session import PlanningSession
 
 class PlanningTrace:
     def __init__(self,directory,manifest):
+        if type(manifest.get('schema_version')) is not int or manifest.get('schema_version')!=2:
+            raise ValueError('planning trace requires post-MB schema2')
         self.root=Path(directory);self.root.mkdir(parents=True,exist_ok=False);(self.root/'frames').mkdir()
         (self.root/'manifest.json').write_text(canonical(manifest)+'\n')
         self.bound=digest((self.root/'manifest.json').read_bytes());self.previous='0'*64;self.index=0;self.stopped=False
@@ -35,7 +37,7 @@ class PlanningTrace:
 
 def replay(directory):
     root=Path(directory);manifest=load_json(root/'manifest.json')
-    if type(manifest.get('schema_version')) is not int or manifest.get('schema_version')!=1 or manifest.get('feedback_level')!='offline_multi_block_planning' or manifest.get('official_platform') is not False:
+    if type(manifest.get('schema_version')) is not int or manifest.get('schema_version')!=2 or manifest.get('feedback_level')!='offline_multi_block_planning' or manifest.get('official_platform') is not False:
         raise ValueError('unsupported planning record')
     config=PlanConfig.from_dict(manifest['planning']);vision=VisionConfig(**manifest['vision'])
     session=PlanningSession(tuple(Camera(**c) for c in manifest['cameras']),manifest['producer'],config,vision)

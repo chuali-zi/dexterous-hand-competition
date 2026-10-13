@@ -14,7 +14,7 @@ from multi_block_fixtures import CAMERAS,packet,staged_scene,goal_scene,calibrat
 
 def run_case(path,stages,seed=0,jitter=0,cameras=CAMERAS):
     config=PlanConfig();vision=VisionConfig();session=PlanningSession(cameras,'offline_multi_rgb_fixture_v1',config,vision)
-    manifest={'schema_version':1,'feedback_level':'offline_multi_block_planning','official_platform':False,
+    manifest={'schema_version':2,'feedback_level':'offline_multi_block_planning','official_platform':False,
        'planning':asdict(config),'vision':asdict(vision),'cameras':[asdict(c) for c in cameras],'producer':session.producer,
        'code':code_identity(),'fixture_source_sha256':hashlib.sha256((ROOT/'scripts/multi_block_fixtures.py').read_bytes()).hexdigest(),
        'effect_model':'none; predeclared RGB snapshots, no executed robot transport or contact physics','seed':seed,'pixel_jitter':jitter}

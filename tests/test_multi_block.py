@@ -7,15 +7,20 @@ import shutil
 import tempfile
 import unittest
 from hand_competition.closed_loop.contracts import ObservationGate
-from hand_competition.closed_loop.vision import Detection
 from hand_competition.closed_loop.geometry import distance
-from hand_competition.multi_block.perception import VisionConfig,BlockObservation,associate,observe_many
+from hand_competition.multi_block.perception import VisionConfig,BlockObservation,associate,observe_many,Component
 from hand_competition.multi_block.tracking import Tracker,TrackView
 from hand_competition.multi_block.planning import PlanConfig,build_slots,plan
 from hand_competition.multi_block.session import PlanningSession
 from hand_competition.multi_block.records import PlanningTrace,replay
 from hand_competition.closed_loop.artifacts import canonical,digest
 from scripts.multi_block_fixtures import CAMERAS,packet,initial_scene,pixels_for,goal_scene
+
+
+def Detection(color,centroid,area):
+    # Analytic unit components only; actual RGB extraction is tested separately.
+    x,y=centroid
+    return Component(color,centroid,area,(x-5,x+5,y-5,y+5))
 
 
 def block(x=0.,y=0.,color='red',pixels=((1.,2.),(3.,4.))):
@@ -174,7 +179,7 @@ class PlanningLifecycleTests(unittest.TestCase):
     def test_planning_record_recompute_and_terminal_mutations(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory);base=root/'valid';cfg=PlanConfig();vc=VisionConfig()
-            manifest={'schema_version':1,'feedback_level':'offline_multi_block_planning','official_platform':False,
+            manifest={'schema_version':2,'feedback_level':'offline_multi_block_planning','official_platform':False,
                       'planning':asdict(cfg),'vision':asdict(vc),'cameras':[asdict(c) for c in CAMERAS],'producer':'offline_multi_rgb_fixture_v1'}
             session=PlanningSession(CAMERAS,manifest['producer'],cfg,vc);trace=PlanningTrace(base,manifest)
             for i in (1,2):

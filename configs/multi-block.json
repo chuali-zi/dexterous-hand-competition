@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "planning": {
     "block_size_m": [
       0.05,
@@ -71,6 +71,7 @@
     "max_residual_m": 0.003,
     "min_area_px": 20,
     "max_objects": 10,
-    "max_same_color": 4
+    "max_same_color": 4,
+    "component_model": "offline_full_rectangle_11px_v1"
   }
 }

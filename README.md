@@ -6,7 +6,7 @@
 
 **固定代码362e9a8的纯离线统一独立验收已通过**：R1–R6、N1、M1、C1/C2全部关闭，无阻断本轮离线验收的剩余问题。完整报告、复现入口与后续边界见[最终离线验收](docs/offline-acceptance.md)。比赛工程尚未完成，物理稳定/停止、数据真实性及物理执行验证标志仍为false。
 
-新多块模块未纳入上述独立验收。当前能从无噪声散料RGB辨认10块并建议底层红块；遮挡后的叠层质心会偏移，部分场景被保守拒绝。不能据此声称完成十块堆叠、稳定得分或机器人避碰。
+新多块模块未纳入上述独立验收。0de824e独立审查发现未知障碍、实际支撑及遮挡质心三类候选误放行，已按独立RGB反例做[MB1–MB3修复](docs/multi-block-review-fixes.md)，当前等待新SHA复验。候选仍只是在明确离线色标/块体假设下的几何建议；相同RGB不能排除两视图实际看见不同同色物体。不能据此声称完成十块堆叠、稳定得分或机器人避碰。
 
 初步推荐 **仿真垒砖 + 全自主 + 传统视觉/几何/状态机闭环**：先验证每块释放后稳定，再逐步增加形状和颜色分。正式场景、资格、设备与平台资源尚待确认；推荐不代替用户选组。ACT 是有条件的局部技能备选，Diffusion Policy 次之；当前不把 VLA、大规模强化学习或 REA 逆向工具放进关键路径。
 
@@ -16,6 +16,7 @@
 |---|---|
 | [最终离线验收](docs/offline-acceptance.md) | 固定362e9a8的完整独立结论、关闭状态与本轮收束 |
 | [多块观测与规划](docs/multi-block-planning.md) | 新阶段：本地ID、颜色/支撑依赖、失败重规划、RGB证据及限制 |
+| [多块审查修复](docs/multi-block-review-fixes.md) | MB1–MB3独立反例、先红后绿、空间/支撑/完整性门与观测歧义 |
 | [赛事详细要求](docs/competition-requirements.md) | 资格、报名、程序、计分、提交及审计证据整合 |
 | [原件精确证据](docs/evidence/official-excerpts.md) | 父任务复核的条款短引文、页码与适用范围 |
 | [规则矩阵](docs/rules-matrix.md) | 分组、计分、日期、冲突、正式/演练边界 |
@@ -52,6 +53,7 @@ python -m hand_competition examples/assembly-final-state.json
 python -m hand_competition.multi_block blueprint configs/multi-block.json
 python scripts/multi_block_validation.py --output runs/my-multi-block-scan
 python -m hand_competition.multi_block replay runs/my-multi-block-scan/occlusion
+python scripts/multi_block_review_validation.py --output runs/my-review-regressions
 ```
 
 `hand_competition.closed_loop`会在本地合成RGB场景执行内部动作协议并生成图像/日志；`hand_competition`旧入口仍只计算人工/测试标注分数。`multi_block`独立入口只观察预先指定的RGB快照并重算规划，不调用机器人。全部不是官方成绩。`configs/offline.json`和`configs/multi-block.json`是离线约定，不是平台配置；尚未接入ROS/SDK或实现官方几何判分。实验目录必须不存在，换新目录可重跑。

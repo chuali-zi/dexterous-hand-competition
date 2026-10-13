@@ -1,7 +1,8 @@
 """Color/dependency planning from current visual tracks; never a score judge."""
 from dataclasses import dataclass,asdict,fields
 from ..closed_loop.geometry import vector,finite,distance
-from .perception import COLORS
+from .perception import COLORS,SpatialUncertainty
+from .proxy_geometry import support_geometry,volume_intersects,EPSILON
 
 
 @dataclass(frozen=True)
@@ -105,13 +106,16 @@ def witnessed(track,config):
     return track.robot_clear and track.unchanged_for_s>=config.observed_unchanged_s-1e-9
 
 
-def plan(tracks,config=PlanConfig()):
+def plan(tracks,config=PlanConfig(),uncertainties=()):
     """Pure replan from the current snapshot; no claimed executed placement.
 
     Geometry may suggest support, but legal robot transport/contact/official
     scoring cannot be established here. A candidate is not an SDK command.
     """
-    slots=build_slots(config);occupancy={};supported=set();blocked={};used=set()
+    if any(not isinstance(u,SpatialUncertainty) for u in uncertainties):raise ValueError('spatial uncertainty records required')
+    slots=build_slots(config);occupancy={};supported=set();blocked={};used=set();support_checks={}
+    by_id={t.track_id:t for t in tracks}
+    if len(by_id)!=len(tracks):raise ValueError('duplicate local track ID')
     for slot in slots:
         possible=[t for t in tracks if near_slot(t,slot,config)]
         if len(possible)>1:blocked[slot.slot_id]='ambiguous_occupancy';continue
@@ -122,18 +126,35 @@ def plan(tracks,config=PlanConfig()):
         if t.color!=slot.color:blocked[slot.slot_id]='wrong_color_occupied'
         elif not witnessed(t,config):blocked[slot.slot_id]='unverified_observation_window'
         elif any(parent not in supported for parent in slot.supports):blocked[slot.slot_id]='support_dependency_missing'
-        else:supported.add(slot.slot_id)
+        else:
+            check=support_geometry(t.center_m,[by_id[occupancy[parent]] for parent in slot.supports],config)
+            support_checks[slot.slot_id]=check
+            if not check['valid']:blocked[slot.slot_id]=check['reason']
+            elif any(other.track_id!=t.track_id and volume_intersects(t.center_m,other.center_m,config.block_size_m) for other in tracks):
+                blocked[slot.slot_id]='observed_final_volume_overlap'
+            else:supported.add(slot.slot_id)
     decisions=[]
     for slot in slots:
         if slot.slot_id in occupancy or slot.slot_id in blocked:continue
+        if uncertainties:
+            # Any unresolved component currently spans the whole workspace.
+            # No motion or goal-complete claim may certify that volume as free.
+            blocked[slot.slot_id]='unlocalized_visual_obstacle';continue
         if any(parent not in supported for parent in slot.supports):
             blocked[slot.slot_id]='support_dependency_missing';continue
         support_ids={occupancy[parent] for parent in slot.supports}
+        check=support_geometry(slot.center_m,[by_id[identity] for identity in sorted(support_ids)],config)
+        support_checks[slot.slot_id]=check
+        if not check['valid']:blocked[slot.slot_id]=check['reason'];continue
+        # Every observed block participates, including support IDs. Only actual
+        # non-penetrating top-surface contact can pass, not membership in a list.
+        if any(volume_intersects(slot.center_m,t.center_m,config.block_size_m) for t in tracks):
+            blocked[slot.slot_id]='candidate_final_volume_overlap';continue
         # Vertical descent column can be obstructed even with no final-volume
         # overlap; never repair a lower row through surviving upper blocks.
         obstacles=[t for t in tracks if t.track_id not in support_ids
                    and xy_intersects(t.center_m,slot.center_m,config.block_size_m,config.clearance_m)
-                   and t.center_m[2]+config.block_size_m[2]/2>slot.center_m[2]-config.block_size_m[2]/2+1e-6]
+                   and t.center_m[2]+config.block_size_m[2]/2>slot.center_m[2]-config.block_size_m[2]/2+EPSILON]
         if obstacles:blocked[slot.slot_id]='occupied_target_or_descent_column';continue
         sources=[]
         for t in tracks:
@@ -151,10 +172,11 @@ def plan(tracks,config=PlanConfig()):
         _,_,slot,source=min(decisions,key=lambda row:row[:2])
         candidate={'source_track_id':source.track_id,'source_color':source.color,'source_center_m':source.center_m,
                    'target_slot_id':slot.slot_id,'target_center_m':slot.center_m,'required_support_slots':slot.supports,
-                   'observation_captured_s':source.captured_s}
-    return {'kind':'candidate' if candidate else 'geometric_goal_observed' if len(supported)==len(slots) else 'wait_or_blocked',
+                   'observation_captured_s':source.captured_s,'support_proxy_check':support_checks[slot.slot_id]}
+    return {'kind':'candidate' if candidate else 'geometric_goal_observed' if not uncertainties and len(supported)==len(slots) else 'wait_or_blocked',
             'candidate':candidate,'geometric_occupancy':occupancy,'geometrically_supported_slots':sorted(supported),
-            'remaining_slots':[s.slot_id for s in slots if s.slot_id not in supported],'blocked':blocked,
+            'remaining_slots':[s.slot_id for s in slots if s.slot_id not in supported],'blocked':blocked,'support_proxy_checks':support_checks,
+            'unresolved_space_count':len(uncertainties),'geometric_epsilon_m':EPSILON,
             'official_score':None,'robot_actions_executed':0,'execution_available':False,'physical_support_verified':False,
             'robot_collision_verified':False,'collision_scope':'axis_aligned_block_proxy_and_vertical_descent_column_only',
-            'transport_provenance_verified':False}
+            'transport_provenance_verified':False,'correspondence_authenticity_verified':False,'physical_component_completeness_verified':False}

@@ -2,7 +2,7 @@
 from dataclasses import asdict
 from ..closed_loop.contracts import ObservationGate
 from ..closed_loop.geometry import finite
-from .perception import VisionConfig,observe_many
+from .perception import VisionConfig,observe_many,SpatialUncertainty
 from .tracking import Tracker
 from .planning import PlanConfig,plan
 
@@ -24,12 +24,14 @@ class PlanningSession:
             observation=self.gate.accept(raw,received_s)
             found=observe_many(observation,self.cameras,self.vision)
             tracks,issues,retired=self.tracker.update(found.blocks,observation.sensor_time_s,observation.tip)
-            decision=plan(tracks,self.config)
+            uncertainties=found.uncertainties+tuple(SpatialUncertainty(issue,self.config.workspace) for issue in issues)
+            decision=plan(tracks,self.config,uncertainties)
         except Exception:
             self.terminated=True;raise
         self.observations+=1;self.last_received_s=received_s
         return observation,{'tracks':[asdict(t) for t in tracks],'perception_issues':found.issues,
-            'tracking_issues':issues,'retired_local_ids':retired,'decision':decision}
+            'tracking_issues':issues,'spatial_uncertainties':[asdict(u) for u in uncertainties],
+            'retired_local_ids':retired,'decision':decision}
     def stop(self):
         if self.terminated:raise ValueError('planning session already terminated')
         self.terminated=True
