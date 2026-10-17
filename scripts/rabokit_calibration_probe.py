@@ -36,7 +36,7 @@ def sample(arm, root, label, stereo=False, side_camera=False):
     folder.mkdir()
     before = measured(arm)
     scripts = Path(__file__).resolve().parent
-    camera_command = ([str(scripts / 'rabokit_stereo.py'), '--capture-only', '--seconds', '1',
+    camera_command = ([str(scripts / 'rabokit_stereo.py'), '--capture-only', '--seconds', '6' if side_camera else '1',
                        '--output', str(folder / 'camera')] if stereo else
                       [str(scripts / 'rabokit_camera.py'), '--seconds', '1',
                        '--topic', 'base/base_cam/image_raw', '--output', str(folder / 'camera')])
