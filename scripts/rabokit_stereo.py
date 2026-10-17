@@ -54,7 +54,7 @@ def reconstruct(pairs, metadata, frames):
     for name in pairs:
         info = metadata[name]
         rotation, origin = world_transform(frames, info['frame_id'])
-        k = info['k']
+        k = [float(value) for value in info['k']]
         cameras.append(Camera(name, origin, transpose(rotation), k[0], k[4], k[2], k[5],
                               info['width'], info['height'], 'manual-mount-and-robot-frames'))
         image = pairs[name][0]
