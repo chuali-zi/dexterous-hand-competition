@@ -6,10 +6,29 @@ import unittest
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from rabokit_joint_path import translation_path
+from rabokit_joint_path import interpolate_rotation, pose_path, translation_path
 
 
 class JointPathTests(unittest.TestCase):
+    def test_rotation_interpolation_handles_half_turn_and_seeded_turn(self):
+        half_turn = np.diag([-1., -1., 1.])
+        middle = interpolate_rotation(np.eye(3), half_turn, .5)
+        np.testing.assert_allclose(middle @ middle, half_turn, atol=1e-8)
+        np.testing.assert_allclose(middle.T @ middle, np.eye(3), atol=1e-8)
+
+        def forward(joints):
+            pose = np.eye(4)
+            angle = joints[0]
+            pose[:3, :3] = [[np.cos(angle), -np.sin(angle), 0],
+                            [np.sin(angle), np.cos(angle), 0], [0, 0, 1]]
+            return pose
+
+        target = forward([.2] * 7)
+        start = {'joints': [0.] * 7, 'pose': [[0.] * 3, [0.] * 3]}
+        result = pose_path(start, target, lambda t, s: [np.arctan2(t[1, 0], t[0, 0])] + [0.] * 6, forward)
+        self.assertTrue(result['continuous'])
+        self.assertAlmostEqual(result['points'][-1]['joints'][0], .2)
+
     def test_continuous_seed_is_propagated_and_branch_jump_is_rejected(self):
         start = {'joints': [0.] * 7, 'pose': [[0.] * 3, [0.] * 3]}
 
