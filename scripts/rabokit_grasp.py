@@ -133,8 +133,8 @@ def main():
         parser.error('--tool-clearance must be in (0, .10]')
     if not math.isfinite(args.yaw_deg) or not -180 <= args.yaw_deg <= 180:
         parser.error('--yaw-deg must be in [-180, 180]')
-    if args.seed_record and (args.stage not in ('approach', 'touch') or args.yaw_deg != -90):
-        parser.error('--seed-record currently requires approach/touch and yaw -90')
+    if args.seed_record and (args.stage not in ('approach', 'touch', 'pickup') or args.yaw_deg != -90):
+        parser.error('--seed-record currently requires approach/touch/pickup and yaw -90')
     if args.output.exists():
         parser.error('--output must be a new directory')
     args.output.mkdir(parents=True)

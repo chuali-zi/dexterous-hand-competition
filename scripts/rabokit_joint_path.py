@@ -92,8 +92,8 @@ def seeded_approach_plan(start, point, uncertainty, clearance, reference, stage,
     """Reverse-plan from an achieved low branch, then connect behind the table."""
     import numpy as np
 
-    if stage not in ('approach', 'touch'):
-        raise ValueError('Seeded approach currently supports approach and touch stages')
+    if stage not in ('approach', 'touch', 'pickup'):
+        raise ValueError('Seeded route supports approach, touch and source-return pickup stages')
     reference_joints = next(event['measured']['joints'] for event in reference['completed']
                             if event['name'] == 'contact')
     target = np.asarray(forward(reference_joints)).copy()
@@ -159,7 +159,30 @@ def seeded_approach_plan(start, point, uncertainty, clearance, reference, stage,
             break
     returning = [{**event, 'name': event['name'] + '_return', 'reverse_of': event['name'], 'capture': False}
                  for event in reversed(outgoing[:-1])]
-    return [{'name': 'opened', 'hand': 'open', 'capture': True}, *outgoing, *returning], checks
+    pickup = []
+    if stage == 'pickup':
+        raised = []
+        joints = outgoing[-1]['joints']
+        for name, height_offset in (('lifted', .20), ('followed', .25)):
+            current = node('current', joints)
+            target = np.asarray(forward(joints)).copy()
+            target[:3, 3] = [point[0] - .08, point[1], point[2] + height_offset]
+            path = pose_path({'joints': joints, 'pose': [current['position'], current['orientation']]},
+                             target, inverse, forward)
+            checks.append({'stage': name, **{key: value for key, value in path.items() if key != 'points'},
+                           'point_count': len(path['points'])})
+            if not path['continuous']:
+                raise ValueError(f'{name}: {path.get("reason")} at step {path.get("failed_step")}')
+            for index, sample in enumerate(path['points']):
+                last = index == len(path['points']) - 1
+                raised.append(node(name if last else f'{name}_{index:03}', sample['joints'], last))
+            joints = path['points'][-1]['joints']
+        lowered = [{**event, 'name': event['name'] + '_lower_return', 'reverse_of': event['name'], 'capture': False}
+                   for event in reversed(raised[:-1])]
+        pickup = [{'name': 'closed', 'hand': 'close', 'capture': True}, *raised, *lowered,
+                  {**outgoing[-1], 'name': 'source_release_position', 'reverse_of': 'contact', 'capture': False},
+                  {'name': 'released', 'hand': 'open', 'capture': True}]
+    return [{'name': 'opened', 'hand': 'open', 'capture': True}, *outgoing, *pickup, *returning], checks
 
 
 def main():

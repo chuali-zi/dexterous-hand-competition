@@ -6,10 +6,35 @@ import unittest
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from rabokit_joint_path import interpolate_rotation, pose_path, translation_path
+from rabokit_joint_path import interpolate_rotation, pose_path, seeded_approach_plan, translation_path
 
 
 class JointPathTests(unittest.TestCase):
+    def test_seeded_pickup_returns_to_source_before_opening_and_retraces_joint_samples(self):
+        def forward(joints):
+            transform = np.eye(4)
+            transform[:3, 3] = joints[:3]
+            return transform
+
+        inverse = lambda target, seed: [*target[:3, 3], 0., 0., 0., 0.]
+        start = {'joints': [0., .222, -.6082, 0., 0., 0., 0.], 'pose': [[0., .222, -.6082], [0.] * 3]}
+        point = [.22875, .08125, -.497625]
+        reference = {'completed': [{'name': 'contact', 'measured': {
+            'joints': [.14875, .08125, -.457625, 0., 0., 0., 0.]}}]}
+        events, _ = seeded_approach_plan(start, point, .009, .04, reference, 'pickup', inverse, forward)
+        names = [event['name'] for event in events]
+        for first, second in zip(('contact', 'closed', 'lifted', 'followed', 'source_release_position'),
+                                 ('closed', 'lifted', 'followed', 'source_release_position', 'released')):
+            self.assertLess(names.index(first), names.index(second))
+        self.assertNotIn('transferred', names)
+        seen = set()
+        for event in events:
+            if 'reverse_of' in event:
+                self.assertIn(event['reverse_of'], seen)
+            seen.add(event['name'])
+        touch, _ = seeded_approach_plan(start, point, .009, .04, reference, 'touch', inverse, forward)
+        self.assertFalse(any(event.get('hand') == 'close' for event in touch))
+
     def test_rotation_interpolation_handles_half_turn_and_seeded_turn(self):
         half_turn = np.diag([-1., -1., 1.])
         middle = interpolate_rotation(np.eye(3), half_turn, .5)
