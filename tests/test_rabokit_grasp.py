@@ -4,7 +4,7 @@ import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from rabokit_grasp import make_plan, relocation
+from rabokit_grasp import make_plan, pickup_offset, relocation
 from rabokit_pickup_vision import neighboring_layout, pickup_evidence
 
 
@@ -57,6 +57,18 @@ class GraspPlanTests(unittest.TestCase):
 
 
 class PickupVisionTests(unittest.TestCase):
+    def test_tool_shift_is_removed_from_expected_surface_offset(self):
+        import math
+        source = [0., 0., 0.]
+        tools = [[-.08, -.07, .20], [-.08, -.07, .25]]
+        held = [{'valid': True, 'point': [0., -.08, height]} for height in (.165, .215)]
+        proof = pickup_evidence(source, *held, *tools, pickup_offset(-math.pi / 2, .01), .035)
+        self.assertTrue(proof['physical_grasp_verified'])
+        self.assertAlmostEqual(proof['attachment_error_m'], 0.)
+        table = {'valid': True, 'point': source}
+        self.assertFalse(pickup_evidence(source, table, table, *tools,
+                         pickup_offset(-math.pi / 2, .01), .035)['physical_grasp_verified'])
+
     def test_peek_rejects_a_visible_brick_still_at_the_source(self):
         source = [0., 0., 0.]
         tools = [[-.08, -.08, .20], [-.08, -.08, .25]]

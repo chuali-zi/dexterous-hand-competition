@@ -88,9 +88,10 @@ def translation_path(start, goal, inverse, forward, spacing=.01, joint_step_limi
     return pose_path(start, target, inverse, forward, spacing, joint_step_limit)
 
 
-def seeded_approach_plan(start, point, uncertainty, clearance, reference, stage, inverse, forward):
+def seeded_approach_plan(start, point, uncertainty, clearance, reference, stage, inverse, forward, tool_offset_y=0.):
     """Keep accepted routes; retry a rejected route once with 5 mm translations."""
-    arguments = (start, point, uncertainty, clearance, reference, stage, inverse, forward)
+    target_point = [point[0], point[1] + tool_offset_y, point[2]]
+    arguments = (start, target_point, uncertainty, clearance, reference, stage, inverse, forward)
     try:
         return _seeded_approach_plan(*arguments, spacing=.01)
     except ValueError as coarse_error:
@@ -201,10 +202,11 @@ def _seeded_approach_plan(start, point, uncertainty, clearance, reference, stage
     return [{'name': 'opened', 'hand': 'open', 'capture': True}, *outgoing, *pickup, *returning], checks
 
 
-def pickup_inspection_plan(events, point, inverse, forward):
+def pickup_inspection_plan(events, point, inverse, forward, tool_offset_y=0.):
     """Insert an explicit high diagnostic peek, then retrace before source release."""
     import numpy as np
 
+    point = [point[0], point[1] + tool_offset_y, point[2]]
     names = [event['name'] for event in events]
     if 'followed' not in names or 'source_release_position' not in names or 'transferred' in names:
         raise ValueError('Inspection requires a source-return pickup route')

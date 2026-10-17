@@ -10,6 +10,27 @@ from rabokit_joint_path import interpolate_rotation, pickup_inspection_plan, pos
 
 
 class JointPathTests(unittest.TestCase):
+    def test_tool_y_adjustment_keeps_source_and_source_return_consistent(self):
+        def forward(joints):
+            transform = np.eye(4)
+            transform[:3, 3] = joints[:3]
+            return transform
+
+        inverse = lambda target, seed: [*target[:3, 3], 0., 0., 0., 0.]
+        start = {'joints': [0., .222, -.6082, 0., 0., 0., 0.], 'pose': [[0., .222, -.6082], [0.] * 3]}
+        point = [.22875, .08125, -.497625]
+        reference = {'completed': [{'name': 'contact', 'measured': {
+            'joints': [.14875, .08125, point[2] + .035, 0., 0., 0., 0.]}}]}
+        events, _ = seeded_approach_plan(start, point, .009, .035, reference, 'pickup', inverse, forward,
+                                         tool_offset_y=.01)
+        events, _ = pickup_inspection_plan(events, point, inverse, forward, tool_offset_y=.01)
+        by_name = {event['name']: event for event in events}
+        self.assertAlmostEqual(by_name['contact']['joints'][1], point[1] + .01)
+        self.assertAlmostEqual(by_name['followed']['joints'][1], point[1] + .01)
+        self.assertAlmostEqual(by_name['inspection_low']['joints'][1], point[1] + .01 - .08)
+        self.assertEqual(by_name['source_release_position']['reverse_of'], 'contact')
+        self.assertEqual(point, [.22875, .08125, -.497625])
+
     def test_seeded_route_refines_translation_without_raising_joint_step_limit(self):
         def forward(joints):
             transform = np.eye(4)

@@ -17,6 +17,11 @@ TOP_GRASP_RPY = (math.pi / 2, 0., -math.pi / 2)
 ZERO_RPY = (0., 0., 0.)
 
 
+def pickup_offset(yaw, tool_offset_y=0.):
+    """Expected tool-to-surface XY vector, including a deliberate tool shift."""
+    return [-.08 * math.sin(yaw), .08 * math.cos(yaw) - tool_offset_y]
+
+
 def make_plan(start, point, uncertainty, stage, clearance=.03, yaw=-math.pi / 2):
     height = point[2] + .30 + uncertainty
     transit = hover_waypoints(start, point, height)
@@ -130,6 +135,8 @@ def main():
                         help='Seeded pickup only: diagnose at Y -8 cm and heights 20/25 cm, then return to source')
     parser.add_argument('--tool-clearance', type=float, default=.03,
                         help='Contact tool height above the observed colored surface, metres')
+    parser.add_argument('--tool-offset-y', type=float, default=0.,
+                        help='Seeded route only: signed tool Y adjustment, at most 2 cm; RGB source stays unchanged')
     parser.add_argument('--yaw-deg', type=float, default=-90,
                         help='Horizontal entry direction; -90 approaches from outside the brick columns')
     args = parser.parse_args()
@@ -137,6 +144,10 @@ def main():
         parser.error('Run only in the Rabokit simulation terminal')
     if not math.isfinite(args.tool_clearance) or not 0 < args.tool_clearance <= .10:
         parser.error('--tool-clearance must be in (0, .10]')
+    if not math.isfinite(args.tool_offset_y) or abs(args.tool_offset_y) > .02:
+        parser.error('--tool-offset-y must be finite and within +/- .02 m')
+    if args.tool_offset_y and not args.seed_record:
+        parser.error('--tool-offset-y requires --seed-record')
     if not math.isfinite(args.yaw_deg) or not -180 <= args.yaw_deg <= 180:
         parser.error('--yaw-deg must be in [-180, 180]')
     if args.seed_record and (args.stage not in ('approach', 'touch', 'pickup') or args.yaw_deg != -90):
@@ -169,11 +180,13 @@ def main():
             forward = lambda joints: k.forward_kinematics('left', joints)
             events, seeded_checks = seeded_approach_plan(start, point, surface['half_pixel_perturbation_radius_m'],
                 args.tool_clearance, json.loads(args.seed_record.read_text(encoding='utf-8')), args.stage,
-                lambda target, seed: k.inverse_kinematics('left', target, seed_real=seed), forward)
+                lambda target, seed: k.inverse_kinematics('left', target, seed_real=seed), forward,
+                tool_offset_y=args.tool_offset_y)
             if args.inspect_pickup:
                 from rabokit_joint_path import pickup_inspection_plan
                 events, inspection_checks = pickup_inspection_plan(events, point,
-                    lambda target, seed: k.inverse_kinematics('left', target, seed_real=seed), forward)
+                    lambda target, seed: k.inverse_kinematics('left', target, seed_real=seed), forward,
+                    tool_offset_y=args.tool_offset_y)
                 seeded_checks.extend(inspection_checks)
             if any(not low <= value <= high for event in events if 'joints' in event
                    for value, (low, high) in zip(event['joints'], k.REAL_JOINT_LIMITS_LEFT)):
@@ -190,6 +203,7 @@ def main():
         report = {'stage': args.stage, 'start': start, 'source_surface': surface,
                   'destination_surface': destination, 'events': events, 'reachability_checks': checks,
                   'tool_clearance_m': args.tool_clearance, 'completed': [], 'physical_grasp_verified': False,
+                  'tool_offset_y_m': args.tool_offset_y,
                   'entry_yaw_deg': args.yaw_deg,
                   'seeded_path_checks': seeded_checks,
                   'side_camera_capture': args.side_camera,
@@ -256,9 +270,9 @@ def main():
                         second = target_observation(args.output / evidence_labels[1])
                         tools = [json.loads((args.output / label / 'sdk.json').read_text(encoding='utf-8'))
                                  ['after']['pose'][0] for label in evidence_labels]
-                        direction = (-math.sin(math.radians(args.yaw_deg)), math.cos(math.radians(args.yaw_deg)))
                         proof = pickup_evidence(point, first, second, *tools,
-                                                 [axis * .08 for axis in direction], args.tool_clearance)
+                                                 pickup_offset(math.radians(args.yaw_deg), args.tool_offset_y),
+                                                 args.tool_clearance)
                         neighbors = [neighboring_layout(initial, saved_scene(args.output / label,
                                       colors={'red', 'yellow', 'blue'}), exclude_green=True)
                                      for label in evidence_labels]
