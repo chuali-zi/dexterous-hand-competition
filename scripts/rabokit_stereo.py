@@ -49,7 +49,7 @@ def match_candidates(cameras, candidates, sdk_origin, sdk_rotation):
     return matches, issues
 
 
-def reconstruct(pairs, metadata, frames):
+def reconstruct(pairs, metadata, frames, colors=None):
     cameras, candidates, component_issues = [], [], []
     for name in pairs:
         info = metadata[name]
@@ -59,8 +59,9 @@ def reconstruct(pairs, metadata, frames):
                               info['width'], info['height'], 'manual-mount-and-robot-frames'))
         image = pairs[name][0]
         detected = detect(image.width, image.height, rgb_bytes(image))
-        candidates.append(detected['candidates'])
-        if detected['rejected_components']:
+        candidates.append([item for item in detected['candidates']
+                           if colors is None or item['color'] in colors])
+        if any(colors is None or item['color'] in colors for item in detected['rejected_components']):
             component_issues.append(f'{name}: rejected colored components remain')
     left = world_transform(frames, LEFT_ROOT)
     right = world_transform(frames, RIGHT_ROOT)

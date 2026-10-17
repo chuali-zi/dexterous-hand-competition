@@ -51,9 +51,23 @@ def return_joints(arm, joints):
     if not arm.move_joints(joints, speed=10, blocking=False):
         raise RuntimeError('SDK rejected the return command')
     deadline = time.monotonic() + 40
+    previous = None
+    settled_since = None
+    minimum, maximum = [math.inf] * 3, [-math.inf] * 3
     while time.monotonic() < deadline:
-        if max(abs(a - b) for a, b in zip(measured(arm)['joints'], joints)) < .005:
-            return
+        state = measured(arm)
+        minimum = [min(a, b) for a, b in zip(minimum, state['pose'][0])]
+        maximum = [max(a, b) for a, b in zip(maximum, state['pose'][0])]
+        quiet = previous is not None and max(abs(a - b) for a, b in
+                                            zip(state['joints'], previous['joints'])) < .0005
+        if max(abs(a - b) for a, b in zip(state['joints'], joints)) < .003 and quiet:
+            if settled_since is None:
+                settled_since = time.monotonic()
+            elif time.monotonic() - settled_since >= .5:
+                return {**state, 'observed_tool_position_bounds': {'minimum': minimum, 'maximum': maximum}}
+        else:
+            settled_since = None
+        previous = state
         time.sleep(.1)
     raise TimeoutError('Joint feedback did not return to the start')
 
