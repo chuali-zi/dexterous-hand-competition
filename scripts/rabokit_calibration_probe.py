@@ -89,11 +89,14 @@ def main():
         if args.hand_motion:
             for label, action in (('opened', robot.left_hand.open), ('closed', robot.left_hand.close),
                                   ('reopened', robot.left_hand.open)):
-                if not action():
-                    raise RuntimeError(f'Left hand {label} command rejected')
+                if not action(blocking=False):
+                    raise RuntimeError(f'Left hand {label} command was not acknowledged')
                 # SDK hand blocking is an estimate; preserve actual sim link frames for comparison.
                 time.sleep(1)
-                records.append(sample(arm, args.output, label))
+                record = sample(arm, args.output, label)
+                record['hand_command_acknowledged'] = True
+                record['hand_arrival_verified'] = False
+                records.append(record)
         report = {'motion_requested': args.motion or args.hand_motion,
                   'motion_kind': 'wrist' if args.motion else 'empty_hand' if args.hand_motion else None,
                   'samples': records,
@@ -104,7 +107,8 @@ def main():
     finally:
         try:
             if args.hand_motion:
-                robot.left_hand.open()
+                robot.left_hand.open(blocking=False)
+                time.sleep(1)
             if args.motion:
                 robot.stop()
         finally:
