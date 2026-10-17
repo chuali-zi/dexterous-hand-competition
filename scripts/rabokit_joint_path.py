@@ -195,7 +195,7 @@ def pickup_inspection_plan(events, point, inverse, forward):
     index = names.index('followed')
     joints = events[index]['joints']
     extra, checks = [], []
-    for name, height in (('inspection_high', .25), ('inspection_low', .20), ('inspection_followed', .25)):
+    for name, height in (('inspection_high', .25), ('inspection_low', .20)):
         current = np.asarray(forward(joints))
         target = current.copy()
         target[:3, 3] = [point[0] - .08, point[1] - .08, point[2] + height]
@@ -210,8 +210,18 @@ def pickup_inspection_plan(events, point, inverse, forward):
             extra.append({'name': name if last else f'{name}_{i:03}', 'joints': sample['joints'],
                           'capture': last and name != 'inspection_high'})
         joints = path['points'][-1]['joints']
+        if name == 'inspection_high':
+            horizontal = list(extra)
+    # Reuse the checked descent instead of asking IK to choose an upward branch.
+    upward = list(reversed(extra[len(horizontal) - 1:-1]))
+    for i, event in enumerate(upward):
+        last = i == len(upward) - 1
+        extra.append({'name': 'inspection_followed' if last else f'inspection_followed_{i:03}',
+                      'joints': event['joints'], 'reverse_of': event['name'], 'capture': last})
+    checks.append({'stage': 'inspection_followed', 'continuous': True, 'point_count': len(upward),
+                   'scope': 'Reverse of checked descent; uses actually measured joints at execution'})
     returning = [{**event, 'name': event['name'] + '_inspection_return',
-                  'reverse_of': event['name'], 'capture': False} for event in reversed(extra[:-1])]
+                  'reverse_of': event['name'], 'capture': False} for event in reversed(horizontal[:-1])]
     returning.append({'name': 'inspection_source_return', 'reverse_of': 'followed', 'capture': False})
     return events[:index + 1] + extra + returning + events[index + 1:], checks
 

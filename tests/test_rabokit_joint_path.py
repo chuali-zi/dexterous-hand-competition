@@ -15,7 +15,10 @@ class JointPathTests(unittest.TestCase):
             transform = np.eye(4)
             transform[:3, 3] = joints[:3]
             return transform
-        inverse = lambda target, seed: [*target[:3, 3], 0., 0., 0., 0.]
+        def inverse(target, seed):
+            if target[2, 3] > seed[2] + 1e-6:
+                return None  # The observed upward IK failure must not be retried.
+            return [*target[:3, 3], 0., 0., 0., 0.]
         point = [.22875, .08125, -.497625]
         events = [{'name': 'followed', 'joints': [.14875, .08125, -.247625, 0., 0., 0., 0.], 'capture': True},
                   {'name': 'source_release_position', 'reverse_of': 'contact', 'capture': False},
@@ -27,6 +30,8 @@ class JointPathTests(unittest.TestCase):
             np.testing.assert_allclose(event['joints'][:3], [point[0] - .08, point[1] - .08, point[2] + height])
             self.assertTrue(event['capture'])
         self.assertLess(names.index('inspection_followed'), names.index('inspection_source_return'))
+        self.assertEqual(next(e for e in planned if e['name'] == 'inspection_followed')['reverse_of'],
+                         'inspection_high')
         self.assertLess(names.index('inspection_source_return'), names.index('source_release_position'))
         self.assertLess(names.index('source_release_position'), names.index('released'))
         seen = {'contact'}
