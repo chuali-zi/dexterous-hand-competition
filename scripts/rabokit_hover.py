@@ -72,6 +72,45 @@ def return_joints(arm, joints):
     raise TimeoutError('Joint feedback did not return to the start')
 
 
+def move_joint_pose(arm, joints, forward, settle=.2):
+    """Track a preplanned short joint segment using the existing tool-pose tolerances."""
+    import numpy as np
+
+    beginning = measured(arm)
+    target = np.asarray(forward(joints))
+    origin, goal = np.asarray(beginning['pose'][0]), target[:3, 3]
+    if max(abs(a - b) for a, b in zip(beginning['joints'], joints)) > .18:
+        raise RuntimeError('Joint segment is too far from measured start')
+    if not arm.move_joints(joints, speed=10, blocking=False):
+        raise RuntimeError('SDK rejected the planned joint segment')
+    deadline, quiet_since = time.monotonic() + 15, None
+    previous = None
+    minimum, maximum = origin.copy(), origin.copy()
+    while time.monotonic() < deadline:
+        state = measured(arm)
+        actual = np.asarray(forward(state['joints']))
+        xyz = np.asarray(state['pose'][0])
+        minimum, maximum = np.minimum(minimum, xyz), np.maximum(maximum, xyz)
+        delta = goal - origin
+        fraction = float(np.clip(np.dot(xyz - origin, delta) / np.dot(delta, delta), 0, 1)) if np.dot(delta, delta) > 1e-12 else 0
+        if np.linalg.norm(xyz - (origin + fraction * delta)) > .015:
+            arm.stop()
+            raise RuntimeError('Measured tool left the planned short segment by more than 15 mm')
+        angle = math.acos(max(-1., min(1., float((np.trace(target[:3, :3].T @ actual[:3, :3]) - 1) / 2))))
+        quiet = previous is not None and max(abs(a - b) for a, b in zip(state['joints'], previous)) < .0005
+        if (np.linalg.norm(xyz - goal) < .003 and angle < .01 and
+                max(abs(a - b) for a, b in zip(state['joints'], joints)) < .01 and quiet):
+            if quiet_since is None:
+                quiet_since = time.monotonic()
+            elif time.monotonic() - quiet_since >= settle:
+                return {**state, 'observed_tool_position_bounds': {'minimum': minimum.tolist(), 'maximum': maximum.tolist()}}
+        else:
+            quiet_since = None
+        previous = state['joints']
+        time.sleep(.1)
+    raise TimeoutError('Measured planned joint segment did not settle')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)

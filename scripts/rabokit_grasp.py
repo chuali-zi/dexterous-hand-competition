@@ -10,7 +10,7 @@ import sys
 import time
 
 from rabokit_calibration_probe import hand_command, measured, sample
-from rabokit_hover import hover_waypoints, move_pose, return_joints
+from rabokit_hover import hover_waypoints, move_joint_pose, move_pose, return_joints
 from rabokit_pickup_vision import neighboring_layout, pickup_evidence, saved_scene, target_observation
 
 TOP_GRASP_RPY = (math.pi / 2, 0., -math.pi / 2)
@@ -90,7 +90,7 @@ def check_plan(arm, start, events):
     previous, previous_rpy = start['pose']
     checks = []
     for event in events:
-        if 'position' not in event or 'reverse_of' in event:
+        if 'position' not in event or 'reverse_of' in event or 'joints' in event:
             continue
         target, rpy = event['position'], event['orientation']
         checks.append({'stage': event['name'], 'point': target, 'orientation': rpy,
@@ -121,6 +121,7 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--stage', choices=('plan', 'orient', 'approach', 'touch', 'pickup', 'grasp'), default='plan')
     parser.add_argument('--plan-only', action='store_true', help='Check the selected stage without enabling motion')
+    parser.add_argument('--seed-record', type=Path, help='Use the achieved contact joint branch from a prior grasp.json')
     parser.add_argument('--tool-clearance', type=float, default=.03,
                         help='Contact tool height above the observed colored surface, metres')
     parser.add_argument('--yaw-deg', type=float, default=-90,
@@ -132,6 +133,8 @@ def main():
         parser.error('--tool-clearance must be in (0, .10]')
     if not math.isfinite(args.yaw_deg) or not -180 <= args.yaw_deg <= 180:
         parser.error('--yaw-deg must be in [-180, 180]')
+    if args.seed_record and (args.stage not in ('approach', 'touch') or args.yaw_deg != -90):
+        parser.error('--seed-record currently requires approach/touch and yaw -90')
     if args.output.exists():
         parser.error('--output must be a new directory')
     args.output.mkdir(parents=True)
@@ -151,6 +154,14 @@ def main():
         start = measured(arm)
         events, destination = make_plan(start, point, surface['half_pixel_perturbation_radius_m'],
                                         args.stage, args.tool_clearance, math.radians(args.yaw_deg))
+        seeded_checks = None
+        if args.seed_record:
+            from rabokit_joint_path import seeded_approach_plan
+            from _robolib_core.arms import _lbot_kinematics as k
+            forward = lambda joints: k.forward_kinematics('left', joints)
+            events, seeded_checks = seeded_approach_plan(start, point, surface['half_pixel_perturbation_radius_m'],
+                args.tool_clearance, json.loads(args.seed_record.read_text(encoding='utf-8')), args.stage,
+                lambda target, seed: k.inverse_kinematics('left', target, seed_real=seed), forward)
         if any(math.dist(item['colored_surface_point_sdk_m'][:2], destination[:2]) < .07
                for item in initial['matches'] if item['color'] != 'green'):
             raise RuntimeError('The RGB destination overlaps another observed brick')
@@ -159,6 +170,7 @@ def main():
                   'destination_surface': destination, 'events': events, 'reachability_checks': checks,
                   'tool_clearance_m': args.tool_clearance, 'completed': [], 'physical_grasp_verified': False,
                   'entry_yaw_deg': args.yaw_deg,
+                  'seeded_path_checks': seeded_checks,
                   'official_score': None, 'path_note': 'SDK joint interpolation; sampled IK is not collision checking'}
 
         def save():
@@ -196,7 +208,10 @@ def main():
                     time.sleep(1)
                     state = measured(arm)
                 elif 'reverse_of' in event:
-                    state = return_joints(arm, joint_targets[event['reverse_of']])
+                    state = (move_joint_pose(arm, joint_targets[event['reverse_of']], forward)
+                             if args.seed_record else return_joints(arm, joint_targets[event['reverse_of']]))
+                elif 'joints' in event:
+                    state = move_joint_pose(arm, event['joints'], forward, settle=.5 if event['capture'] else .2)
                 else:
                     state = move_pose(arm, event['position'], event['orientation'])
                 joint_targets[event['name']] = state['joints']
@@ -207,6 +222,8 @@ def main():
                     try:
                         sample(arm, args.output, event['name'], stereo=True)
                     except (RuntimeError, subprocess.TimeoutExpired) as error:
+                        if args.seed_record:
+                            raise RuntimeError(f'{event["name"]}: seeded route camera sampling failed') from error
                         pending = recover(f'{event["name"]}: camera sampling failed: {error}')
                         save()
                         continue

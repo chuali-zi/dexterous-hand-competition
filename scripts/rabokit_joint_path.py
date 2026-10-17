@@ -88,6 +88,78 @@ def translation_path(start, goal, inverse, forward, spacing=.01, joint_step_limi
     return pose_path(start, target, inverse, forward, spacing, joint_step_limit)
 
 
+def seeded_approach_plan(start, point, uncertainty, clearance, reference, stage, inverse, forward):
+    """Reverse-plan from an achieved low branch, then connect behind the table."""
+    import numpy as np
+
+    if stage not in ('approach', 'touch'):
+        raise ValueError('Seeded approach currently supports approach and touch stages')
+    reference_joints = next(event['measured']['joints'] for event in reference['completed']
+                            if event['name'] == 'contact')
+    target = np.asarray(forward(reference_joints)).copy()
+    target[:3, 3] = [point[0] - .08, point[1], point[2] + clearance]
+    low = inverse(target, reference_joints)
+    if low is None or max(abs(a - b) for a, b in zip(low, reference_joints)) > .15:
+        raise ValueError('Fresh RGB low target does not preserve the recorded joint branch')
+
+    def node(name, joints, capture=False):
+        transform = np.asarray(forward(joints))
+        rotation = transform[:3, :3]
+        rpy = [math.atan2(rotation[2, 1], rotation[2, 2]),
+               math.atan2(-rotation[2, 0], math.hypot(rotation[2, 1], rotation[2, 2])),
+               math.atan2(rotation[1, 0], rotation[0, 0])]
+        return {'name': name, 'joints': [float(value) for value in joints],
+                'position': transform[:3, 3].tolist(), 'orientation': rpy, 'capture': capture}
+
+    backward = [node('contact', low, True)]
+    checks = []
+    height = point[2] + .30 + uncertainty
+    destinations = [('approached', [point[0] - .08, point[1], point[2] + .12], False),
+                    ('aligned', [point[0] - .08, point[1], height], False),
+                    ('over_row', [.35, point[1], height], False),
+                    ('front', [.35, .60, height], False),
+                    ('vertical_front', [.35, .60, height], True),
+                    ('outside', [-.20, .60, height], True),
+                    ('retreat', [-.15, start['pose'][0][1], -.35], True)]
+    joints = low
+    for name, xyz, vertical in destinations:
+        current = node('current', joints)
+        target = np.asarray(forward(joints)).copy()
+        target[:3, 3] = xyz
+        if vertical:
+            target[:3, :3] = np.eye(3)
+        path = pose_path({'joints': joints, 'pose': [current['position'], current['orientation']]},
+                         target, inverse, forward)
+        checks.append({'stage': name, **{key: value for key, value in path.items() if key != 'points'},
+                       'point_count': len(path['points'])})
+        if not path['continuous']:
+            raise ValueError(f'{name}: {path.get("reason")} at step {path.get("failed_step")}')
+        for index, sample in enumerate(path['points']):
+            last = index == len(path['points']) - 1
+            backward.append(node(name if last else f'{name}_{index:03}', sample['joints'], last))
+        joints = path['points'][-1]['joints']
+
+    # This connection stays behind the observed bricks; it does not claim whole-body collision clearance.
+    count = max(1, math.ceil(max(abs(a - b) for a, b in zip(start['joints'], joints)) / .10))
+    bridge = [node(f'bridge_{index:03}', [a + (b - a) * index / count
+                   for a, b in zip(start['joints'], joints)]) for index in range(1, count + 1)]
+    bridge_xyz = np.asarray([forward([a + (b - a) * t for a, b in zip(start['joints'], joints)])[:3, 3]
+                             for t in np.linspace(0, 1, 201)])
+    if float(bridge_xyz[:, 0].max()) > .05:
+        raise ValueError('Initial joint connection leaves the rear tool region')
+    checks.append({'stage': 'initial_joint_connection', 'continuous': True,
+                   'tool_minimum': bridge_xyz.min(axis=0).tolist(),
+                   'tool_maximum': bridge_xyz.max(axis=0).tolist(), 'point_count': len(bridge)})
+    outgoing = bridge
+    for event in reversed(backward[:-1]):
+        outgoing.append(event)
+        if event['name'] == ('approached' if stage == 'approach' else 'contact'):
+            break
+    returning = [{**event, 'name': event['name'] + '_return', 'reverse_of': event['name'], 'capture': False}
+                 for event in reversed(outgoing[:-1])]
+    return [{'name': 'opened', 'hand': 'open', 'capture': True}, *outgoing, *returning], checks
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('record', type=Path, help='grasp.json with actual completed robot states')

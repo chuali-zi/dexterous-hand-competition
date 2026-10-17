@@ -4,12 +4,35 @@ import sys
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
+import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import rabokit_hover as hover
 
 
 class HoverTests(unittest.TestCase):
+    def test_seeded_joint_tracking_stops_on_measured_sideways_excursion(self):
+        def forward(joints):
+            pose = np.eye(4)
+            pose[:3, 3] = joints[:3]
+            return pose
+
+        states = iter([{'joints': [0.] * 7, 'pose': [[0.] * 3, [0.] * 3]},
+                       {'joints': [0., .04, 0., 0., 0., 0., 0.], 'pose': [[0., .04, 0.], [0.] * 3]}])
+        stopped = []
+        arm = SimpleNamespace(move_joints=lambda *a, **k: True, stop=lambda: stopped.append(True))
+        with patch.object(hover, 'measured', lambda _: next(states)):
+            with self.assertRaisesRegex(RuntimeError, '15 mm'):
+                hover.move_joint_pose(arm, [.01, 0., 0., 0., 0., 0., 0.], forward)
+        self.assertEqual(stopped, [True])
+
+    def test_seeded_joint_tracking_rejects_large_step_before_sending(self):
+        initial = {'joints': [0.] * 7, 'pose': [[0.] * 3, [0.] * 3]}
+        arm = SimpleNamespace(move_joints=lambda *a, **k: self.fail('unexpected motion command'))
+        with patch.object(hover, 'measured', lambda _: initial):
+            with self.assertRaisesRegex(RuntimeError, 'too far'):
+                hover.move_joint_pose(arm, [1.] * 7, lambda _: np.eye(4))
+
     def test_pose_arrival_still_waits_for_joint_settling(self):
         clock = [0.]
         calls = [0]
