@@ -40,44 +40,76 @@ def png_bytes(width, height, pixels):
             chunk(b'IDAT', zlib.compress(rows)) + chunk(b'IEND', b''))
 
 
-def capture(image_topic, info_topic, seconds):
+def capture_cameras(topics, seconds):
     import rclpy
     from rclpy.qos import QoSProfile, ReliabilityPolicy
     from sensor_msgs.msg import CameraInfo, Image
 
     rclpy.init()
     node = rclpy.create_node('competition_camera_capture')
-    pending = {'image': {}, 'info': {}}
-    counts = {'image': 0, 'info': 0}
+    pending = {}
+    counts = {name: {'image': 0, 'info': 0} for name in topics}
     matched = None
+    matched_stamp = None
     subscriptions = []
     qos = QoSProfile(depth=5, reliability=ReliabilityPolicy.RELIABLE)
 
-    def receive(kind, msg):
-        nonlocal matched
-        counts[kind] += 1
-        key = (msg.header.stamp.sec, msg.header.stamp.nanosec, msg.header.frame_id)
-        pending[kind][key] = msg
-        if key in pending['image'] and key in pending['info']:
-            matched = (pending['image'][key], pending['info'][key])
-        while len(pending[kind]) > 8:
-            del pending[kind][next(iter(pending[kind]))]
+    def receive(name, kind, msg):
+        nonlocal matched, matched_stamp
+        counts[name][kind] += 1
+        key = (msg.header.stamp.sec, msg.header.stamp.nanosec)
+        group = pending.setdefault(key, {})
+        group.setdefault(name, {})[kind] = msg
+        if all(name in group and 'image' in group[name] and 'info' in group[name]
+               and group[name]['image'].header.frame_id == group[name]['info'].header.frame_id
+               for name in topics):
+            if matched_stamp is None or key >= matched_stamp:
+                matched = {name: (group[name]['image'], group[name]['info']) for name in topics}
+                matched_stamp = key
+        while len(pending) > 16:
+            del pending[next(iter(pending))]
 
     try:
-        for kind, topic, message in (('image', image_topic, Image),
-                                     ('info', info_topic, CameraInfo)):
-            subscriptions.append(node.create_subscription(
-                message, topic, lambda msg, kind=kind: receive(kind, msg),
-                qos))
+        for name, (image_topic, info_topic) in topics.items():
+            for kind, topic, message in (('image', image_topic, Image), ('info', info_topic, CameraInfo)):
+                subscriptions.append(node.create_subscription(
+                    message, topic, lambda msg, name=name, kind=kind: receive(name, kind, msg), qos))
         deadline = time.monotonic() + seconds
         while time.monotonic() < deadline:
             rclpy.spin_once(node, timeout_sec=0.1)
         if matched is None:
             raise TimeoutError(f'No matching RGB/CameraInfo pair in {seconds}s: {counts}')
-        return *matched, counts
+        return matched, counts
     finally:
         node.destroy_node()
         rclpy.try_shutdown()
+
+
+def capture(image_topic, info_topic, seconds):
+    pairs, counts = capture_cameras({'camera': (image_topic, info_topic)}, seconds)
+    return *pairs['camera'], counts['camera']
+
+
+def save_pair(image, info, counts, seconds, image_topic, info_topic, output):
+    pixels = rgb_bytes(image)
+    if (not image.header.frame_id or (image.width, image.height) != (info.width, info.height)
+            or len(info.k) != 9 or not all(math.isfinite(v) for v in info.k)
+            or info.k[0] <= 0 or info.k[4] <= 0):
+        raise ValueError('Missing frame or inconsistent/uncalibrated CameraInfo')
+    report = {'image_topic': image_topic, 'camera_info_topic': info_topic,
+              'frame_id': image.header.frame_id,
+              'stamp': {'sec': image.header.stamp.sec, 'nanosec': image.header.stamp.nanosec},
+              'width': image.width, 'height': image.height, 'encoding': image.encoding,
+              'step': image.step, 'messages': counts, 'observation_wall_seconds': seconds,
+              'qos_reliability': 'reliable',
+              'k': list(info.k), 'd': list(info.d), 'r': list(info.r), 'p': list(info.p),
+              'distortion_model': info.distortion_model,
+              'extrinsics_calibrated': False, 'official_score': None}
+    output.mkdir(parents=True)
+    (output / 'frame.png').write_bytes(png_bytes(image.width, image.height, pixels))
+    (output / 'frame.ppm').write_bytes(f'P6\n{image.width} {image.height}\n255\n'.encode() + pixels)
+    (output / 'camera.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
+    return report
 
 
 def main():
@@ -101,25 +133,7 @@ def main():
     image_topic = f'/{namespace}/{args.topic}'
     info_topic = image_topic.rsplit('/', 1)[0] + '/camera_info'
     image, info, counts = capture(image_topic, info_topic, args.seconds)
-    pixels = rgb_bytes(image)
-    if (not image.header.frame_id or (image.width, image.height) != (info.width, info.height)
-            or len(info.k) != 9 or not all(math.isfinite(v) for v in info.k)
-            or info.k[0] <= 0 or info.k[4] <= 0):
-        raise ValueError('Missing frame or inconsistent/uncalibrated CameraInfo')
-    report = {'image_topic': image_topic, 'camera_info_topic': info_topic,
-              'frame_id': image.header.frame_id,
-              'stamp': {'sec': image.header.stamp.sec, 'nanosec': image.header.stamp.nanosec},
-              'width': image.width, 'height': image.height, 'encoding': image.encoding,
-              'step': image.step, 'messages': counts, 'observation_wall_seconds': args.seconds,
-              'qos_reliability': 'reliable',
-              'k': list(info.k), 'd': list(info.d), 'r': list(info.r), 'p': list(info.p),
-              'distortion_model': info.distortion_model,
-              'extrinsics_calibrated': False, 'official_score': None}
-    args.output.mkdir(parents=True)
-    (args.output / 'frame.png').write_bytes(png_bytes(image.width, image.height, pixels))
-    (args.output / 'frame.ppm').write_bytes(
-        f'P6\n{image.width} {image.height}\n255\n'.encode() + pixels)
-    (args.output / 'camera.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
+    report = save_pair(image, info, counts, args.seconds, image_topic, info_topic, args.output)
     print(json.dumps(report), flush=True)
     print(f'PASS: RGB and matching CameraInfo saved to {args.output}')
 

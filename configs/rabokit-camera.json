@@ -13,5 +13,19 @@
   "rgb_topic": "base/base_cam/image_raw",
   "camera_info_topic": "base/base_cam/camera_info",
   "depth": false,
-  "point_cloud": false
+  "point_cloud": false,
+  "secondary_camera": {
+    "camera_name": "base_cam2",
+    "parent_robot": "base",
+    "parent_link": "r6ef2dc_link_57d50b5359",
+    "position_in_parent_m": [0.1, 0.0, 1.4],
+    "native_camera_xyaxes": [1, 0, 0, 0, 1, 0],
+    "vertical_fov_deg": 35,
+    "width": 320,
+    "height": 240,
+    "rgb_topic": "base/base_cam2/image_raw",
+    "camera_info_topic": "base/base_cam2/camera_info",
+    "depth": false,
+    "point_cloud": false
+  }
 }

@@ -10,7 +10,7 @@ import time
 # Actual robot link IDs in the user's copied LBot scene; object frames are excluded.
 ROBOT_PREFIXES = ('r6ef2dc_link_', 'r412d23_link_', 'rbd03eb_link_',
                   'r136d7b_link_', 'rcd72e2_link_')
-CAMERA_FRAMES = ('base_cam', 'base_cam_optical')
+CAMERA_FRAMES = ('base_cam', 'base_cam_optical', 'base_cam2', 'base_cam2_optical')
 
 
 def robot_frame(name):
