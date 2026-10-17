@@ -260,28 +260,28 @@ def main():
             except (RuntimeError, subprocess.TimeoutExpired) as error:
                 report['restored_capture_error'] = str(error)
                 save()
-            if args.stage in ('touch', 'pickup', 'grasp'):
+            if args.stage in ('approach', 'touch', 'pickup', 'grasp'):
                 final = observe(args.output / 'final', require_complete=False)
                 settled = observe(args.output / 'settled', require_complete=False)
                 report['neighbor_observations_after_return'] = [neighboring_layout(initial, view,
-                    exclude_green=args.stage != 'touch') for view in (final, settled)]
+                    exclude_green=args.stage not in ('approach', 'touch')) for view in (final, settled)]
                 goal = destination if args.stage == 'grasp' and 'recovery_reason' not in report else point
                 report['final_observation'] = relocation(final, goal, point)
                 report['settled_observation'] = relocation(settled, goal, point)
                 positions = [report[key].get('observed_surface') for key in
                              ('final_observation', 'settled_observation')]
-                report['release_observations_consistent'] = (
+                report['post_return_observations_consistent'] = (
                     all(positions) and math.dist(*positions) < .01)
                 save()
                 neighbors_ok = all(item['consistent'] for item in report['neighbor_observations_after_return'])
-                if args.stage == 'touch':
+                if args.stage in ('approach', 'touch'):
                     if not neighbors_ok or 'recovery_reason' in report:
                         raise RuntimeError('Low open-hand approach did not preserve the observed brick arrangement')
                 else:
                     placed = (all(report[key].get('destination_planar_error_m', math.inf) < .015 and
                                   report[key].get('destination_height_error_m', math.inf) < .02
                                   for key in ('final_observation', 'settled_observation')) and
-                              report['release_observations_consistent'])
+                              report['post_return_observations_consistent'])
                     if not (report.get('pickup_scene_verified') and neighbors_ok and placed and
                             'recovery_reason' not in report):
                         raise RuntimeError('RGB did not verify clean pickup and release; measured return completed')
