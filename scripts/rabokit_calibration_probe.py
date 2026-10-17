@@ -68,7 +68,7 @@ def main():
         parser.error('Run in the Rabokit cloud simulation terminal')
     if args.output.exists():
         parser.error('--output must be a new directory')
-    from rabo_robolib import LbotDualArm, LbotHand
+    from rabo_robolib import LbotDualArm
 
     args.output.mkdir(parents=True)
     robot = LbotDualArm(mode='sim')
@@ -87,19 +87,11 @@ def main():
             move(arm, start)
             records.append(sample(arm, args.output, 'restored'))
         if args.hand_motion:
-            def open_hand(blocking=False):
-                # Exact-zero SDK open did not reopen the four fingers in this simulation.
-                return robot.left_hand.move_joints([LbotHand.THUMB_ROT_OPEN, .01, .01, .01, .01, .01],
-                                                    blocking=blocking)
-
-            for label, action in (('opened', open_hand), ('closed', robot.left_hand.close),
-                                  ('reopened', open_hand)):
-                if not action(blocking=False):
-                    raise RuntimeError(f'Left hand {label} command was not acknowledged')
-                # SDK hand blocking is an estimate; preserve actual sim link frames for comparison.
+            for label, pose in (('opened', 'open'), ('closed', 'close'), ('reopened', 'open')):
+                hand_command(pose)
                 time.sleep(1)
                 record = sample(arm, args.output, label)
-                record['hand_command_acknowledged'] = True
+                record['hand_command_published'] = True
                 record['hand_arrival_verified'] = False
                 records.append(record)
         report = {'motion_requested': args.motion or args.hand_motion,
@@ -112,7 +104,7 @@ def main():
             views = [json.loads((args.output / label / 'robot-frames.json').read_text(encoding='utf-8'))['frames']
                      for label in ('opened', 'closed', 'reopened')]
             report['hand_geometry'] = compare_hand_frames(*views)
-            report['open_bend_normalized'] = .01
+            report['hand_driver'] = 'native Float64 targets measured from SDK 3.0.0 commands'
         (args.output / 'summary.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
         if args.hand_motion:
             print(json.dumps(report['hand_geometry']), flush=True)
@@ -123,12 +115,19 @@ def main():
     finally:
         try:
             if args.hand_motion:
-                robot.left_hand.move_joints([LbotHand.THUMB_ROT_OPEN, .01, .01, .01, .01, .01], blocking=False)
+                hand_command('open')
                 time.sleep(1)
             if args.motion:
                 robot.stop()
         finally:
             robot.shutdown()
+
+
+def hand_command(pose):
+    result = subprocess.run([sys.executable, str(Path(__file__).with_name('rabokit_hand.py')),
+                             '--pose', pose], capture_output=True, text=True, timeout=10)
+    print(result.stdout + result.stderr, end='', flush=True)
+    result.check_returncode()
 
 
 if __name__ == '__main__':
