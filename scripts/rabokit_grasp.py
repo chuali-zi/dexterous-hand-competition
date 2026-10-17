@@ -185,6 +185,8 @@ def main():
 
             while pending:
                 event = pending.pop(0)
+                report['active_stage'] = event['name']
+                save()
                 if event.get('requires_verified_pickup') and not report.get('pickup_scene_verified', False):
                     pending = recover('No verified pickup before lateral transfer')
                     save()
@@ -268,6 +270,15 @@ def main():
                         raise RuntimeError('RGB did not verify clean pickup and release; measured return completed')
                     print('PASS: RGB pickup and release with consistent neighboring observations', flush=True)
         print(f'PASS: {args.stage} motion plan' + (' executed with measured return' if motion else ' (no motion)'), flush=True)
+    except Exception as error:
+        if 'report' in locals():
+            report['error'] = f'{type(error).__name__}: {error}'
+            try:
+                report['last_measured'] = measured(arm)
+            except RuntimeError:
+                pass
+            save()
+        raise
     finally:
         try:
             if motion:
