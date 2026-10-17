@@ -11,6 +11,24 @@ spec.loader.exec_module(calibration)
 
 
 class CalibrationGeometryTests(unittest.TestCase):
+    def hand(self, bend, arm_x=0):
+        frames = {calibration.LEFT_HAND_BASE: {'parent': 'world', 'xyz': [arm_x, 0, 0],
+                                               'xyzw': [0, 0, 0, 1]}}
+        for i in range(5):
+            frames['r136d7b_link_test' + str(i)] = {'parent': calibration.LEFT_HAND_BASE,
+                                                  'xyz': [i * .02, bend, .1], 'xyzw': [0, 0, 0, 1]}
+        return frames
+
+    def test_hand_reopening_uses_actual_links_and_ignores_arm_translation(self):
+        report = calibration.compare_hand_frames(self.hand(0), self.hand(.05, .4), self.hand(0, .2))
+        self.assertTrue(report['sequence_verified'])
+        self.assertFalse(report['physical_grasp_verified'])
+
+    def test_acknowledged_open_with_still_closed_links_is_not_verified(self):
+        report = calibration.compare_hand_frames(self.hand(0), self.hand(.05), self.hand(.05))
+        self.assertFalse(report['sequence_verified'])
+        self.assertAlmostEqual(report['max_reopening_error_m'], .05)
+
     def test_rotated_parent_changes_child_translation(self):
         frames = {'parent': {'parent': 'world', 'xyz': [2, 3, 4],
                               'xyzw': [0, 0, math.sqrt(.5), math.sqrt(.5)]},

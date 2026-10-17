@@ -9,6 +9,7 @@ IDENTITY = ((1, 0, 0), (0, 1, 0), (0, 0, 1))
 LEFT_ROOT = 'r412d23_link_c7c36cf32f'
 RIGHT_ROOT = 'rbd03eb_link_13df66db66'
 LEFT_WRIST = 'r412d23_link_c610da48be'
+LEFT_HAND_BASE = 'r136d7b_link_2848c4d4a8'
 
 
 def matvec(matrix, point):
@@ -25,6 +26,27 @@ def subtract(a, b):
 
 def distance(a, b):
     return math.sqrt(sum(x * x for x in subtract(a, b)))
+
+
+def compare_hand_frames(opened, closed, reopened):
+    """Compare hand link origins relative to its own base, independent of arm drift."""
+    names = sorted(name for name in opened if name.startswith('r136d7b_link_'))
+    if len(names) < 6 or not all(name in view for view in (closed, reopened) for name in names):
+        raise ValueError('Expected the same measured left-hand links in all three samples')
+
+    def points(frames):
+        rotation, origin = world_transform(frames, LEFT_HAND_BASE)
+        return {name: matvec(transpose(rotation), subtract(world_transform(frames, name)[1], origin))
+                for name in names}
+
+    initial, bent, returned = map(points, (opened, closed, reopened))
+    movement = {name: distance(initial[name], bent[name]) for name in names}
+    residual = {name: distance(initial[name], returned[name]) for name in names}
+    moving = sum(value > .02 for value in movement.values())
+    return {'closing_displacement_m': movement, 'reopening_error_m': residual,
+            'links_moved_over_20mm': moving, 'max_reopening_error_m': max(residual.values()),
+            'sequence_verified': moving >= 4 and max(residual.values()) < .005,
+            'physical_grasp_verified': False}
 
 
 def quaternion_rotation(q):

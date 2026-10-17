@@ -68,7 +68,7 @@ def main():
         parser.error('Run in the Rabokit cloud simulation terminal')
     if args.output.exists():
         parser.error('--output must be a new directory')
-    from rabo_robolib import LbotDualArm
+    from rabo_robolib import LbotDualArm, LbotHand
 
     args.output.mkdir(parents=True)
     robot = LbotDualArm(mode='sim')
@@ -87,8 +87,13 @@ def main():
             move(arm, start)
             records.append(sample(arm, args.output, 'restored'))
         if args.hand_motion:
-            for label, action in (('opened', robot.left_hand.open), ('closed', robot.left_hand.close),
-                                  ('reopened', robot.left_hand.open)):
+            def open_hand(blocking=False):
+                # Exact-zero SDK open did not reopen the four fingers in this simulation.
+                return robot.left_hand.move_joints([LbotHand.THUMB_ROT_OPEN, .01, .01, .01, .01, .01],
+                                                    blocking=blocking)
+
+            for label, action in (('opened', open_hand), ('closed', robot.left_hand.close),
+                                  ('reopened', open_hand)):
                 if not action(blocking=False):
                     raise RuntimeError(f'Left hand {label} command was not acknowledged')
                 # SDK hand blocking is an estimate; preserve actual sim link frames for comparison.
@@ -101,13 +106,24 @@ def main():
                   'motion_kind': 'wrist' if args.motion else 'empty_hand' if args.hand_motion else None,
                   'samples': records,
                   'extrinsics_validated': False, 'official_score': None}
+        if args.hand_motion:
+            from rabokit_calibration_analysis import compare_hand_frames
+
+            views = [json.loads((args.output / label / 'robot-frames.json').read_text(encoding='utf-8'))['frames']
+                     for label in ('opened', 'closed', 'reopened')]
+            report['hand_geometry'] = compare_hand_frames(*views)
+            report['open_bend_normalized'] = .01
         (args.output / 'summary.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
+        if args.hand_motion:
+            print(json.dumps(report['hand_geometry']), flush=True)
+            if not report['hand_geometry']['sequence_verified']:
+                raise RuntimeError('Measured hand links did not close and return within 5 mm')
         print('PASS: static calibration samples' + (' and wrist motion/return' if args.motion else
                                                   ' and empty hand command sequence' if args.hand_motion else ''))
     finally:
         try:
             if args.hand_motion:
-                robot.left_hand.open(blocking=False)
+                robot.left_hand.move_joints([LbotHand.THUMB_ROT_OPEN, .01, .01, .01, .01, .01], blocking=False)
                 time.sleep(1)
             if args.motion:
                 robot.stop()
