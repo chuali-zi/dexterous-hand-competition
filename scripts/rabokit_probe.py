@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check a running Rabokit simulation; optionally move and restore one wrist."""
 import argparse
-from importlib.metadata import version
+from importlib.metadata import PackageNotFoundError, version
 import json
 import math
 import os
@@ -85,7 +85,13 @@ def main():
     args = parser.parse_args()
     if not os.getenv('ROS2_NAMESPACE'):
         parser.error('Run this in the Rabokit cloud terminal with the simulation started')
-    report = {'sdk_version': version('rabo_robolib'), 'observation': observe(4)}
+    try:
+        sdk_version = version('rabo_robolib')
+    except PackageNotFoundError:
+        sdk_version = None
+    if args.motion and sdk_version is None:
+        parser.error('Wrist motion requires rabo_robolib; install rabokit/requirements.txt first')
+    report = {'sdk_version': sdk_version, 'observation': observe(4)}
     print(json.dumps(report, ensure_ascii=False), flush=True)
     if not all(report['observation']['joint_states'].get(side, {}).get('messages', 0)
                for side in ('arm_left', 'arm_right')):
