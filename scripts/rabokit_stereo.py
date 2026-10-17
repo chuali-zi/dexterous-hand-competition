@@ -83,7 +83,10 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--seconds', type=float, default=6)
     parser.add_argument('--capture-only', action='store_true', help='Save synchronized RGB without requiring visible brick matches')
+    parser.add_argument('--side-camera', action='store_true', help='Also capture base_cam3 at the same timestamp (capture-only)')
     args = parser.parse_args()
+    if args.side_camera and not args.capture_only:
+        parser.error('--side-camera requires --capture-only; metric reconstruction uses the original stereo pair')
     namespace = os.getenv('ROS2_NAMESPACE', '').strip('/')
     if not namespace:
         parser.error('Run in the Rabokit cloud simulation terminal')
@@ -91,8 +94,9 @@ def main():
         parser.error('--seconds must be in (0, 30]')
     if args.output.exists():
         parser.error('--output must be a new directory')
+    names = ('base_cam', 'base_cam2', 'base_cam3') if args.side_camera else ('base_cam', 'base_cam2')
     topics = {name: (f'/{namespace}/base/{name}/image_raw', f'/{namespace}/base/{name}/camera_info')
-              for name in ('base_cam', 'base_cam2')}
+              for name in names}
     pairs, counts = capture_cameras(topics, args.seconds)
     metadata = {name: save_pair(*pairs[name], counts[name], args.seconds, *topics[name], args.output / name)
                 for name in topics}

@@ -124,6 +124,8 @@ def main():
     parser.add_argument('--seed-record', type=Path, help='Use the achieved contact joint branch from a prior grasp.json')
     parser.add_argument('--keep-pinky-open', action='store_true',
                         help='Close the other fingers while keeping the pinky at its measured open target')
+    parser.add_argument('--side-camera', action='store_true',
+                        help='Record synchronized side RGB at static stages for grasp visibility diagnosis')
     parser.add_argument('--tool-clearance', type=float, default=.03,
                         help='Contact tool height above the observed colored surface, metres')
     parser.add_argument('--yaw-deg', type=float, default=-90,
@@ -177,6 +179,7 @@ def main():
                   'tool_clearance_m': args.tool_clearance, 'completed': [], 'physical_grasp_verified': False,
                   'entry_yaw_deg': args.yaw_deg,
                   'seeded_path_checks': seeded_checks,
+                  'side_camera_capture': args.side_camera,
                   'official_score': None, 'path_note': 'SDK joint interpolation; sampled IK is not collision checking'}
 
         def save():
@@ -226,7 +229,7 @@ def main():
                 print(json.dumps({'completed': event['name'], 'measured': state}), flush=True)
                 if event['capture']:
                     try:
-                        sample(arm, args.output, event['name'], stereo=True)
+                        sample(arm, args.output, event['name'], stereo=True, side_camera=args.side_camera)
                     except (RuntimeError, subprocess.TimeoutExpired) as error:
                         if args.seed_record:
                             raise RuntimeError(f'{event["name"]}: seeded route camera sampling failed') from error
@@ -262,7 +265,7 @@ def main():
             report['motion_sequence_completed'] = 'recovery_reason' not in report
             save()
             try:
-                sample(arm, args.output, 'restored', stereo=True)
+                sample(arm, args.output, 'restored', stereo=True, side_camera=args.side_camera)
             except (RuntimeError, subprocess.TimeoutExpired) as error:
                 report['restored_capture_error'] = str(error)
                 save()

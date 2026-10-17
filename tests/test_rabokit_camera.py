@@ -15,7 +15,7 @@ spec.loader.exec_module(camera)
 
 
 class CameraTests(unittest.TestCase):
-    def capture_events(self, events):
+    def capture_events(self, events, names=('a', 'b')):
         callbacks, cleanup = {}, []
         clock = [0.0]
 
@@ -39,8 +39,7 @@ class CameraTests(unittest.TestCase):
                    'sensor_msgs.msg': SimpleNamespace(CameraInfo=object, Image=object)}
         with patch.dict(sys.modules, modules), patch.object(camera.time, 'monotonic', lambda: clock[0]):
             try:
-                return camera.capture_cameras({'a': ('a/image', 'a/info'),
-                                                'b': ('b/image', 'b/info')}, 1.2)
+                return camera.capture_cameras({name: (name + '/image', name + '/info') for name in names}, 1.2)
             finally:
                 self.assertEqual(cleanup, ['destroyed', 'shutdown'])
 
@@ -62,6 +61,16 @@ class CameraTests(unittest.TestCase):
         pairs, counts = self.capture_events(events)
         self.assertEqual([pairs[name][0].header.stamp.sec for name in ('a', 'b')], [2, 2])
         self.assertEqual(counts, {'a': {'image': 2, 'info': 2}, 'b': {'image': 2, 'info': 2}})
+
+    def test_three_views_require_all_six_messages_at_one_timestamp(self):
+        events = [(name + '/' + kind, self.message(2, name))
+                  for name in ('a', 'b') for kind in ('info', 'image')]
+        events += [('c/' + kind, self.message(1, 'c')) for kind in ('info', 'image')]
+        with self.assertRaises(TimeoutError):
+            self.capture_events(events.copy(), ('a', 'b', 'c'))
+        events += [('c/' + kind, self.message(2, 'c')) for kind in ('info', 'image')]
+        pairs, _ = self.capture_events(events, ('a', 'b', 'c'))
+        self.assertEqual([pairs[name][0].header.stamp.sec for name in ('a', 'b', 'c')], [2, 2, 2])
 
     def test_padded_bgr_rows_preserve_colors_and_skip_padding(self):
         msg = SimpleNamespace(encoding='bgr8', width=1, height=2, step=4,

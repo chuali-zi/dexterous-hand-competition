@@ -12,6 +12,7 @@ from hand_competition.closed_loop.artifacts import read_ppm
 def saved_scene(folder, colors=None):
     folder = Path(folder)
     metadata = json.loads((folder / 'camera/capture.json').read_text(encoding='utf-8'))['camera_messages']
+    metadata = {name: metadata[name] for name in ('base_cam', 'base_cam2')}
     frames = json.loads((folder / 'robot-frames.json').read_text(encoding='utf-8'))['frames']
     pairs = {}
     for name in metadata:

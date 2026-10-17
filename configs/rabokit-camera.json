@@ -27,5 +27,22 @@
     "camera_info_topic": "base/base_cam2/camera_info",
     "depth": false,
     "point_cloud": false
+  },
+  "side_camera": {
+    "purpose": "Supplemental RGB grasp visibility; not part of stereo localization",
+    "camera_name": "base_cam3",
+    "parent_robot": "base",
+    "parent_link": "r6ef2dc_link_57d50b5359",
+    "position_in_parent_m": [0.0288, 0.6813, -0.1441],
+    "native_camera_xyaxes": [-0.9486832981, -0.3162277660, 0, 0.1142287350, -0.3426862050, 0.9324794695],
+    "vertical_fov_deg": 35,
+    "width": 320,
+    "height": 240,
+    "rate_hz": 5,
+    "mode": "fixed",
+    "rgb_topic": "base/base_cam3/image_raw",
+    "camera_info_topic": "base/base_cam3/camera_info",
+    "depth": false,
+    "point_cloud": false
   }
 }
