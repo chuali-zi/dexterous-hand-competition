@@ -57,6 +57,17 @@ class GraspPlanTests(unittest.TestCase):
 
 
 class PickupVisionTests(unittest.TestCase):
+    def test_peek_rejects_a_visible_brick_still_at_the_source(self):
+        source = [0., 0., 0.]
+        tools = [[-.08, -.08, .20], [-.08, -.08, .25]]
+        table = {'valid': True, 'point': source}
+        proof = pickup_evidence(source, table, table, *tools, [.08, 0.], .04)
+        self.assertFalse(proof['physical_grasp_verified'])
+        self.assertEqual(proof['minimum_elevation_m'], 0.)
+        self.assertGreater(proof['following_error_m'], .04)
+        held = [{'valid': True, 'point': [0., -.08, z]} for z in (.16, .21)]
+        self.assertTrue(pickup_evidence(source, *held, *tools, [.08, 0.], .04)['physical_grasp_verified'])
+
     def test_only_elevated_following_target_verifies_pickup(self):
         source = [0, 0, 0]
         tools = [[-.08, 0, .2], [-.08, 0, .25]]

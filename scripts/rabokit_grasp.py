@@ -126,6 +126,8 @@ def main():
                         help='Close the other fingers while keeping the pinky at its measured open target')
     parser.add_argument('--side-camera', action='store_true',
                         help='Record synchronized side RGB at static stages for grasp visibility diagnosis')
+    parser.add_argument('--inspect-pickup', action='store_true',
+                        help='Seeded pickup only: diagnose at Y -8 cm and heights 20/25 cm, then return to source')
     parser.add_argument('--tool-clearance', type=float, default=.03,
                         help='Contact tool height above the observed colored surface, metres')
     parser.add_argument('--yaw-deg', type=float, default=-90,
@@ -139,6 +141,8 @@ def main():
         parser.error('--yaw-deg must be in [-180, 180]')
     if args.seed_record and (args.stage not in ('approach', 'touch', 'pickup') or args.yaw_deg != -90):
         parser.error('--seed-record currently requires approach/touch/pickup and yaw -90')
+    if args.inspect_pickup and (not args.seed_record or args.stage != 'pickup'):
+        parser.error('--inspect-pickup requires --seed-record and --stage pickup')
     if args.output.exists():
         parser.error('--output must be a new directory')
     args.output.mkdir(parents=True)
@@ -166,6 +170,14 @@ def main():
             events, seeded_checks = seeded_approach_plan(start, point, surface['half_pixel_perturbation_radius_m'],
                 args.tool_clearance, json.loads(args.seed_record.read_text(encoding='utf-8')), args.stage,
                 lambda target, seed: k.inverse_kinematics('left', target, seed_real=seed), forward)
+            if args.inspect_pickup:
+                from rabokit_joint_path import pickup_inspection_plan
+                events, inspection_checks = pickup_inspection_plan(events, point,
+                    lambda target, seed: k.inverse_kinematics('left', target, seed_real=seed), forward)
+                seeded_checks.extend(inspection_checks)
+            if any(not low <= value <= high for event in events if 'joints' in event
+                   for value, (low, high) in zip(event['joints'], k.REAL_JOINT_LIMITS_LEFT)):
+                raise ValueError('Seeded pickup route exceeds SDK joint limits')
         if any(math.dist(item['colored_surface_point_sdk_m'][:2], destination[:2]) < .07
                for item in initial['matches'] if item['color'] != 'green'):
             raise RuntimeError('The RGB destination overlaps another observed brick')
@@ -174,12 +186,14 @@ def main():
             for event in events:
                 if event.get('hand') == 'close':
                     event['hand'] = 'close_without_pinky'
+        evidence_labels = ('inspection_low', 'inspection_followed') if args.inspect_pickup else ('lifted', 'followed')
         report = {'stage': args.stage, 'start': start, 'source_surface': surface,
                   'destination_surface': destination, 'events': events, 'reachability_checks': checks,
                   'tool_clearance_m': args.tool_clearance, 'completed': [], 'physical_grasp_verified': False,
                   'entry_yaw_deg': args.yaw_deg,
                   'seeded_path_checks': seeded_checks,
                   'side_camera_capture': args.side_camera,
+                  'inspection_requested': args.inspect_pickup, 'pickup_observation_stages': list(evidence_labels),
                   'official_score': None, 'path_note': 'SDK joint interpolation; sampled IK is not collision checking'}
 
         def save():
@@ -236,18 +250,18 @@ def main():
                         pending = recover(f'{event["name"]}: camera sampling failed: {error}')
                         save()
                         continue
-                if event['name'] == 'followed':
+                if event['name'] == evidence_labels[1]:
                     try:
-                        first = target_observation(args.output / 'lifted')
-                        second = target_observation(args.output / 'followed')
+                        first = target_observation(args.output / evidence_labels[0])
+                        second = target_observation(args.output / evidence_labels[1])
                         tools = [json.loads((args.output / label / 'sdk.json').read_text(encoding='utf-8'))
-                                 ['after']['pose'][0] for label in ('lifted', 'followed')]
+                                 ['after']['pose'][0] for label in evidence_labels]
                         direction = (-math.sin(math.radians(args.yaw_deg)), math.cos(math.radians(args.yaw_deg)))
                         proof = pickup_evidence(point, first, second, *tools,
                                                  [axis * .08 for axis in direction], args.tool_clearance)
                         neighbors = [neighboring_layout(initial, saved_scene(args.output / label,
                                       colors={'red', 'yellow', 'blue'}), exclude_green=True)
-                                     for label in ('lifted', 'followed')]
+                                     for label in evidence_labels]
                         report['pickup_evidence'] = proof
                         report['neighbor_observations_during_pickup'] = neighbors
                         report['physical_grasp_verified'] = proof['physical_grasp_verified']

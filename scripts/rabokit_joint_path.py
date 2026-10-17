@@ -185,6 +185,37 @@ def seeded_approach_plan(start, point, uncertainty, clearance, reference, stage,
     return [{'name': 'opened', 'hand': 'open', 'capture': True}, *outgoing, *pickup, *returning], checks
 
 
+def pickup_inspection_plan(events, point, inverse, forward):
+    """Insert an explicit high diagnostic peek, then retrace before source release."""
+    import numpy as np
+
+    names = [event['name'] for event in events]
+    if 'followed' not in names or 'source_release_position' not in names or 'transferred' in names:
+        raise ValueError('Inspection requires a source-return pickup route')
+    index = names.index('followed')
+    joints = events[index]['joints']
+    extra, checks = [], []
+    for name, height in (('inspection_high', .25), ('inspection_low', .20), ('inspection_followed', .25)):
+        current = np.asarray(forward(joints))
+        target = current.copy()
+        target[:3, 3] = [point[0] - .08, point[1] - .08, point[2] + height]
+        path = pose_path({'joints': joints, 'pose': [current[:3, 3].tolist(), [0.] * 3]},
+                         target, inverse, forward)
+        checks.append({'stage': name, **{key: value for key, value in path.items() if key != 'points'},
+                       'point_count': len(path['points'])})
+        if not path['continuous']:
+            raise ValueError(f'{name}: {path.get("reason")} at step {path.get("failed_step")}')
+        for i, sample in enumerate(path['points']):
+            last = i == len(path['points']) - 1
+            extra.append({'name': name if last else f'{name}_{i:03}', 'joints': sample['joints'],
+                          'capture': last and name != 'inspection_high'})
+        joints = path['points'][-1]['joints']
+    returning = [{**event, 'name': event['name'] + '_inspection_return',
+                  'reverse_of': event['name'], 'capture': False} for event in reversed(extra[:-1])]
+    returning.append({'name': 'inspection_source_return', 'reverse_of': 'followed', 'capture': False})
+    return events[:index + 1] + extra + returning + events[index + 1:], checks
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('record', type=Path, help='grasp.json with actual completed robot states')

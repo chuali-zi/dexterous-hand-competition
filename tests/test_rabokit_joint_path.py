@@ -6,10 +6,36 @@ import unittest
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from rabokit_joint_path import interpolate_rotation, pose_path, seeded_approach_plan, translation_path
+from rabokit_joint_path import interpolate_rotation, pickup_inspection_plan, pose_path, seeded_approach_plan, translation_path
 
 
 class JointPathTests(unittest.TestCase):
+    def test_pickup_peek_samples_two_heights_and_retraces_before_source_release(self):
+        def forward(joints):
+            transform = np.eye(4)
+            transform[:3, 3] = joints[:3]
+            return transform
+        inverse = lambda target, seed: [*target[:3, 3], 0., 0., 0., 0.]
+        point = [.22875, .08125, -.497625]
+        events = [{'name': 'followed', 'joints': [.14875, .08125, -.247625, 0., 0., 0., 0.], 'capture': True},
+                  {'name': 'source_release_position', 'reverse_of': 'contact', 'capture': False},
+                  {'name': 'released', 'hand': 'open', 'capture': True}]
+        planned, _ = pickup_inspection_plan(events, point, inverse, forward)
+        names = [e['name'] for e in planned]
+        for name, height in (('inspection_low', .20), ('inspection_followed', .25)):
+            event = next(e for e in planned if e['name'] == name)
+            np.testing.assert_allclose(event['joints'][:3], [point[0] - .08, point[1] - .08, point[2] + height])
+            self.assertTrue(event['capture'])
+        self.assertLess(names.index('inspection_followed'), names.index('inspection_source_return'))
+        self.assertLess(names.index('inspection_source_return'), names.index('source_release_position'))
+        self.assertLess(names.index('source_release_position'), names.index('released'))
+        seen = {'contact'}
+        for event in planned:
+            if 'reverse_of' in event:
+                self.assertIn(event['reverse_of'], seen)
+            seen.add(event['name'])
+        self.assertNotIn('transferred', names)
+
     def test_seeded_pickup_returns_to_source_before_opening_and_retraces_joint_samples(self):
         def forward(joints):
             transform = np.eye(4)
