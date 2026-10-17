@@ -81,6 +81,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--seconds', type=float, default=6)
+    parser.add_argument('--capture-only', action='store_true', help='Save synchronized RGB without requiring visible brick matches')
     args = parser.parse_args()
     namespace = os.getenv('ROS2_NAMESPACE', '').strip('/')
     if not namespace:
@@ -94,6 +95,11 @@ def main():
     pairs, counts = capture_cameras(topics, args.seconds)
     metadata = {name: save_pair(*pairs[name], counts[name], args.seconds, *topics[name], args.output / name)
                 for name in topics}
+    if args.capture_only:
+        (args.output / 'capture.json').write_text(json.dumps({'camera_messages': metadata,
+            'metric_reconstruction_run': False, 'official_score': None}, indent=2) + '\n', encoding='utf-8')
+        print('PASS: synchronized RGB capture (no object reconstruction)', flush=True)
+        return
     result = subprocess.run([sys.executable, str(Path(__file__).with_name('rabokit_robot_frames.py')),
                              '--seconds', '2', '--output', str(args.output / 'robot-frames.json')],
                             capture_output=True, text=True, timeout=15)

@@ -31,16 +31,19 @@ def move(arm, goal):
     raise TimeoutError('Wrist joint feedback did not reach its target')
 
 
-def sample(arm, root, label):
+def sample(arm, root, label, stereo=False):
     folder = root / label
     folder.mkdir()
     before = measured(arm)
     scripts = Path(__file__).resolve().parent
+    camera_command = ([str(scripts / 'rabokit_stereo.py'), '--capture-only', '--seconds', '1',
+                       '--output', str(folder / 'camera')] if stereo else
+                      [str(scripts / 'rabokit_camera.py'), '--seconds', '1',
+                       '--topic', 'base/base_cam/image_raw', '--output', str(folder / 'camera')])
     for command in (
         [str(scripts / 'rabokit_robot_frames.py'), '--seconds', '2',
          '--output', str(folder / 'robot-frames.json')],
-        [str(scripts / 'rabokit_camera.py'), '--seconds', '1',
-         '--topic', 'base/base_cam/image_raw', '--output', str(folder / 'camera')],
+        camera_command,
     ):
         result = subprocess.run([sys.executable, *command], capture_output=True, text=True, timeout=15)
         (folder / (Path(command[0]).stem + '.log')).write_text(

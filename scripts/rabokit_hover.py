@@ -12,6 +12,12 @@ import time
 from rabokit_calibration_probe import measured, sample
 
 
+def hover_waypoints(start, point, height):
+    return [('retreat', (-.15, start['pose'][0][1], -.35)),
+            ('outside', (-.20, .60, height)), ('front', (.35, .60, height)),
+            ('over_row', (.35, point[1], height)), ('hover', (point[0], point[1], height))]
+
+
 def move_pose(arm, point, orientation):
     if not arm.move_to(*point, *orientation, blocking=False):
         raise RuntimeError('SDK rejected the waypoint')
@@ -76,11 +82,7 @@ def main():
         start = measured(arm)
         point = green[0]['colored_surface_point_sdk_m']
         hover_z = point[2] + .30 + green[0]['half_pixel_perturbation_radius_m']
-        waypoints = [('retreat', (-.15, start['pose'][0][1], -.35)),
-                     ('outside', (-.20, .60, hover_z)),
-                     ('front', (.35, .60, hover_z)),
-                     ('over_row', (.35, point[1], hover_z)),
-                     ('hover', (point[0], point[1], hover_z))]
+        waypoints = hover_waypoints(start, point, hover_z)
         orientation = (0., 0., 0.)
         checks = []
         previous = start['pose'][0]
