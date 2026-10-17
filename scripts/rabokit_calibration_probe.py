@@ -87,6 +87,9 @@ def main():
             move(arm, start)
             records.append(sample(arm, args.output, 'restored'))
         if args.hand_motion:
+            if not robot.left_hand.set_force([1.] * 6):
+                raise RuntimeError('Simulation hand force-limit setup was not acknowledged')
+            print(json.dumps({'hand_force_limit_normalized': [1.] * 6}), flush=True)
             for label, pose in (('opened', 'open'), ('closed', 'close'), ('reopened', 'open')):
                 hand_command(pose)
                 time.sleep(1)
@@ -105,6 +108,7 @@ def main():
                      for label in ('opened', 'closed', 'reopened')]
             report['hand_geometry'] = compare_hand_frames(*views)
             report['hand_driver'] = 'native Float64 targets measured from SDK 3.0.0 commands'
+            report['hand_force_limit_normalized'] = [1.] * 6
         (args.output / 'summary.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
         if args.hand_motion:
             print(json.dumps(report['hand_geometry']), flush=True)

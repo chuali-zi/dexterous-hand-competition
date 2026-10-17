@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish measured SDK-equivalent left-hand targets in the Rabokit simulation."""
+"""Publish SDK-equivalent left-hand targets; requires simulation hand force setup."""
 import argparse
 import json
 import os
