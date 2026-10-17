@@ -11,6 +11,12 @@ import rabokit_hover as hover
 
 
 class HoverTests(unittest.TestCase):
+    def test_quiet_window_rejects_slow_drift_and_short_repeated_feedback(self):
+        drifting = [(i * .1, [i * .0002] * 7) for i in range(7)]
+        self.assertFalse(hover.quiet_joint_window(drifting))
+        self.assertFalse(hover.quiet_joint_window([(0., [0.] * 7), (.2, [0.] * 7)]))
+        self.assertTrue(hover.quiet_joint_window([(0., [0.] * 7), (.5, [.0001] * 7)]))
+
     def test_seeded_tracking_corrects_static_error_without_relaxing_arrival_tolerance(self):
         clock = [0.]
         commanded = [0.] * 7

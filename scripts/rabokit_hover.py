@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Plan or test a left-hand hover above the RGB stereo green brick, then return."""
 import argparse
+from collections import deque
 import json
 import math
 import os
@@ -72,6 +73,11 @@ def return_joints(arm, joints):
     raise TimeoutError('Joint feedback did not return to the start')
 
 
+def quiet_joint_window(samples):
+    return (len(samples) > 1 and samples[-1][0] - samples[0][0] >= .5 - 1e-9 and
+            all(max(values) - min(values) < .0005 for values in zip(*(s[1] for s in samples))))
+
+
 def move_joint_pose(arm, joints, forward, settle=.2):
     """Track a preplanned short joint segment using the existing tool-pose tolerances."""
     import numpy as np
@@ -85,7 +91,7 @@ def move_joint_pose(arm, joints, forward, settle=.2):
         raise RuntimeError('SDK rejected the planned joint segment')
     deadline, quiet_since = time.monotonic() + 15, None
     command, command_time, corrections = list(joints), time.monotonic(), []
-    previous = None
+    recent = deque()
     minimum, maximum = origin.copy(), origin.copy()
     while time.monotonic() < deadline:
         state = measured(arm)
@@ -98,7 +104,11 @@ def move_joint_pose(arm, joints, forward, settle=.2):
             arm.stop()
             raise RuntimeError('Measured tool left the planned short segment by more than 15 mm')
         angle = math.acos(max(-1., min(1., float((np.trace(target[:3, :3].T @ actual[:3, :3]) - 1) / 2))))
-        quiet = previous is not None and max(abs(a - b) for a, b in zip(state['joints'], previous)) < .0005
+        now = time.monotonic()
+        recent.append((now, state['joints']))
+        while len(recent) > 1 and recent[0][0] < now - .6:
+            recent.popleft()
+        quiet = quiet_joint_window(recent)
         if (np.linalg.norm(xyz - goal) < .003 and angle < .01 and
                 max(abs(a - b) for a, b in zip(state['joints'], joints)) < .01 and quiet):
             if quiet_since is None:
@@ -118,9 +128,15 @@ def move_joint_pose(arm, joints, forward, settle=.2):
                         raise RuntimeError('SDK rejected the measured tracking correction')
                     command, command_time = corrected, time.monotonic()
                     corrections.append({'command': command, 'measured_joint_error': error})
-        previous = state['joints']
+                    recent.clear()
         time.sleep(.1)
-    raise TimeoutError('Measured planned joint segment did not settle')
+    print(json.dumps({'joint_segment_timeout': {'target_joints': list(joints), 'measured': state,
+        'position_error_m': float(np.linalg.norm(xyz - goal)), 'orientation_error_rad': angle,
+        'tracking_corrections': corrections}}), flush=True)
+    raise TimeoutError(f'Measured planned joint segment did not settle: '
+                       f'position={np.linalg.norm(xyz - goal):.6f} m, orientation={angle:.6f} rad, '
+                       f'joint={max(abs(a - b) for a, b in zip(state["joints"], joints)):.6f} rad, '
+                       f'corrections={len(corrections)}')
 
 
 def return_recorded_route(arm, report, forward):
