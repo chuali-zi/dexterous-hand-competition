@@ -319,3 +319,33 @@ python competition/scripts/rabokit_inspection.py --output /tmp/brick-peek-01 \
 有效的两次绿色表面点均为 SDK `(0.22875,0.08125,-0.4976254544)` m，与本轮初始 RGB 一致；半像素扰动半径约 8.75 mm，只表示该几何扰动量，不是完整定位精度。侧移的实际工具反馈变化约为 `(0.057,-79.583,-0.326)` mm，表面仍在初始位置。没有修改原色块形状、面积或双目阈值，也未把 +4/-4 cm 的部分可见判为通过。Y -8 cm 提供了原照明下可重新观察原位置的候选动作；当前是空手结果，不证明持物后同一姿态也能看清物体，抓持仍待验证。
 
 本地 `runs/brick-peek-01/` 保存同轮基准侧视、-8 cm 三机原始 PNG、各阶段相机/本体数据、原双目定位、最终两次完整布局及 `peek-comparison.png`。结束确认程序退出，仿真已停止，环境光 0、强度 3、阴影开启且无未保存修改；截图为 `stopped-original-light.png`。
+
+## 抓取后的侧向两高度观察计划
+
+`ecdcbb6` 为抓取入口增加显式 `--inspect-pickup`，仅支持带低处分支参考的 source-return pickup：沿原路线闭指并抬高，在高处 Y -8 cm 位置采集砖面上方 20/25 cm 的双目与侧视，再回原位置上方、原位降回张手并撤回。目的地搬运阶段的抓持条件未绕过；离地、随手运动、工具附着及邻砖检查继续使用原判定。新增测试明确拒绝侧移后仍在原处的绿色表面，将两个高度的观测接回原有 `pickup_evidence`，不把重新可见当作抓住。
+
+本地语法、参数入口及 21 项相关测试通过，云端语法与同 21 项通过。首次只读 `/tmp/brick-inspected-pickup-plan-01` 退出 1：20 cm 观察位升回 25 cm 时，`inspection_followed` 第 3 步逆解改变分支，未启用运动。`398d53d` 改为沿已检查下降段的实测关节记录反向升回，保留原步长和工具误差条件；相关 21 项本地、云端测试再次通过，测试也覆盖向上求解不可用时仍应复用下降记录。
+
+修复后的只读命令如下：
+
+```bash
+python competition/scripts/rabokit_grasp.py --output /tmp/brick-inspected-pickup-plan-02 \
+  --stage pickup --tool-clearance .04 --seed-record /tmp/brick-outer-touch-01/grasp.json \
+  --keep-pinky-open --side-camera --inspect-pickup --plan-only
+```
+
+实际退出 **0**，共 506 个计划事件，`completed` 仍为空；新增高处侧移 9 段、下降观察 6 段、沿下降记录反向升回 6 段，SDK 关节限制检查通过。该结果只证明运动学与采样工具路线检查，未证明整臂避碰、抓持或实际往返。本地摘要与初始 RGB 保存于 `runs/brick-inspected-pickup-plan-02/`，首次失败日志也已保留。
+
+用户已明确批准运行这一次抓取与高处侧移观察，随后启动实际试验 `/tmp/brick-inspected-pickup-01`。原照明、手形、4 cm 低位工具高度及 RGB 判定阈值均保持原值；本次授权覆盖观察后回原位置放回，不包含目的地搬运。实际结果见后续记录。
+
+## 抓取后侧移观察实测：目标仍留在原处
+
+源码 `398d53d`，运行上述命令去掉 `--plan-only`，输出目录改为 `/tmp/brick-inspected-pickup-01`。实际 shell 记录 `INSPECTED_PICKUP_EXIT=1`：506 个计划事件及最终 `restored` 共 507 条完成记录，63 段使用一次有界反馈修正，`return_completed` 与 `motion_sequence_completed` 均为 true；最终最大关节残差约 `5.89e-5` rad。错误为 `RGB did not verify clean pickup and release; measured return completed`，不是运动返回失败。
+
+contact、closed、lifted、followed 的原双目都没有有效绿色点；后两阶段三机亮绿色像素均为 0。新增 `inspection_low` 与 `inspection_followed` 则分别获得俯视 1/俯视 2/侧视 **394/399/347** 个亮绿色像素，原双目两次均有效，表面点均为 SDK `(0.2214595314,0.0814698045,-0.5033985215)` m。工具在两次观察间移动约 **48.71 mm**，绿色点没有相应变化；最小离地估计为 **-5.77 mm**、随动误差 **48.71 mm**、工具附着误差 **227.77 mm**，原判定明确拒绝抓持。该离地数值是 RGB 几何估计，不表示穿入桌面的实际深度。侧视原始图中绿色砖仍位于桌面原砖列，支持这次抓取失败；不再只是被阴影遮挡而无法判断。
+
+两高度观察中的红/黄/蓝邻砖中心最大位移均为 0 像素。撤手后的 final 与 settled 都无歧义匹配 10 块，邻砖检查均通过：红最大约 0.0688 像素，黄/蓝为 0。两次最终绿色点完全相同，相对初始观测的平面变化约 **8.36 mm**、高度变化约 **5.10 mm**；满足原位误差条件，但不补足缺失的抓持证据，因此整体仍退出 1，未验证正式任务得分。
+
+本地 `runs/brick-inspected-pickup-01/` 保存完整 `grasp.json`、各阶段本体/相机元数据、初始及两次最终双目、可见性分析、原始 PNG 和错误日志尾部。结束确认没有 Python 控制程序，仿真已停止；平行光环境光 0、强度 3、方向 `(0,0,-1)`、阴影开启，界面无未保存修改，截图为 `stopped-original-light.png`。
+
+随后仅只读试算工具高度降至 `.035` m 的候选 `/tmp/brick-inspected-pickup-plan-035`，其余参数保持一致并带 `--plan-only`。实际 `PICKUP_035_PLAN_EXIT=1`：当前绿色观测位置略有变化，对齐段 `aligned` 第 9 步出现约 **0.22258 rad** 的逆解分支跳变，超过原条件。规划在创建运动报告及启用运动前拒绝；未执行新的接触，也未放宽步长。失败日志已保存，不能将该候选描述为可执行路线。下一步需要结合已保存接触本体几何修正抓取位置与连续关节分支，再准备具体接触试验；本轮在这里提交进度审核。
