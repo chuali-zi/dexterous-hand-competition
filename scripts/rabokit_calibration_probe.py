@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Record SDK pose, robot frames and RGB; optionally roll one wrist and restore."""
+"""Record SDK pose, robot frames and RGB; optionally move the wrist or empty hand."""
 import argparse
 import json
 import math
@@ -60,7 +60,9 @@ def sample(arm, root, label):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--motion', action='store_true', help='Left J7 +0.08 rad, sample, then restore')
+    actions = parser.add_mutually_exclusive_group()
+    actions.add_argument('--motion', action='store_true', help='Left J7 +0.08 rad, sample, then restore')
+    actions.add_argument('--hand-motion', action='store_true', help='Open, close and reopen the empty left hand')
     args = parser.parse_args()
     if not os.getenv('ROS2_NAMESPACE'):
         parser.error('Run in the Rabokit cloud simulation terminal')
@@ -84,12 +86,25 @@ def main():
             records.append(sample(arm, args.output, 'rolled'))
             move(arm, start)
             records.append(sample(arm, args.output, 'restored'))
-        report = {'motion_requested': args.motion, 'samples': records,
+        if args.hand_motion:
+            for label, action in (('opened', robot.left_hand.open), ('closed', robot.left_hand.close),
+                                  ('reopened', robot.left_hand.open)):
+                if not action():
+                    raise RuntimeError(f'Left hand {label} command rejected')
+                # SDK hand blocking is an estimate; preserve actual sim link frames for comparison.
+                time.sleep(1)
+                records.append(sample(arm, args.output, label))
+        report = {'motion_requested': args.motion or args.hand_motion,
+                  'motion_kind': 'wrist' if args.motion else 'empty_hand' if args.hand_motion else None,
+                  'samples': records,
                   'extrinsics_validated': False, 'official_score': None}
         (args.output / 'summary.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
-        print('PASS: static calibration samples' + (' and wrist motion/return' if args.motion else ''))
+        print('PASS: static calibration samples' + (' and wrist motion/return' if args.motion else
+                                                  ' and empty hand command sequence' if args.hand_motion else ''))
     finally:
         try:
+            if args.hand_motion:
+                robot.left_hand.open()
             if args.motion:
                 robot.stop()
         finally:
