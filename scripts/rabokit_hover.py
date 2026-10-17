@@ -66,13 +66,23 @@ def main():
         start = measured(arm)
         point = green[0]['colored_surface_point_sdk_m']
         hover_z = point[2] + .30 + green[0]['half_pixel_perturbation_radius_m']
-        behind = (-.15, start['pose'][0][1], hover_z)
-        hover = (point[0], point[1], hover_z)
+        waypoints = [('retreat', (-.15, start['pose'][0][1], -.35)),
+                     ('outside', (-.20, .60, hover_z)),
+                     ('front', (point[0], .60, hover_z)),
+                     ('hover', (point[0], point[1], hover_z))]
         orientation = start['pose'][1]
-        checks = [arm.pose_check(*target, *orientation) for target in (behind, hover)]
+        checks = []
+        previous = start['pose'][0]
+        for label, target in waypoints:
+            for fraction in (.5, 1):
+                intermediate = [a + fraction * (b - a) for a, b in zip(previous, target)]
+                checks.append({'stage': label, 'fraction': fraction, 'point': intermediate,
+                               'result': arm.pose_check(*intermediate, *orientation)})
+            previous = target
         report = {'motion_requested': args.motion, 'start': start, 'surface': green[0],
-                  'behind_waypoint': behind, 'hover_waypoint': hover,
+                  'waypoints': waypoints,
                   'orientation': orientation, 'reachability_checks': checks,
+                  'path_note': 'SDK joint interpolation; sampled IK is not collision checking',
                   'completed_stages': [], 'physical_grasp_verified': False, 'official_score': None}
 
         def save():
@@ -80,19 +90,22 @@ def main():
 
         save()
         print(json.dumps(report), flush=True)
-        if not all(item[0] for item in checks):
+        if not all(item['result'][0] for item in checks):
             raise RuntimeError('SDK reachability check rejected a waypoint')
         if args.motion:
             if not arm.enable():
                 raise RuntimeError('Left arm enable failed')
-            for label, target in (('behind', behind), ('hover', hover), ('behind_return', behind)):
-                move_pose(arm, target, orientation)
-                sample(arm, args.output, label)
-                report['completed_stages'].append(label)
+            path = waypoints + [(label + '_return', target) for label, target in reversed(waypoints[:-1])]
+            for label, target in path:
+                state = move_pose(arm, target, orientation)
+                if label == 'hover':
+                    sample(arm, args.output, label)
+                report['completed_stages'].append({'stage': label, 'measured': state})
                 save()
+                print(json.dumps({'completed': label, 'measured': state}), flush=True)
             return_joints(arm, start['joints'])
             sample(arm, args.output, 'restored')
-            report['completed_stages'].append('restored')
+            report['completed_stages'].append({'stage': 'restored', 'measured': measured(arm)})
             save()
         print('PASS: hover reachability' + (' and measured motion/return' if args.motion else ' (no motion)'))
     finally:
