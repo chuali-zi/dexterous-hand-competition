@@ -182,3 +182,9 @@ python competition/scripts/rabokit_calibration_probe.py --output /tmp/brick-hand
 同版本 `/tmp/brick-seeded-touch-02 --stage touch --tool-clearance .04 --seed-record /tmp/brick-outer-touch-01/grasp.json` 低位张手复测通过，退出 0：429 个事件，接近到观测砖面上方 0.04 m 的工具目标后返回；实际下降工具范围为 x `[0.148309,0.148931]`、y `[0.080776,0.082701]`、z `[-0.458451,-0.189835]` m。62 个短段有一次反馈修正；返回关节最大误差约 `5.84e-5` rad。两次撤手后双目仍匹配全部 10 块，四种颜色最大中心位移均为 0，未闭手。该结果说明这次低位张手路线及可见彩色布局检查通过，不证明已经夹住、承载或搬运物体。本地必要记录在 `runs/brick-seeded-touch-02/`。
 
 后续将这条连续路线接入 `--stage pickup --seed-record ...`：闭手后只在原位抬高，采集两个高度的实际 RGB，再沿实际记录关节降回原处、张手及撤回。不包含横向搬运，仍需离桌、随手移动及释放后布局的实际图像证据。
+
+`4e36a1c` 本地和云端 31 项相关检查通过。使用新 contact 记录反推的 `/tmp/brick-seeded-pickup-plan-01` 在 aligned 段因相邻目标约 0.1667 rad 超过 0.15 rad 而被拒绝，没有运动；改用两次成功接近所用的同一低处参考 `/tmp/brick-outer-touch-01/grasp.json`，`pickup-plan-02` 通过，退出 0。新 RGB 仍决定本轮目标，参考仅决定关节分支。
+
+随后 `/tmp/brick-seeded-pickup-01 --stage pickup --tool-clearance .04 --seed-record /tmp/brick-outer-touch-01/grasp.json` 实际失败，退出 1。477 个事件及返回完成，但两个抬高观测都没有合格绿色区域，无法确认抓持；没有横向搬运。程序降回原处、张手、撤回后，两次完整双目显示红砖中心最大偏移约 4.736 像素，绿色表面相对初始约偏移 11.2 mm，黄色/蓝色中心未变。闭合后的相机 2 图像已显示邻近两块红砖偏移，此变化在抬高、张手及撤回后持续存在。不能把缺失的绿色区域解释为已抓住，也不能只归因于遮挡。本地摘要及关键图像保存在 `runs/brick-seeded-pickup-01/`。
+
+增加 `--keep-pinky-open`，仅把闭合事件中的小指维持在已测张开关节目标，其余关节仍使用已测 SDK 闭合值。下一次在相同工具高度及连续路线下测试，先检查是否减少邻砖干涉；尚不宣称该手形能夹持绿色砖。

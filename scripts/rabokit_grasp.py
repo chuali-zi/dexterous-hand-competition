@@ -122,6 +122,8 @@ def main():
     parser.add_argument('--stage', choices=('plan', 'orient', 'approach', 'touch', 'pickup', 'grasp'), default='plan')
     parser.add_argument('--plan-only', action='store_true', help='Check the selected stage without enabling motion')
     parser.add_argument('--seed-record', type=Path, help='Use the achieved contact joint branch from a prior grasp.json')
+    parser.add_argument('--keep-pinky-open', action='store_true',
+                        help='Close the other fingers while keeping the pinky at its measured open target')
     parser.add_argument('--tool-clearance', type=float, default=.03,
                         help='Contact tool height above the observed colored surface, metres')
     parser.add_argument('--yaw-deg', type=float, default=-90,
@@ -166,6 +168,10 @@ def main():
                for item in initial['matches'] if item['color'] != 'green'):
             raise RuntimeError('The RGB destination overlaps another observed brick')
         checks = check_plan(arm, start, events)
+        if args.keep_pinky_open:
+            for event in events:
+                if event.get('hand') == 'close':
+                    event['hand'] = 'close_without_pinky'
         report = {'stage': args.stage, 'start': start, 'source_surface': surface,
                   'destination_surface': destination, 'events': events, 'reachability_checks': checks,
                   'tool_clearance_m': args.tool_clearance, 'completed': [], 'physical_grasp_verified': False,

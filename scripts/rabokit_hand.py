@@ -10,19 +10,21 @@ def targets(pose):
     # Native radians observed on all 11 SDK /cmd topics in this scene, SDK 3.0.0.
     if pose == 'open':
         mcp, dip, yaw, pitch, ip = -.082, -.0837, .34705882352941186, -.0922, -.0872
-    elif pose == 'close':
+    elif pose in ('close', 'close_without_pinky'):
         mcp, dip, yaw, pitch, ip = 1.7, 1.53, .511764705882353, .4772, .8472
     else:
-        raise ValueError('Expected open or close')
+        raise ValueError('Expected open, close or close_without_pinky')
     result = {f'lh_{finger}_{joint}': value for finger in ('index', 'middle', 'ring', 'pinky')
               for joint, value in (('mcp_pitch', mcp), ('dip', dip))}
     result.update(lh_thumb_cmc_yaw=yaw, lh_thumb_cmc_pitch=pitch, lh_thumb_ip=ip)
+    if pose == 'close_without_pinky':
+        result.update(lh_pinky_mcp_pitch=-.082, lh_pinky_dip=-.0837)
     return result
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--pose', choices=('open', 'close'), required=True)
+    parser.add_argument('--pose', choices=('open', 'close', 'close_without_pinky'), required=True)
     args = parser.parse_args()
     namespace = os.getenv('ROS2_NAMESPACE', '').strip('/')
     if not namespace:
