@@ -68,9 +68,10 @@ def main():
         hover_z = point[2] + .30 + green[0]['half_pixel_perturbation_radius_m']
         waypoints = [('retreat', (-.15, start['pose'][0][1], -.35)),
                      ('outside', (-.20, .60, hover_z)),
-                     ('front', (point[0], .60, hover_z)),
+                     ('front', (.35, .60, hover_z)),
+                     ('over_row', (.35, point[1], hover_z)),
                      ('hover', (point[0], point[1], hover_z))]
-        orientation = start['pose'][1]
+        orientation = (0., 0., 0.)
         checks = []
         previous = start['pose'][0]
         for label, target in waypoints:
