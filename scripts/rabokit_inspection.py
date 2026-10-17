@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Observe an empty hand at the high pickup pose and a world-X +20 degree tilt."""
+"""Observe an empty hand at a high pose, with a +20 degree tilt or lateral peeks."""
 import argparse
 import json
 import math
@@ -14,8 +14,8 @@ from rabokit_joint_path import pose_path, seeded_approach_plan, translation_path
 from rabokit_pickup_vision import neighboring_layout
 
 
-def inspection_plan(start, surface, reference, inverse, forward):
-    """Reuse the high entry, stop 25 cm above the RGB surface, then tilt in place."""
+def inspection_plan(start, surface, reference, inverse, forward, peek_y=False):
+    """Reuse the high entry, then inspect at fixed height without approaching contact."""
     import numpy as np
 
     point = surface['colored_surface_point_sdk_m']
@@ -41,10 +41,17 @@ def inspection_plan(start, surface, reference, inverse, forward):
 
     extend('high')
     high_index = len(route) - 1
-    target = np.asarray(forward(route[-1]['joints'])).copy()
-    c, s = math.cos(math.radians(20)), math.sin(math.radians(20))
-    target[:3, :3] = np.array([[1., 0., 0.], [0., c, -s], [0., s, c]]) @ target[:3, :3]
-    extend('tilted', target)
+    high = np.asarray(forward(route[-1]['joints'])).copy()
+    if peek_y:
+        for name, offset in (('peek_plus04', .04), ('peek_minus04', -.04), ('peek_minus08', -.08)):
+            target = high.copy()
+            target[1, 3] += offset
+            extend(name, target)
+    else:
+        target = high.copy()
+        c, s = math.cos(math.radians(20)), math.sin(math.radians(20))
+        target[:3, :3] = np.array([[1., 0., 0.], [0., c, -s], [0., s, c]]) @ target[:3, :3]
+        extend('tilted', target)
     return route, high_index, checks
 
 
@@ -52,6 +59,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--seed-record', type=Path, required=True)
+    parser.add_argument('--peek-y', action='store_true',
+                        help='Replace the tilt with fixed-height Y offsets +4, -4 and -8 cm')
     parser.add_argument('--motion', action='store_true', help='Execute empty-hand observation and recorded return')
     args = parser.parse_args()
     if not os.getenv('ROS2_NAMESPACE'):
@@ -78,11 +87,11 @@ def main():
         forward = lambda q: k.forward_kinematics('left', q)
         route, high_index, checks = inspection_plan(start, green[0],
             json.loads(args.seed_record.read_text(encoding='utf-8')),
-            lambda t, q: k.inverse_kinematics('left', t, seed_real=q), forward)
+            lambda t, q: k.inverse_kinematics('left', t, seed_real=q), forward, args.peek_y)
         if any(not low <= q <= high for event in route for q, (low, high)
                in zip(event['joints'], k.REAL_JOINT_LIMITS_LEFT)):
             raise ValueError('Inspection route exceeds SDK joint limits')
-        report.update(start=start, source_surface=green[0], route=route, path_checks=checks,
+        report.update(start=start, source_surface=green[0], route=route, path_checks=checks, peek_y=args.peek_y,
                       scope='SDK kinematics and sampled tool paths; no whole-body collision proof')
         save()
         print(json.dumps({'route_points': len(route), 'path_checks': checks}), flush=True)
@@ -102,10 +111,14 @@ def main():
                     hand_command('close_without_pinky')
                     time.sleep(1)
                     sample(arm, args.output, 'high_closed', stereo=True, side_camera=True)
-            sample(arm, args.output, 'tilted_closed', stereo=True, side_camera=True)
+                if args.peek_y and event['name'] in ('peek_plus04', 'peek_minus04', 'peek_minus08'):
+                    sample(arm, args.output, event['name'] + '_closed', stereo=True, side_camera=True)
+            if not args.peek_y:
+                sample(arm, args.output, 'tilted_closed', stereo=True, side_camera=True)
             hand_command('open')
             time.sleep(1)
-            sample(arm, args.output, 'tilted_open', stereo=True, side_camera=True)
+            sample(arm, args.output, 'peek_minus08_open' if args.peek_y else 'tilted_open',
+                   stereo=True, side_camera=True)
             targets = list(reversed(report['completed'][:-1])) + [{'name': 'start', 'measured': start}]
             for event in targets:
                 report['active_stage'] = event['name'] + '_return'
