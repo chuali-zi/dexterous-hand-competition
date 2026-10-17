@@ -16,13 +16,23 @@ def move_pose(arm, point, orientation):
     if not arm.move_to(*point, *orientation, blocking=False):
         raise RuntimeError('SDK rejected the waypoint')
     deadline = time.monotonic() + 40
+    previous = None
+    settled_since = None
     while time.monotonic() < deadline:
         state = measured(arm)
         error = math.dist(state['pose'][0], point)
         angle_error = max(abs((a - b + math.pi) % (2 * math.pi) - math.pi)
                           for a, b in zip(state['pose'][1], orientation))
-        if error < .01 and angle_error < .04:
-            return state
+        quiet = previous is not None and max(abs(a - b) for a, b in
+                                            zip(state['joints'], previous['joints'])) < .0005
+        if error < .003 and angle_error < .01 and quiet:
+            if settled_since is None:
+                settled_since = time.monotonic()
+            elif time.monotonic() - settled_since >= .5:
+                return state
+        else:
+            settled_since = None
+        previous = state
         time.sleep(.1)
     raise TimeoutError('Measured tool pose did not reach the waypoint')
 
@@ -99,11 +109,11 @@ def main():
             path = waypoints + [(label + '_return', target) for label, target in reversed(waypoints[:-1])]
             for label, target in path:
                 state = move_pose(arm, target, orientation)
-                if label == 'hover':
-                    sample(arm, args.output, label)
                 report['completed_stages'].append({'stage': label, 'measured': state})
                 save()
                 print(json.dumps({'completed': label, 'measured': state}), flush=True)
+                if label == 'hover':
+                    sample(arm, args.output, label)
             return_joints(arm, start['joints'])
             sample(arm, args.output, 'restored')
             report['completed_stages'].append({'stage': 'restored', 'measured': measured(arm)})
