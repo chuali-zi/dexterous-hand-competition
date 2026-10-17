@@ -38,8 +38,8 @@ def make_plan(start, point, uncertainty, stage, clearance=.03, yaw=-math.pi / 2)
 
     hand('opened', 'open')
     for name, position in transit:
-        move(name, position, ZERO_RPY if name in ('retreat', 'outside') else orientation, name == 'hover')
-        if name == 'outside':
+        move(name, position, ZERO_RPY if name in ('retreat', 'outside', 'front') else orientation, name == 'hover')
+        if name == 'front':
             move('oriented', position, orientation, True)
     outbound = [event['name'] for event in events if 'position' in event]
     grasp_xy = tuple(value - .08 * axis for value, axis in zip(point[:2], direction))
@@ -120,6 +120,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--stage', choices=('plan', 'orient', 'approach', 'touch', 'pickup', 'grasp'), default='plan')
+    parser.add_argument('--plan-only', action='store_true', help='Check the selected stage without enabling motion')
     parser.add_argument('--tool-clearance', type=float, default=.03,
                         help='Contact tool height above the observed colored surface, metres')
     parser.add_argument('--yaw-deg', type=float, default=-90,
@@ -143,7 +144,7 @@ def main():
     from rabo_robolib import LbotDualArm
 
     robot = LbotDualArm(mode='sim')
-    motion = args.stage != 'plan'
+    motion = args.stage != 'plan' and not args.plan_only
     try:
         time.sleep(1)
         arm = robot.left_arm
