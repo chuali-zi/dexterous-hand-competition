@@ -42,7 +42,7 @@ def png_bytes(width, height, pixels):
 
 def capture(image_topic, info_topic, seconds):
     import rclpy
-    from rclpy.qos import qos_profile_sensor_data
+    from rclpy.qos import QoSProfile, ReliabilityPolicy
     from sensor_msgs.msg import CameraInfo, Image
 
     rclpy.init()
@@ -51,6 +51,7 @@ def capture(image_topic, info_topic, seconds):
     counts = {'image': 0, 'info': 0}
     matched = None
     subscriptions = []
+    qos = QoSProfile(depth=5, reliability=ReliabilityPolicy.RELIABLE)
 
     def receive(kind, msg):
         nonlocal matched
@@ -67,7 +68,7 @@ def capture(image_topic, info_topic, seconds):
                                      ('info', info_topic, CameraInfo)):
             subscriptions.append(node.create_subscription(
                 message, topic, lambda msg, kind=kind: receive(kind, msg),
-                qos_profile_sensor_data))
+                qos))
         deadline = time.monotonic() + seconds
         while time.monotonic() < deadline:
             rclpy.spin_once(node, timeout_sec=0.1)
@@ -110,6 +111,7 @@ def main():
               'stamp': {'sec': image.header.stamp.sec, 'nanosec': image.header.stamp.nanosec},
               'width': image.width, 'height': image.height, 'encoding': image.encoding,
               'step': image.step, 'messages': counts, 'observation_wall_seconds': args.seconds,
+              'qos_reliability': 'reliable',
               'k': list(info.k), 'd': list(info.d), 'r': list(info.r), 'p': list(info.p),
               'distortion_model': info.distortion_model,
               'extrinsics_calibrated': False, 'official_score': None}
