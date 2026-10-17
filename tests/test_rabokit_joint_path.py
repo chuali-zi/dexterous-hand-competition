@@ -10,6 +10,38 @@ from rabokit_joint_path import interpolate_rotation, pickup_inspection_plan, pos
 
 
 class JointPathTests(unittest.TestCase):
+    def test_seeded_route_refines_translation_without_raising_joint_step_limit(self):
+        def forward(joints):
+            transform = np.eye(4)
+            transform[:3, 3] = [joints[0], joints[1], joints[2] / 20]
+            return transform
+
+        def inverse(target, seed):
+            return [target[0, 3], target[1, 3], target[2, 3] * 20, 0., 0., 0., 0.]
+
+        start = {'joints': [0., .222, -.6082 * 20, 0., 0., 0., 0.],
+                 'pose': [[0., .222, -.6082], [0.] * 3]}
+        point = [.22875, .08125, -.497625]
+        reference = {'completed': [{'name': 'contact', 'measured': {
+            'joints': [.14875, .08125, (point[2] + .04) * 20, 0., 0., 0., 0.]}}]}
+        events, checks = seeded_approach_plan(start, point, .009, .04, reference, 'pickup', inverse, forward)
+        self.assertEqual(checks[0]['spacing_m'], .005)
+        self.assertIn('changed branch', checks[0]['coarse_plan_rejection'])
+        previous = start['joints']
+        for event in events:
+            if 'joints' in event:
+                self.assertLessEqual(max(abs(a - b) for a, b in zip(previous, event['joints'])), .15)
+                previous = event['joints']
+
+        def unavoidable_jump(target, seed):
+            joints = inverse(target, seed)
+            if target[2, 3] > point[2] + .08:
+                joints[-1] = .5
+            return joints
+
+        with self.assertRaisesRegex(ValueError, '5 mm route rejected:.*changed branch'):
+            seeded_approach_plan(start, point, .009, .04, reference, 'pickup', unavoidable_jump, forward)
+
     def test_pickup_peek_samples_two_heights_and_retraces_before_source_release(self):
         def forward(joints):
             transform = np.eye(4)

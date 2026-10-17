@@ -89,6 +89,22 @@ def translation_path(start, goal, inverse, forward, spacing=.01, joint_step_limi
 
 
 def seeded_approach_plan(start, point, uncertainty, clearance, reference, stage, inverse, forward):
+    """Keep accepted routes; retry a rejected route once with 5 mm translations."""
+    arguments = (start, point, uncertainty, clearance, reference, stage, inverse, forward)
+    try:
+        return _seeded_approach_plan(*arguments, spacing=.01)
+    except ValueError as coarse_error:
+        try:
+            events, checks = _seeded_approach_plan(*arguments, spacing=.005)
+        except ValueError as fine_error:
+            raise ValueError(f'10 mm route rejected: {coarse_error}; '
+                             f'5 mm route rejected: {fine_error}') from fine_error
+        checks.insert(0, {'stage': 'translation_refinement', 'spacing_m': .005,
+                          'coarse_plan_rejection': str(coarse_error)})
+        return events, checks
+
+
+def _seeded_approach_plan(start, point, uncertainty, clearance, reference, stage, inverse, forward, spacing):
     """Reverse-plan from an achieved low branch, then connect behind the table."""
     import numpy as np
 
@@ -130,7 +146,7 @@ def seeded_approach_plan(start, point, uncertainty, clearance, reference, stage,
         if vertical:
             target[:3, :3] = np.eye(3)
         path = pose_path({'joints': joints, 'pose': [current['position'], current['orientation']]},
-                         target, inverse, forward)
+                         target, inverse, forward, spacing=spacing)
         checks.append({'stage': name, **{key: value for key, value in path.items() if key != 'points'},
                        'point_count': len(path['points'])})
         if not path['continuous']:
@@ -168,7 +184,7 @@ def seeded_approach_plan(start, point, uncertainty, clearance, reference, stage,
             target = np.asarray(forward(joints)).copy()
             target[:3, 3] = [point[0] - .08, point[1], point[2] + height_offset]
             path = pose_path({'joints': joints, 'pose': [current['position'], current['orientation']]},
-                             target, inverse, forward)
+                             target, inverse, forward, spacing=spacing)
             checks.append({'stage': name, **{key: value for key, value in path.items() if key != 'points'},
                            'point_count': len(path['points'])})
             if not path['continuous']:
