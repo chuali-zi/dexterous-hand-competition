@@ -11,6 +11,34 @@ import rabokit_hover as hover
 
 
 class HoverTests(unittest.TestCase):
+    def test_seeded_tracking_corrects_static_error_without_relaxing_arrival_tolerance(self):
+        clock = [0.]
+        commanded = [0.] * 7
+        sent = []
+
+        def forward(joints):
+            pose = np.eye(4)
+            pose[:3, 3] = joints[:3]
+            return pose
+
+        def state(_):
+            joints = list(commanded)
+            joints[0] -= .004 if sent else 0.
+            return {'joints': joints, 'pose': [joints[:3], [0.] * 3]}
+
+        def move(joints, **_):
+            commanded[:] = joints
+            sent.append(list(joints))
+            return True
+
+        with patch.object(hover, 'measured', state), \
+                patch.object(hover.time, 'monotonic', lambda: clock[0]), \
+                patch.object(hover.time, 'sleep', lambda dt: clock.__setitem__(0, clock[0] + dt)):
+            result = hover.move_joint_pose(SimpleNamespace(move_joints=move), [.01, 0., 0., 0., 0., 0., 0.], forward)
+        self.assertEqual(len(sent), 2)
+        self.assertLess(abs(result['pose'][0][0] - .01), .003)
+        self.assertEqual(len(result['tracking_corrections']), 1)
+
     def test_seeded_joint_tracking_stops_on_measured_sideways_excursion(self):
         def forward(joints):
             pose = np.eye(4)

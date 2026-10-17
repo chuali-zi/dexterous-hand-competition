@@ -84,6 +84,7 @@ def move_joint_pose(arm, joints, forward, settle=.2):
     if not arm.move_joints(joints, speed=10, blocking=False):
         raise RuntimeError('SDK rejected the planned joint segment')
     deadline, quiet_since = time.monotonic() + 15, None
+    command, command_time, corrections = list(joints), time.monotonic(), []
     previous = None
     minimum, maximum = origin.copy(), origin.copy()
     while time.monotonic() < deadline:
@@ -103,12 +104,39 @@ def move_joint_pose(arm, joints, forward, settle=.2):
             if quiet_since is None:
                 quiet_since = time.monotonic()
             elif time.monotonic() - quiet_since >= settle:
-                return {**state, 'observed_tool_position_bounds': {'minimum': minimum.tolist(), 'maximum': maximum.tolist()}}
+                return {**state, 'tracking_corrections': corrections,
+                        'observed_tool_position_bounds': {'minimum': minimum.tolist(), 'maximum': maximum.tolist()}}
         else:
             quiet_since = None
+            error = [a - b for a, b in zip(joints, state['joints'])]
+            if (quiet and time.monotonic() - command_time > 1 and len(corrections) < 2 and
+                    .0005 < max(abs(value) for value in error) < .01):
+                corrected = [a + b for a, b in zip(command, error)]
+                if (max(abs(a - b) for a, b in zip(corrected, joints)) <= .012 and
+                        np.linalg.norm(np.asarray(forward(corrected))[:3, 3] - goal) < .01):
+                    if not arm.move_joints(corrected, speed=10, blocking=False):
+                        raise RuntimeError('SDK rejected the measured tracking correction')
+                    command, command_time = corrected, time.monotonic()
+                    corrections.append({'command': command, 'measured_joint_error': error})
         previous = state['joints']
         time.sleep(.1)
     raise TimeoutError('Measured planned joint segment did not settle')
+
+
+def return_recorded_route(arm, report, forward):
+    """Retrace actually completed outbound joint samples after an interrupted approach."""
+    if (report['stage'] not in ('approach', 'touch') or
+            any(event['name'].endswith('_return') for event in report['completed'])):
+        raise ValueError('This recovery expects an interrupted outbound route')
+    returned = []
+    for event in reversed(report['completed']):
+        if event['name'] == 'opened':
+            continue
+        state = move_joint_pose(arm, event['measured']['joints'], forward)
+        returned.append({'name': event['name'], 'measured': state})
+        print(json.dumps({'returned': event['name'], 'measured': state}), flush=True)
+    state = move_joint_pose(arm, report['start']['joints'], forward, settle=.5)
+    return {'returned': returned, 'final': state, 'return_completed': True}
 
 
 def main():
