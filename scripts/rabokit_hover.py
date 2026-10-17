@@ -24,8 +24,12 @@ def move_pose(arm, point, orientation):
     deadline = time.monotonic() + 40
     previous = None
     settled_since = None
+    minimum = [math.inf] * 3
+    maximum = [-math.inf] * 3
     while time.monotonic() < deadline:
         state = measured(arm)
+        minimum = [min(a, b) for a, b in zip(minimum, state['pose'][0])]
+        maximum = [max(a, b) for a, b in zip(maximum, state['pose'][0])]
         error = math.dist(state['pose'][0], point)
         angle_error = max(abs((a - b + math.pi) % (2 * math.pi) - math.pi)
                           for a, b in zip(state['pose'][1], orientation))
@@ -35,7 +39,7 @@ def move_pose(arm, point, orientation):
             if settled_since is None:
                 settled_since = time.monotonic()
             elif time.monotonic() - settled_since >= .5:
-                return state
+                return {**state, 'observed_tool_position_bounds': {'minimum': minimum, 'maximum': maximum}}
         else:
             settled_since = None
         previous = state
