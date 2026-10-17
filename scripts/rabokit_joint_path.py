@@ -101,6 +101,8 @@ def seeded_approach_plan(start, point, uncertainty, clearance, reference, stage,
     low = inverse(target, reference_joints)
     if low is None or max(abs(a - b) for a, b in zip(low, reference_joints)) > .15:
         raise ValueError('Fresh RGB low target does not preserve the recorded joint branch')
+    if float(np.linalg.norm(np.asarray(forward(low))[:3, 3] - target[:3, 3])) > .003:
+        raise ValueError('Seeded low joint target does not reach the RGB tool target')
 
     def node(name, joints, capture=False):
         transform = np.asarray(forward(joints))
@@ -119,8 +121,7 @@ def seeded_approach_plan(start, point, uncertainty, clearance, reference, stage,
                     ('over_row', [.35, point[1], height], False),
                     ('front', [.35, .60, height], False),
                     ('vertical_front', [.35, .60, height], True),
-                    ('outside', [-.20, .60, height], True),
-                    ('retreat', [-.15, start['pose'][0][1], -.35], True)]
+                    ('outside', [-.20, .60, height], True)]
     joints = low
     for name, xyz, vertical in destinations:
         current = node('current', joints)
@@ -133,7 +134,8 @@ def seeded_approach_plan(start, point, uncertainty, clearance, reference, stage,
         checks.append({'stage': name, **{key: value for key, value in path.items() if key != 'points'},
                        'point_count': len(path['points'])})
         if not path['continuous']:
-            raise ValueError(f'{name}: {path.get("reason")} at step {path.get("failed_step")}')
+            raise ValueError(f'{name}: {path.get("reason")} at step {path.get("failed_step")}; '
+                             f'joint step {path.get("maximum_joint_step_rad")} rad')
         for index, sample in enumerate(path['points']):
             last = index == len(path['points']) - 1
             backward.append(node(name if last else f'{name}_{index:03}', sample['joints'], last))
