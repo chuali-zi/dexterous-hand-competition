@@ -4,11 +4,25 @@ import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from rabokit_grasp import make_plan, pickup_offset, relocation
+from rabokit_grasp import fingers_first_plan, make_plan, pickup_offset, relocation
 from rabokit_pickup_vision import neighboring_layout, pickup_evidence
 
 
 class GraspPlanTests(unittest.TestCase):
+    def test_fingers_first_adds_only_one_stationary_capture_before_thumb_closure(self):
+        events, _ = make_plan(self.start, self.source, .009, 'pickup')
+        original = [dict(event) for event in events]
+        staged = fingers_first_plan(events)
+        support_index = next(i for i, e in enumerate(staged) if e['name'] == 'fingers_closed')
+        self.assertEqual(staged[support_index]['hand'], 'support_without_pinky')
+        self.assertTrue(staged[support_index]['capture'])
+        self.assertEqual(staged[support_index - 1]['name'], 'contact')
+        self.assertEqual(staged[support_index + 1]['name'], 'closed')
+        self.assertEqual([e for e in staged if e['name'] != 'fingers_closed'], original)
+        self.assertEqual(events, original)
+        with self.assertRaises(ValueError):
+            fingers_first_plan([e for e in events if e['name'] != 'closed'])
+
     def setUp(self):
         self.start = {'pose': [[0, .222, -.6082], [0, 0, 0]]}
         self.source = (.2275, .0825, -.5065)

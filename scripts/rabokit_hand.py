@@ -65,17 +65,19 @@ def targets(pose, thumb_yaw=None):
     # Native radians observed on all 11 SDK /cmd topics in this scene, SDK 3.0.0.
     if pose == 'open':
         mcp, dip, yaw, pitch, ip = -.082, -.0837, .34705882352941186, -.0922, -.0872
-    elif pose in ('close', 'close_without_pinky'):
+    elif pose in ('close', 'close_without_pinky', 'support_without_pinky'):
         mcp, dip, yaw, pitch, ip = 1.7, 1.53, .511764705882353, .4772, .8472
     else:
-        raise ValueError('Expected open, close or close_without_pinky')
+        raise ValueError('Expected open, close, close_without_pinky or support_without_pinky')
     result = {f'lh_{finger}_{joint}': value for finger in ('index', 'middle', 'ring', 'pinky')
               for joint, value in (('mcp_pitch', mcp), ('dip', dip))}
     result.update(lh_thumb_cmc_yaw=yaw, lh_thumb_cmc_pitch=pitch, lh_thumb_ip=ip)
-    if pose == 'close_without_pinky':
+    if pose in ('close_without_pinky', 'support_without_pinky'):
         result.update(lh_pinky_mcp_pitch=-.082, lh_pinky_dip=-.0837)
+    if pose == 'support_without_pinky':
+        result.update({name: value for name, value in targets('open').items() if name.startswith('lh_thumb_')})
     if thumb_yaw is not None:
-        if pose == 'open' or not math.isfinite(thumb_yaw) or not 0 <= thumb_yaw <= 1.3:
+        if pose not in ('close', 'close_without_pinky') or not math.isfinite(thumb_yaw) or not 0 <= thumb_yaw <= 1.3:
             raise ValueError('Thumb yaw override requires closure and a finite angle in [0, 1.3] rad')
         result['lh_thumb_cmc_yaw'] = thumb_yaw
     return result
@@ -83,7 +85,7 @@ def targets(pose, thumb_yaw=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--pose', choices=('open', 'close', 'close_without_pinky'), required=True)
+    parser.add_argument('--pose', choices=('open', 'close', 'close_without_pinky', 'support_without_pinky'), required=True)
     parser.add_argument('--thumb-yaw', type=float, help='Closure-only thumb CMC yaw target in native radians')
     parser.add_argument('--wait-open', action='store_true',
                         help='Require fresh robot TF to verify all open joints before returning')

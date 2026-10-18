@@ -13,6 +13,15 @@ from rabokit_calibration_probe import hand_command, initialize_empty_hand
 
 
 class HandTargetsTests(unittest.TestCase):
+    def test_support_closes_three_fingers_without_moving_thumb_or_pinky(self):
+        opened, closed = targets('open'), targets('close')
+        support = targets('support_without_pinky')
+        self.assertEqual(set(support), set(opened))
+        for name, value in support.items():
+            self.assertEqual(value, (opened if name.startswith(('lh_thumb_', 'lh_pinky_')) else closed)[name])
+        with self.assertRaises(ValueError):
+            targets('support_without_pinky', thumb_yaw=.62)
+
     def test_empty_initialization_checks_closure_and_always_attempts_verified_reopening(self):
         arm = SimpleNamespace(get_joint_angles=lambda: [0.] * 7,
                               get_pose=lambda: [[0., .222, -.6082], [0.] * 3])
