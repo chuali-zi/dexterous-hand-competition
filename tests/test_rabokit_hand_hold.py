@@ -42,6 +42,13 @@ class HandHoldTests(unittest.TestCase):
             robot.left_arm.enable.assert_not_called()
             robot.left_hand.set_force.assert_not_called()
 
+        for options in ({'thumb_yaw': float('nan')}, {'thumb_yaw': 1.4},
+                        {'thumb_yaw': .51, 'sdk_close': True}):
+            robot = self.robot()
+            with self.assertRaises(ValueError):
+                run_motion(robot, Path('unused'), **options)
+            robot.left_arm.enable.assert_not_called()
+
     def test_failed_preshape_still_finishes_recording_and_verifies_reopening(self):
         runs = Path(__file__).resolve().parents[1] / 'runs'
         runs.mkdir(exist_ok=True)
@@ -49,13 +56,14 @@ class HandHoldTests(unittest.TestCase):
             output = Path(temporary)
             recorder = SimpleNamespace(stdout=io.StringIO('HAND_TRACE_READY\n'), returncode=0,
                 communicate=Mock(return_value=('PASS: recorded\n', '')), poll=lambda: 0)
-            for failed, prepared, recovery_failed, limit, sdk in ((False, False, False, 1., False),
-                    (True, False, False, 1., False), (False, True, False, 1., False),
-                    (False, False, True, 1., False), (False, True, False, .05, False),
-                    (False, False, False, .05, True), (True, False, False, .05, True)):
+            for failed, prepared, recovery_failed, limit, sdk, yaw in ((False, False, False, 1., False, None),
+                    (True, False, False, 1., False, None), (False, True, False, 1., False, None),
+                    (False, False, True, 1., False, None), (False, True, False, .05, False, None),
+                    (False, False, False, .05, True, None), (True, False, False, .05, True, None),
+                    (False, True, False, 1., False, .511764705882353)):
                 pose = 'close' if sdk else 'pinch_thumb_ready_without_pinky' if prepared else 'pinch_preshape_without_pinky'
                 frames = {}
-                for name, angle in targets(pose).items():
+                for name, angle in targets(pose, yaw).items():
                     child, parent, origin, axis = HAND_JOINTS[name]
                     frames['r136d7b_link_'+child] = {'parent': 'r136d7b_link_'+parent,
                         'xyzw': target_quaternion(origin, axis, angle), 'stamp': [3, 0]}
@@ -80,14 +88,15 @@ class HandHoldTests(unittest.TestCase):
                         patch('rabokit_hand_hold.hand_command', side_effect=command) as hand:
                     if failed or recovery_failed:
                         with self.assertRaises(RuntimeError):
-                            run_motion(robot, output, prepared_thumb=prepared, force_limit=limit, sdk_close=sdk)
+                            run_motion(robot, output, prepared_thumb=prepared, force_limit=limit, sdk_close=sdk, thumb_yaw=yaw)
                     else:
-                        run_motion(robot, output, prepared_thumb=prepared, force_limit=limit, sdk_close=sdk)
+                        run_motion(robot, output, prepared_thumb=prepared, force_limit=limit, sdk_close=sdk, thumb_yaw=yaw)
                 if sdk:
                     robot.left_hand.close.assert_called_once_with(blocking=False)
                     self.assertTrue(all(call.args == ('open',) for call in hand.call_args_list))
                 else:
                     self.assertEqual(hand.call_args_list[0].args[0], pose)
+                    self.assertEqual(hand.call_args_list[0].kwargs['thumb_yaw'], yaw)
                     self.assertEqual(hand.call_args_list[0].kwargs.get('wait_arrival', False), not prepared)
                 self.assertEqual(initialize.call_count, 1 if limit != 1. else 2)
                 if limit == 1.:
@@ -97,6 +106,7 @@ class HandHoldTests(unittest.TestCase):
                     self.assertTrue(hand.call_args.kwargs['wait_open'])
                 self.assertEqual(robot.left_hand.set_force.call_args.args, ([limit]*6,))
                 saved = json.loads((output/'hold.json').read_text())
+                self.assertEqual(saved['native_targets_rad'], targets(pose, yaw))
                 self.assertEqual('reopen_error' in saved, recovery_failed)
                 if not recovery_failed:
                     self.assertTrue(saved['reopened']['hand_arrival_verified'])
