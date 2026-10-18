@@ -94,14 +94,10 @@ def targets(pose, thumb_yaw=None):
 
 
 def preparation_feedback(frames, pose, thumb_yaw=None):
-    values = targets(pose, thumb_yaw)
-    feedback = hand_feedback(frames, values)
-    if pose == 'thumb_ready_without_pinky':
-        # Pitch approaches the brick and may stop before its goal. Preserve its
-        # measured error, but check the axes that define the approach shape.
-        values.pop('lh_thumb_cmc_pitch')
-        feedback['required_feedback'] = hand_feedback(frames, values)
-        feedback['thumb_pitch_goal_required'] = False
+    feedback = hand_feedback(frames, targets(pose, thumb_yaw))
+    # This low closure step can meet the brick. Joint goals are not a contact
+    # sensor; retain all errors without requiring an empty-hand arrival pose.
+    feedback['goal_arrival_required'] = pose != 'thumb_ready_without_pinky'
     return feedback
 
 

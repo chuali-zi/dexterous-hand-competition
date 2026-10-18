@@ -13,7 +13,7 @@ from rabokit_calibration_probe import hand_command, initialize_empty_hand
 
 
 class HandTargetsTests(unittest.TestCase):
-    def test_contact_preparation_records_blocked_pitch_but_requires_the_other_axes(self):
+    def test_contact_preparation_records_errors_without_claiming_goal_arrival(self):
         values = targets('thumb_ready_without_pinky', .62)
         frames = {}
         for name, (child, parent, origin, axis) in HAND_JOINTS.items():
@@ -22,13 +22,13 @@ class HandTargetsTests(unittest.TestCase):
                 'xyzw': target_quaternion(origin, axis, angle), 'stamp': [446, 720000001]}
         feedback = preparation_feedback(frames, 'thumb_ready_without_pinky', .62)
         self.assertGreater(feedback['maximum_error_rad'], .03)
-        self.assertLess(feedback['required_feedback']['maximum_error_rad'], .001)
-        self.assertFalse(feedback['thumb_pitch_goal_required'])
-        self.assertNotIn('required_feedback', preparation_feedback(frames, 'preshape_without_pinky'))
+        self.assertFalse(feedback['goal_arrival_required'])
+        self.assertTrue(preparation_feedback(frames, 'preshape_without_pinky')['goal_arrival_required'])
         child, _, origin, axis = HAND_JOINTS['lh_index_mcp_pitch']
         frames['r136d7b_link_' + child]['xyzw'] = target_quaternion(origin, axis, values['lh_index_mcp_pitch'] + .05)
-        self.assertGreater(preparation_feedback(frames, 'thumb_ready_without_pinky', .62)
-                           ['required_feedback']['maximum_error_rad'], .03)
+        recorded = preparation_feedback(frames, 'thumb_ready_without_pinky', .62)
+        self.assertGreater(recorded['joint_rotation_error_rad']['lh_index_mcp_pitch'], .03)
+        self.assertFalse(recorded['goal_arrival_required'])
         frames.pop('r136d7b_link_' + HAND_JOINTS['lh_thumb_cmc_pitch'][0])
         self.assertFalse(preparation_feedback(frames, 'thumb_ready_without_pinky', .62)['complete'])
 

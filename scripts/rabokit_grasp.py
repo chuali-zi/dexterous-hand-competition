@@ -339,8 +339,8 @@ def main():
                     feedback = preparation_feedback(frames, event['hand'], event.get('thumb_yaw_rad'))
                     report[event['preshape_feedback_key']] = feedback
                     save()
-                    required = feedback.get('required_feedback', feedback)
-                    if not feedback['complete'] or not required['complete'] or required['maximum_error_rad'] >= .03:
+                    if not feedback['complete'] or (feedback['goal_arrival_required'] and
+                                                   feedback['maximum_error_rad'] >= .03):
                         raise RuntimeError(f'{event["name"]}: hand preshape did not reach its targets; arm continuation stopped')
                 if event['name'] in ('preshaped', 'thumb_ready'):
                     observation_key = event['name'] + '_observation' if event['name'] == 'thumb_ready' else 'preshape_observation'
