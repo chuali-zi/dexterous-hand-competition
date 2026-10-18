@@ -260,14 +260,24 @@ def main():
                 event = pending.pop(0)
                 report['active_stage'] = event['name']
                 save()
+                if event.get('requires_tabletop_target') and not report.get('pickup_evidence', {}).get(
+                        'target_stationary_on_tabletop', False):
+                    report.setdefault('skipped', []).append({'name': event['name'],
+                        'reason': 'No positive RGB evidence of a stationary tabletop target'})
+                    save()
+                    continue
                 if event.get('requires_verified_pickup') and not report.get('pickup_scene_verified', False):
                     pending = recover('No verified pickup before lateral transfer')
                     save()
                     continue
                 if 'hand' in event:
-                    hand_command(event['hand'], thumb_yaw=event.get('thumb_yaw_rad'))
-                    time.sleep(1)
+                    feedback = hand_command(event['hand'], thumb_yaw=event.get('thumb_yaw_rad'),
+                                            wait_open=event.get('wait_open', False))
+                    if not event.get('wait_open'):
+                        time.sleep(1)
                     state = measured(arm)
+                    if feedback is not None:
+                        state['hand_feedback'] = feedback
                 elif 'reverse_of' in event:
                     state = (move_joint_pose(arm, joint_targets[event['reverse_of']], forward)
                              if args.seed_record else return_joints(arm, joint_targets[event['reverse_of']]))

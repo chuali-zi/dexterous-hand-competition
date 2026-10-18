@@ -36,7 +36,8 @@ def target_observation(folder):
 
 def pickup_evidence(source, first, second, tool_first, tool_second, offset, clearance):
     if not first['valid'] or not second['valid']:
-        return {'physical_grasp_verified': False, 'reason': 'Target not visible in both elevated observations',
+        return {'physical_grasp_verified': False, 'target_stationary_on_tabletop': False,
+                'reason': 'Target not visible in both elevated observations',
                 'observations': [first, second]}
     points = [first['point'], second['point']]
     tools = [tool_first, tool_second]
@@ -48,7 +49,11 @@ def pickup_evidence(source, first, second, tool_first, tool_second, offset, clea
                            for point, tool in zip(points, tools))
     verified = (elevation > .08 and math.dist(*tools) > .04 and
                 following_error < .02 and attachment_error < .03)
-    return {'physical_grasp_verified': verified, 'minimum_elevation_m': elevation,
+    tabletop = (all(math.isfinite(value) for vector in [source, *points, *tools] for value in vector) and
+                max(abs(point[2] - source[2]) for point in points) < .02 and
+                math.dist(*points) < .005 and math.dist(*tools) > .04 and attachment_error > .08)
+    return {'physical_grasp_verified': verified, 'target_stationary_on_tabletop': tabletop,
+            'minimum_elevation_m': elevation,
             'tool_motion_m': math.dist(*tools), 'following_error_m': following_error,
             'attachment_error_m': attachment_error, 'observations': [first, second]}
 

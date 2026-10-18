@@ -57,6 +57,28 @@ class GraspPlanTests(unittest.TestCase):
 
 
 class PickupVisionTests(unittest.TestCase):
+    def test_positive_tabletop_evidence_allows_high_open_even_after_target_was_pushed(self):
+        source = [0., 0., 0.]
+        tools = [[-.08, -.08, .20], [-.08, -.08, .25]]
+        table = {'valid': True, 'point': [-.062, .037, .0023]}
+        proof = pickup_evidence(source, table, table, *tools, [.08, 0.], .035)
+        self.assertFalse(proof['physical_grasp_verified'])
+        self.assertTrue(proof['target_stationary_on_tabletop'])
+
+    def test_missing_moving_or_elevated_target_cannot_trigger_high_open(self):
+        tools = [[-.08, -.08, .20], [-.08, -.08, .25]]
+        table = {'valid': True, 'point': [0., 0., 0.]}
+        cases = [(table, {'valid': False}),
+                 (table, {'valid': True, 'point': [.01, 0., 0.]}),
+                 ({'valid': True, 'point': [0., 0., .16]},
+                  {'valid': True, 'point': [0., 0., .16]}),
+                 (table, {'valid': True, 'point': [0., 0., .025]}),
+                 (table, {'valid': True, 'point': [float('nan'), 0., 0.]})]
+        for first, second in cases:
+            with self.subTest(first=first, second=second):
+                proof = pickup_evidence([0., 0., 0.], first, second, *tools, [.08, 0.], .035)
+                self.assertFalse(proof['target_stationary_on_tabletop'])
+
     def test_tool_shift_is_removed_from_expected_surface_offset(self):
         import math
         source = [0., 0., 0.]

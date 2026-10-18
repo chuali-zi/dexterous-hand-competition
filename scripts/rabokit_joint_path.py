@@ -324,6 +324,8 @@ def pickup_inspection_plan(events, point, inverse, forward, tool_offset_y=0., to
     returning = [{**event, 'name': event['name'] + '_inspection_return',
                   'reverse_of': event['name'], 'capture': False} for event in reversed(horizontal[:-1])]
     returning.append({'name': 'inspection_source_return', 'reverse_of': 'followed', 'capture': False})
+    returning.append({'name': 'empty_pickup_open', 'hand': 'open', 'capture': False,
+                      'requires_tabletop_target': True, 'wait_open': True})
     return events[:index + 1] + extra + returning + events[index + 1:], checks
 
 

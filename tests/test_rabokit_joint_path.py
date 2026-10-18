@@ -137,6 +137,12 @@ class JointPathTests(unittest.TestCase):
         self.assertEqual(next(e for e in planned if e['name'] == 'inspection_followed')['reverse_of'],
                          'inspection_high')
         self.assertLess(names.index('inspection_source_return'), names.index('source_release_position'))
+        self.assertLess(names.index('inspection_source_return'), names.index('empty_pickup_open'))
+        self.assertLess(names.index('empty_pickup_open'), names.index('source_release_position'))
+        opening = next(e for e in planned if e['name'] == 'empty_pickup_open')
+        self.assertEqual(opening['hand'], 'open')
+        self.assertTrue(opening['requires_tabletop_target'])
+        self.assertTrue(opening['wait_open'])
         self.assertLess(names.index('source_release_position'), names.index('released'))
         seen = {'contact'}
         for event in planned:
