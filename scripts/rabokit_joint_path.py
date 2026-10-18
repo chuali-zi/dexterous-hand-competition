@@ -123,8 +123,42 @@ def pose_path(start, goal, inverse, forward, spacing=.01, joint_step_limit=.15):
                        'maximum_joint_step_rad': jump, 'sampled_position_error_m': maximum_error,
                        'sampled_orientation_error_rad': maximum_angle})
         joints = solved
-    return {'continuous': True, 'points': points,
-            'scope': 'Seeded IK and sampled tool interpolation only; no robot-body collision clearance'}
+    result = {'continuous': True, 'points': points,
+              'scope': 'Seeded IK and sampled tool interpolation only; no robot-body collision clearance'}
+    if spacing < .01:
+        result['points'] = _coarsen_samples(start, points, forward, joint_step_limit)
+        result['control_point_reduction'] = {'original_count': len(points),
+                                             'retained_count': len(result['points'])}
+    return result
+
+
+def _coarsen_samples(start, points, forward, joint_step_limit):
+    """Merge neighboring fine samples only after the ordinary segment checks pass."""
+    import numpy as np
+
+    retained, previous, index = [], start, 0
+    previous_target = np.asarray(start['pose'][0])
+    while index < len(points):
+        selected, combined = index, None
+        if index + 1 < len(points):
+            joints = points[index + 1]['joints']
+            target = np.asarray(forward(joints))
+            current = np.asarray(forward(previous['joints']))
+            angle = math.acos(max(-1., min(1., float((np.trace(current[:3, :3].T @ target[:3, :3]) - 1) / 2))))
+            if (np.linalg.norm(np.asarray(points[index + 1]['target_xyz']) - previous_target) <= .01 + 1e-9
+                    and angle <= .05 and
+                    max(abs(a - b) for a, b in zip(joints, previous['joints'])) <= joint_step_limit):
+                checked = pose_path(previous, target, lambda t, s: joints, forward,
+                                    spacing=.01, joint_step_limit=joint_step_limit)
+                if checked['continuous']:
+                    selected, combined = index + 1, checked['points'][-1]
+        point = points[selected] if combined is None else combined
+        retained.append(point)
+        previous_target = np.asarray(points[selected]['target_xyz'])
+        previous = {'joints': point['joints'],
+                    'pose': [np.asarray(forward(point['joints']))[:3, 3].tolist(), [0.] * 3]}
+        index = selected + 1
+    return retained
 
 
 def translation_path(start, goal, inverse, forward, spacing=.01, joint_step_limit=.15):
@@ -134,18 +168,6 @@ def translation_path(start, goal, inverse, forward, spacing=.01, joint_step_limi
     target = np.asarray(forward(start['joints']), dtype=float).copy()
     target[:3, 3] = goal
     return pose_path(start, target, inverse, forward, spacing, joint_step_limit)
-
-
-def _pose_path_with_refinement(start, goal, inverse, forward, spacing):
-    path = pose_path(start, goal, inverse, forward, spacing=spacing)
-    if not path['continuous'] and spacing > .005:
-        refined = pose_path(start, goal, inverse, forward, spacing=.005)
-        if refined['continuous']:
-            refined['translation_refinement'] = {
-                'spacing_m': .005, 'coarse_failure_reason': path.get('reason'),
-                'coarse_failed_step': path.get('failed_step')}
-            return refined
-    return path
 
 
 def seeded_approach_plan(start, point, uncertainty, clearance, reference, stage, inverse, forward,
@@ -207,9 +229,8 @@ def _seeded_approach_plan(start, point, uncertainty, clearance, reference, stage
         target[:3, 3] = xyz
         if vertical:
             target[:3, :3] = np.eye(3)
-        path = _pose_path_with_refinement(
-            {'joints': joints, 'pose': [current['position'], current['orientation']]},
-            target, inverse, forward, spacing)
+        path = pose_path({'joints': joints, 'pose': [current['position'], current['orientation']]},
+                         target, inverse, forward, spacing=spacing)
         checks.append({'stage': name, **{key: value for key, value in path.items() if key != 'points'},
                        'point_count': len(path['points'])})
         if not path['continuous']:
@@ -246,9 +267,8 @@ def _seeded_approach_plan(start, point, uncertainty, clearance, reference, stage
             current = node('current', joints)
             target = np.asarray(forward(joints)).copy()
             target[:3, 3] = [point[0] - .08, point[1], point[2] + height_offset]
-            path = _pose_path_with_refinement(
-                {'joints': joints, 'pose': [current['position'], current['orientation']]},
-                target, inverse, forward, spacing)
+            path = pose_path({'joints': joints, 'pose': [current['position'], current['orientation']]},
+                             target, inverse, forward, spacing=spacing)
             checks.append({'stage': name, **{key: value for key, value in path.items() if key != 'points'},
                            'point_count': len(path['points'])})
             if not path['continuous']:

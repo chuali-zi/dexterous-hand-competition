@@ -10,6 +10,26 @@ from rabokit_joint_path import continuous_inverse, interpolate_rotation, pickup_
 
 
 class JointPathTests(unittest.TestCase):
+    def test_fine_samples_merge_only_when_the_original_interpolation_checks_pass(self):
+        def forward(joints):
+            pose = np.eye(4)
+            pose[:3, 3] = joints[:3]
+            return pose
+        start = {'joints': [0.] * 7, 'pose': [[0.] * 3, [0.] * 3]}
+        inverse = lambda target, seed: [*target[:3, 3], 0., 0., 0., 0.]
+        result = translation_path(start, [.04, 0., 0.], inverse, forward, spacing=.005)
+        self.assertTrue(result['continuous'])
+        self.assertLess(len(result['points']), result['control_point_reduction']['original_count'])
+
+        def curved_forward(joints):
+            pose = forward(joints)
+            pose[1, 3] += 200 * joints[0] ** 2
+            return pose
+        curved_inverse = lambda t, s: [t[0, 3], t[1, 3] - 200 * t[0, 3] ** 2, t[2, 3], 0., 0., 0., 0.]
+        curved = translation_path(start, [.02, 0., 0.], curved_inverse, curved_forward, spacing=.005)
+        self.assertTrue(curved['continuous'])
+        self.assertEqual(len(curved['points']), curved['control_point_reduction']['original_count'])
+
     def test_fk_continuation_preserves_accepted_sdk_solution_without_extra_work(self):
         solution = [.04, 0., 0., 0., 0., 0., 0.]
         def unexpected_forward(joints):
@@ -77,11 +97,8 @@ class JointPathTests(unittest.TestCase):
         reference = {'completed': [{'name': 'contact', 'measured': {
             'joints': [.14875, .08125, (point[2] + .04) * 20, 0., 0., 0., 0.]}}]}
         events, checks = seeded_approach_plan(start, point, .009, .04, reference, 'pickup', inverse, forward)
-        self.assertEqual(checks[0]['stage'], 'approached')
-        refinements = [check['translation_refinement'] for check in checks if 'translation_refinement' in check]
-        self.assertTrue(refinements)
-        self.assertTrue(all(check['spacing_m'] == .005 for check in refinements))
-        self.assertTrue(all('changed branch' in check['coarse_failure_reason'] for check in refinements))
+        self.assertEqual(checks[0]['spacing_m'], .005)
+        self.assertIn('changed branch', checks[0]['coarse_plan_rejection'])
         previous = start['joints']
         for event in events:
             if 'joints' in event:
