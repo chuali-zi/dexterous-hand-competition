@@ -43,7 +43,8 @@ class HandHoldTests(unittest.TestCase):
             robot.left_hand.set_force.assert_not_called()
 
         for options in ({'thumb_yaw': float('nan')}, {'thumb_yaw': 1.4},
-                        {'thumb_yaw': .51, 'sdk_close': True}):
+                        {'thumb_yaw': .51, 'sdk_close': True}, {'ramp_seconds': 1.},
+                        {'ramp_seconds': float('nan')}, {'ramp_seconds': .5, 'sdk_close': True}):
             robot = self.robot()
             with self.assertRaises(ValueError):
                 run_motion(robot, Path('unused'), **options)
@@ -90,13 +91,15 @@ class HandHoldTests(unittest.TestCase):
                         with self.assertRaises(RuntimeError):
                             run_motion(robot, output, prepared_thumb=prepared, force_limit=limit, sdk_close=sdk, thumb_yaw=yaw)
                     else:
-                        run_motion(robot, output, prepared_thumb=prepared, force_limit=limit, sdk_close=sdk, thumb_yaw=yaw)
+                        run_motion(robot, output, prepared_thumb=prepared, force_limit=limit, sdk_close=sdk,
+                                   thumb_yaw=yaw, ramp_seconds=.5 if yaw is not None else 0.)
                 if sdk:
                     robot.left_hand.close.assert_called_once_with(blocking=False)
                     self.assertTrue(all(call.args == ('open',) for call in hand.call_args_list))
                 else:
                     self.assertEqual(hand.call_args_list[0].args[0], pose)
                     self.assertEqual(hand.call_args_list[0].kwargs['thumb_yaw'], yaw)
+                    self.assertEqual(hand.call_args_list[0].kwargs['ramp_seconds'], .5 if yaw is not None else 0.)
                     self.assertEqual(hand.call_args_list[0].kwargs.get('wait_arrival', False), not prepared)
                 self.assertEqual(initialize.call_count, 1 if limit != 1. else 2)
                 if limit == 1.:

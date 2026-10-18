@@ -120,12 +120,16 @@ def main():
                                          'thumb_ready_without_pinky', 'pinch_preshape_without_pinky',
                                          'pinch_thumb_ready_without_pinky', 'pinch_without_pinky'), required=True)
     parser.add_argument('--thumb-yaw', type=float, help='Thumb CMC yaw closure endpoint in native radians')
+    parser.add_argument('--ramp-seconds', type=float, default=0.,
+                        help='Ramp from measured robot TF over [0,1) seconds within the original one-second burst')
     waiting = parser.add_mutually_exclusive_group()
     waiting.add_argument('--wait-open', action='store_true',
                         help='Require fresh robot TF to verify all open joints before returning')
     waiting.add_argument('--wait-arrival', action='store_true',
                          help='Wait for fresh TF at an empty-hand high preshape; not a contact pose')
     args = parser.parse_args()
+    if not math.isfinite(args.ramp_seconds) or not 0 <= args.ramp_seconds < 1:
+        parser.error('--ramp-seconds must be in [0,1)')
     if args.wait_open and args.pose != 'open':
         parser.error('--wait-open requires --pose open; a blocked grasp need not reach its closure targets')
     if args.wait_arrival and args.pose not in ('preshape_without_pinky', 'pinch_preshape_without_pinky'):
@@ -145,7 +149,7 @@ def main():
     node = rclpy.create_node('competition_left_hand_targets')
     try:
         frames = {}
-        if wait_arrival:
+        if wait_arrival or args.ramp_seconds:
             from rclpy.qos import qos_profile_sensor_data
             from tf2_msgs.msg import TFMessage
             allowed = {'r136d7b_link_' + item[0] for item in HAND_JOINTS.values()}
@@ -172,6 +176,24 @@ def main():
             if time.monotonic() >= deadline:
                 raise TimeoutError('Left-hand command subscribers were not ready')
             rclpy.spin_once(node, timeout_sec=.05)
+        ramp_start = None
+        if args.ramp_seconds:
+            deadline = time.monotonic() + 3
+            while True:
+                measured = hand_feedback(frames, values)
+                if measured['complete'] and measured['stamp_max_sec'] - measured['stamp_min_sec'] < .1:
+                    break
+                if time.monotonic() >= deadline:
+                    raise TimeoutError('No coherent hand TF for the ramp start; no targets published')
+                rclpy.spin_once(node, timeout_sec=.05)
+            ramp_start = {}
+            for name, (child, _, origin, axis) in HAND_JOINTS.items():
+                rest = target_quaternion(origin, axis, 0.)
+                relative = quaternion_product([-v for v in rest[:3]] + [rest[3]],
+                                               frames['r136d7b_link_' + child]['xyzw'])
+                ramp_start[name] = math.remainder(2 * math.atan2(relative[axis], relative[3]), 2 * math.pi)
+            if not wait_arrival:
+                node.destroy_subscription(subscription)
         command_stamp = max((f['stamp'][0] + f['stamp'][1] * 1e-9 for f in frames.values()), default=-1.)
         started = time.monotonic()
         deadline = started + (12 if wait_arrival else 1)
@@ -184,8 +206,10 @@ def main():
             # Preserve the original one-second command burst. Waiting for TF
             # must not keep resubmitting goals throughout the observation.
             if time.monotonic() - started < 1:
+                fraction = min(1., (time.monotonic() - started) / args.ramp_seconds) if ramp_start else 1.
                 for name, pub in publishers.items():
-                    pub.publish(Float64(data=values[name]))
+                    value = ramp_start[name] + fraction * (values[name] - ramp_start[name]) if ramp_start else values[name]
+                    pub.publish(Float64(data=value))
             rclpy.spin_once(node, timeout_sec=.05)
             if wait_arrival:
                 feedback = hand_feedback(frames, values)
@@ -193,7 +217,7 @@ def main():
                 if args.wait_arrival and feedback['complete'] and (not feedback_samples or
                         elapsed - feedback_samples[-1]['wall_seconds'] >= .5):
                     feedback_samples.append({'wall_seconds': elapsed, **feedback})
-                if (feedback['complete'] and feedback['maximum_error_rad'] < .03 and
+                if (elapsed >= args.ramp_seconds and feedback['complete'] and feedback['maximum_error_rad'] < .03 and
                         feedback['stamp_min_sec'] > command_stamp and
                         feedback['stamp_max_sec'] - feedback['stamp_min_sec'] < .1):
                     errors = feedback['joint_rotation_error_rad']
@@ -210,6 +234,7 @@ def main():
                     stable_stamp = None
                     stable_errors = None
         print(json.dumps({'pose': args.pose, 'native_targets_rad': values,
+                          'ramp_seconds': args.ramp_seconds, 'ramp_start_rad': ramp_start,
                           'command_published': True, 'hand_arrival_verified': arrived,
                           'wall_seconds': time.monotonic() - started,
                           'feedback_start_stamp_sec': command_stamp,
