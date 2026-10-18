@@ -86,9 +86,9 @@ class HandTargetsTests(unittest.TestCase):
             self.assertEqual(run.call_args.args[0][-2:], ['--ramp-seconds', '0.5'])
             self.assertEqual(run.call_args.kwargs['timeout'], 25)
 
-    def high_wait(self, overshoot=False, ramped_open=False):
+    def high_wait(self, overshoot=False, ramped_open=False, pose='pinch_preshape_without_pinky'):
         clock, callbacks, published = [0.], [], []
-        values = targets('open' if ramped_open else 'pinch_preshape_without_pinky')
+        values = targets('open' if ramped_open else pose)
         def spin(node, timeout_sec):
             clock[0] += timeout_sec
             transforms = []
@@ -112,7 +112,7 @@ class HandTargetsTests(unittest.TestCase):
                    'std_msgs.msg': SimpleNamespace(Float64=SimpleNamespace),
                    'tf2_msgs.msg': SimpleNamespace(TFMessage=object)}
         arguments = ['rabokit_hand.py', '--pose', 'open', '--wait-open', '--ramp-seconds', '.5'] if ramped_open else \
-                    ['rabokit_hand.py', '--pose', 'pinch_preshape_without_pinky', '--wait-arrival']
+                    ['rabokit_hand.py', '--pose', pose, '--wait-arrival']
         with patch.dict(sys.modules, modules), patch.dict('os.environ', {'ROS2_NAMESPACE': 'test'}), \
                 patch.object(sys, 'argv', arguments), \
                 patch('rabokit_hand.time.monotonic', side_effect=lambda: clock[0]), patch('builtins.print') as output:
@@ -132,6 +132,17 @@ class HandTargetsTests(unittest.TestCase):
         self.assertTrue(record['hand_arrival_verified'])
         self.assertGreater(record['feedback_samples'][0]['maximum_error_rad'], .16)
         self.assertLess(record['feedback']['maximum_error_rad'], .03)
+
+    def test_prepared_high_thumb_uses_ready_geometry_but_requires_empty_hand_settling(self):
+        pose = 'pinch_high_thumb_ready_without_pinky'
+        self.assertEqual(targets(pose, .511764705882353),
+                         targets('pinch_thumb_ready_without_pinky', .511764705882353))
+        self.assertTrue(preparation_feedback({}, pose)['goal_arrival_required'])
+        for overshoot in (False, True):
+            record, elapsed, published = self.high_wait(overshoot=overshoot, pose=pose)
+            self.assertEqual(record['hand_arrival_verified'], not overshoot)
+            self.assertGreaterEqual(elapsed, 12. if overshoot else 4.)
+            self.assertLess(max(published), 1.)
 
     def test_short_goal_crossing_followed_by_measured_scale_overshoot_does_not_verify_settling(self):
         for ramped_open in (False, True):

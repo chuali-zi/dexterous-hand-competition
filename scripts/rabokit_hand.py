@@ -63,7 +63,8 @@ def hand_feedback(frames, values):
 
 def targets(pose, thumb_yaw=None):
     # Native radians observed on all 11 SDK /cmd topics in this scene, SDK 3.0.0.
-    if pose in ('pinch_preshape_without_pinky', 'pinch_thumb_ready_without_pinky', 'pinch_without_pinky'):
+    if pose in ('pinch_preshape_without_pinky', 'pinch_high_thumb_ready_without_pinky',
+                'pinch_thumb_ready_without_pinky', 'pinch_without_pinky'):
         opened = targets('open')
         closed = targets('close_without_pinky', .62 if thumb_yaw is None else thumb_yaw)
         finger_fraction = .75 if pose == 'pinch_without_pinky' else .5
@@ -118,6 +119,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--pose', choices=('open', 'close', 'close_without_pinky', 'preshape_without_pinky',
                                          'thumb_ready_without_pinky', 'pinch_preshape_without_pinky',
+                                         'pinch_high_thumb_ready_without_pinky',
                                          'pinch_thumb_ready_without_pinky', 'pinch_without_pinky'), required=True)
     parser.add_argument('--thumb-yaw', type=float, help='Thumb CMC yaw closure endpoint in native radians')
     parser.add_argument('--ramp-seconds', type=float, default=0.,
@@ -132,7 +134,8 @@ def main():
         parser.error('--ramp-seconds must be in [0,3]')
     if args.wait_open and args.pose != 'open':
         parser.error('--wait-open requires --pose open; a blocked grasp need not reach its closure targets')
-    if args.wait_arrival and args.pose not in ('preshape_without_pinky', 'pinch_preshape_without_pinky'):
+    if args.wait_arrival and args.pose not in ('preshape_without_pinky', 'pinch_preshape_without_pinky',
+                                              'pinch_high_thumb_ready_without_pinky'):
         parser.error('--wait-arrival requires an empty-hand preshape')
     wait_arrival = args.wait_open or args.wait_arrival
     try:

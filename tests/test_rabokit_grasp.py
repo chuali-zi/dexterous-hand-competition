@@ -9,6 +9,22 @@ from rabokit_pickup_vision import neighboring_layout, pickup_evidence
 
 
 class GraspPlanTests(unittest.TestCase):
+    def test_high_thumb_preparation_changes_only_the_high_hand_event(self):
+        events, _ = make_plan(self.start, self.source, .009, 'pickup')
+        old = preshape_fingers_plan(events, limited_pinch=True)
+        new = preshape_fingers_plan(events, limited_pinch=True, prepare_thumb_high=True)
+        changed = [(a, b) for a, b in zip(old, new) if a != b]
+        self.assertEqual(len(changed), 1)
+        before, after = changed[0]
+        self.assertEqual(after['name'], 'preshaped')
+        self.assertEqual(after['hand'], 'pinch_high_thumb_ready_without_pinky')
+        self.assertEqual({**before, 'hand': after['hand']}, after)
+        self.assertTrue(after['wait_arrival'])
+        self.assertEqual(new[new.index(after)-1]['name'], 'aligned')
+        self.assertGreater(new[new.index(after)-1]['position'][2]-self.source[2], .25)
+        with self.assertRaises(ValueError):
+            preshape_fingers_plan(events, prepare_thumb_high=True)
+
     def test_pass_through_only_marks_high_uncaptured_outbound_joint_points(self):
         def point(name, z, capture=False):
             return {'name': name, 'joints': [0.] * 7, 'position': [0., 0., z], 'capture': capture}

@@ -40,13 +40,16 @@ def high_pass_through_plan(events, start, surface_z):
     return result
 
 
-def preshape_fingers_plan(events, limited_pinch=False):
-    """Descend half-shaped, prepare the thumb, and mirror that shape on release."""
+def preshape_fingers_plan(events, limited_pinch=False, prepare_thumb_high=False):
+    """Prepare fingers high, optionally bend the thumb high, and retain the release shape."""
+    if prepare_thumb_high and not limited_pinch:
+        raise ValueError('High thumb preparation requires limited pinch')
     names = [event['name'] for event in events]
     if any(names.count(name) != 1 for name in ('aligned', 'contact', 'closed', 'released')) or not (
             names.index('aligned') < names.index('contact') < names.index('closed') < names.index('released')):
         raise ValueError('Preshape requires high alignment before contact and pickup closure')
     preshape = 'pinch_preshape_without_pinky' if limited_pinch else 'preshape_without_pinky'
+    high_preshape = 'pinch_high_thumb_ready_without_pinky' if prepare_thumb_high else preshape
     thumb_ready = 'pinch_thumb_ready_without_pinky' if limited_pinch else 'thumb_ready_without_pinky'
     staged = []
     for event in events:
@@ -61,7 +64,7 @@ def preshape_fingers_plan(events, limited_pinch=False):
                      'preshape_feedback_key': 'empty_return_preshape_feedback'}
         staged.append(event)
         if event['name'] == 'aligned':
-            staged.append({'name': 'preshaped', 'hand': preshape, 'capture': True,
+            staged.append({'name': 'preshaped', 'hand': high_preshape, 'capture': True,
                            'wait_arrival': limited_pinch,
                            'preshape_feedback_key': 'preshape_feedback'})
         elif event['name'] == 'contact':
@@ -185,6 +188,8 @@ def main():
                         help='Preshaped inspection only: preposition thumb yaw high, use 45%% thumb / 75%% finger closure')
     parser.add_argument('--pass-through-high', action='store_true',
                         help='Limited pinch only: advance high intermediate joints without a stop at every point')
+    parser.add_argument('--prepare-thumb-high', action='store_true',
+                        help='Limited pinch only: bend the thumb to its 45%% ready target before descending')
     parser.add_argument('--side-camera', action='store_true',
                         help='Record synchronized side RGB at static stages for grasp visibility diagnosis')
     parser.add_argument('--inspect-pickup', action='store_true',
@@ -206,6 +211,8 @@ def main():
         parser.error('--limited-pinch requires --preshape-fingers and --inspect-pickup')
     if args.pass_through_high and not args.limited_pinch:
         parser.error('--pass-through-high requires --limited-pinch')
+    if args.prepare_thumb_high and not args.limited_pinch:
+        parser.error('--prepare-thumb-high requires --limited-pinch')
     if args.thumb_yaw is not None:
         if args.stage not in ('pickup', 'grasp'):
             parser.error('--thumb-yaw requires pickup or grasp')
@@ -273,7 +280,8 @@ def main():
             raise RuntimeError('The RGB destination overlaps another observed brick')
         checks = check_plan(arm, start, events)
         if args.preshape_fingers:
-            events = preshape_fingers_plan(events, limited_pinch=args.limited_pinch)
+            events = preshape_fingers_plan(events, limited_pinch=args.limited_pinch,
+                                          prepare_thumb_high=args.prepare_thumb_high)
         if args.pass_through_high:
             events = high_pass_through_plan(events, start, point[2])
         if args.keep_pinky_open:
@@ -283,6 +291,7 @@ def main():
         if args.thumb_yaw is not None:
             for event in events:
                 if event.get('hand') in ('close', 'close_without_pinky', 'thumb_ready_without_pinky',
+                                         'pinch_high_thumb_ready_without_pinky',
                                          'pinch_preshape_without_pinky', 'pinch_thumb_ready_without_pinky',
                                          'pinch_without_pinky'):
                     event['thumb_yaw_rad'] = args.thumb_yaw
@@ -295,6 +304,7 @@ def main():
                   'thumb_yaw_override_rad': args.thumb_yaw,
                   'preshape_fingers_requested': args.preshape_fingers,
                   'limited_pinch_requested': args.limited_pinch,
+                  'prepare_thumb_high_requested': args.prepare_thumb_high,
                   'hand_ramp_seconds': 2. if args.limited_pinch else 0.,
                   'pass_through_high_requested': args.pass_through_high,
                   'pass_through_joint_count': sum(bool(e.get('pass_through')) for e in events),
