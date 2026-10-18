@@ -2,6 +2,7 @@
 """Observe an empty-hand preshape at the tested initial arm pose; --motion is explicit."""
 import argparse
 import json
+import math
 import os
 from pathlib import Path
 import subprocess
@@ -12,15 +13,18 @@ from rabokit_calibration_probe import hand_command, initialize_empty_hand, measu
 from rabokit_hand import hand_feedback, targets
 
 
-def run_motion(robot, output, seconds=20, prepared_thumb=False):
+def run_motion(robot, output, seconds=20, prepared_thumb=False, force_limit=1.):
     arm = robot.left_arm
     before = measured(arm)
     if any(abs(value) > .01 for value in before['joints']):
         raise ValueError('Hand hold diagnostic requires the tested initial arm pose')
+    if not math.isfinite(force_limit) or not 0 < force_limit <= 1:
+        raise ValueError('Normalized force limit must be in (0, 1]')
     pose = 'pinch_thumb_ready_without_pinky' if prepared_thumb else 'pinch_preshape_without_pinky'
     goals = targets(pose)
     report = {'before': before, 'arm_motion_commanded': False, 'official_score': None,
-              'pose': pose, 'native_targets_rad': goals}
+              'pose': pose, 'native_targets_rad': goals, 'probe_force_limit_normalized': force_limit,
+              'initialization_force_limit_normalized': 1.}
     trace = None
     ready_line = ''
     started = time.monotonic()
@@ -34,6 +38,11 @@ def run_motion(robot, output, seconds=20, prepared_thumb=False):
         ready_line = trace.stdout.readline()
         if ready_line.strip() != 'HAND_TRACE_READY':
             raise RuntimeError('Hand TF recorder was not ready; preshape not commanded')
+        if force_limit != 1.:
+            report['force_limit_command_monotonic'] = time.monotonic()
+            report['force_limit_request_accepted'] = robot.left_hand.set_force([force_limit] * 6)
+            if not report['force_limit_request_accepted']:
+                raise RuntimeError('SDK rejected the probe force-limit request')
         report['preshape_command_wall_seconds'] = time.monotonic() - started
         report['preshape_command_monotonic'] = time.monotonic()
         try:
@@ -78,8 +87,13 @@ def run_motion(robot, output, seconds=20, prepared_thumb=False):
                 trace.kill()
                 trace.communicate(timeout=3)
         try:
-            report['recovery'] = initialize_empty_hand(arm, output / 'hand-recovery')
-            report['reopened'] = report['recovery']['opened']
+            if report.get('force_limit_request_accepted') and force_limit != 1.:
+                report['recovery_kind'] = 'direct_open_after_force_limit_request'
+                report['reopened'] = hand_command('open', wait_open=True)
+            else:
+                report['recovery_kind'] = 'initialization_close_then_open'
+                report['recovery'] = initialize_empty_hand(arm, output / 'hand-recovery')
+                report['reopened'] = report['recovery']['opened']
             report['after'] = measured(arm)
             report['arm_joint_drift_rad'] = max(abs(a-b) for a, b in zip(before['joints'], report['after']['joints']))
             if report['arm_joint_drift_rad'] > .005:
@@ -105,9 +119,13 @@ def main():
     parser.add_argument('--motion', action='store_true', help='Initialize, preshape, observe and reopen; no arm targets')
     parser.add_argument('--prepared-thumb', action='store_true',
                         help='At the initial arm pose, compare 45%% thumb bending instead of an open thumb')
+    parser.add_argument('--force-limit', type=float, default=1.,
+                        help='SDK normalized limit for all six hand groups during observation; initialization uses 1')
     args = parser.parse_args()
     if not 15 <= args.seconds <= 25:
         parser.error('--seconds must be in [15, 25]')
+    if not math.isfinite(args.force_limit) or not 0 < args.force_limit <= 1:
+        parser.error('--force-limit must be in (0, 1]')
     if not os.getenv('ROS2_NAMESPACE'):
         parser.error('Run only in the Rabokit simulation terminal')
     if args.output.exists():
@@ -122,7 +140,7 @@ def main():
     robot = LbotDualArm(mode='sim')
     try:
         time.sleep(1)
-        run_motion(robot, args.output, args.seconds, args.prepared_thumb)
+        run_motion(robot, args.output, args.seconds, args.prepared_thumb, args.force_limit)
         print('PASS: initial-pose hand observation and verified reopening; no grasp or score', flush=True)
     finally:
         robot.shutdown()

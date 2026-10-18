@@ -51,8 +51,6 @@ def capture(seconds, trace_hand=False):
             subscriptions.append(node.create_subscription(Float64, topic, callback, qos_profile_sensor_data))
         def receive_joints(msg, info):
             elapsed = time.monotonic() - started
-            if joint_samples and elapsed - joint_samples[-1]['wall_seconds'] < .25:
-                return
             indices = {name: i for i, name in enumerate(msg.name) if name in HAND_JOINTS and i < len(msg.position)}
             joint_samples.append({'wall_seconds': elapsed,
                 'stamp': [msg.header.stamp.sec, msg.header.stamp.nanosec],

@@ -34,6 +34,14 @@ class HandHoldTests(unittest.TestCase):
         robot.left_arm.enable.assert_not_called()
         robot.left_hand.set_force.assert_not_called()
 
+    def test_invalid_force_limit_is_rejected_before_actuation(self):
+        for value in (0., -1., 1.01, float('nan')):
+            robot = self.robot()
+            with self.assertRaises(ValueError):
+                run_motion(robot, Path('unused'), force_limit=value)
+            robot.left_arm.enable.assert_not_called()
+            robot.left_hand.set_force.assert_not_called()
+
     def test_failed_preshape_still_finishes_recording_and_verifies_reopening(self):
         runs = Path(__file__).resolve().parents[1] / 'runs'
         runs.mkdir(exist_ok=True)
@@ -41,8 +49,8 @@ class HandHoldTests(unittest.TestCase):
             output = Path(temporary)
             recorder = SimpleNamespace(stdout=io.StringIO('HAND_TRACE_READY\n'), returncode=0,
                 communicate=Mock(return_value=('PASS: recorded\n', '')), poll=lambda: 0)
-            for failed, prepared, recovery_failed in ((False, False, False), (True, False, False),
-                                                       (False, True, False), (False, False, True)):
+            for failed, prepared, recovery_failed, limit in ((False, False, False, 1.), (True, False, False, 1.),
+                    (False, True, False, 1.), (False, False, True, 1.), (False, True, False, .05)):
                 pose = 'pinch_thumb_ready_without_pinky' if prepared else 'pinch_preshape_without_pinky'
                 frames = {}
                 for name, angle in targets(pose).items():
@@ -59,6 +67,7 @@ class HandHoldTests(unittest.TestCase):
                         return {'hand_arrival_verified': True, 'feedback': {'stamp_max_sec': 1.}}
                     return {'hand_arrival_verified': True}
                 recorder.stdout.seek(0)
+                robot = self.robot()
                 def initialize_hand(arm, destination):
                     if destination.name == 'hand-recovery' and recovery_failed:
                         raise RuntimeError('Reopening not verified')
@@ -68,13 +77,18 @@ class HandHoldTests(unittest.TestCase):
                         patch('rabokit_hand_hold.hand_command', side_effect=command) as hand:
                     if failed or recovery_failed:
                         with self.assertRaises(RuntimeError):
-                            run_motion(self.robot(), output, prepared_thumb=prepared)
+                            run_motion(robot, output, prepared_thumb=prepared, force_limit=limit)
                     else:
-                        run_motion(self.robot(), output, prepared_thumb=prepared)
-                self.assertEqual(hand.call_args.args[0], pose)
-                self.assertEqual(hand.call_args.kwargs.get('wait_arrival', False), not prepared)
-                self.assertEqual(initialize.call_count, 2)
-                self.assertEqual(initialize.call_args.args[1], output/'hand-recovery')
+                        run_motion(robot, output, prepared_thumb=prepared, force_limit=limit)
+                self.assertEqual(hand.call_args_list[0].args[0], pose)
+                self.assertEqual(hand.call_args_list[0].kwargs.get('wait_arrival', False), not prepared)
+                self.assertEqual(initialize.call_count, 1 if limit != 1. else 2)
+                if limit == 1.:
+                    self.assertEqual(initialize.call_args.args[1], output/'hand-recovery')
+                else:
+                    self.assertEqual(hand.call_args.args, ('open',))
+                    self.assertTrue(hand.call_args.kwargs['wait_open'])
+                self.assertEqual(robot.left_hand.set_force.call_args.args, ([limit]*6,))
                 saved = json.loads((output/'hold.json').read_text())
                 self.assertEqual('reopen_error' in saved, recovery_failed)
                 if not recovery_failed:
@@ -88,7 +102,7 @@ class HandHoldTests(unittest.TestCase):
 
 class FrameTraceTests(unittest.TestCase):
     def test_trace_keeps_robot_tf_and_yaw_commands_but_excludes_object_frames(self):
-        clock, callbacks, qos_used = [0.], {}, {}
+        clock, callbacks, qos_used, joint_stamps = [0.], {}, {}, []
         def subscribe(kind, topic, callback, qos):
             callbacks[topic] = callback
             qos_used[topic] = qos
@@ -111,6 +125,7 @@ class FrameTraceTests(unittest.TestCase):
                     name=['lh_thumb_cmc_yaw', 'prop_hidden'], position=[.42, 99.], velocity=[], effort=[],
                     header=SimpleNamespace(stamp=SimpleNamespace(sec=0, nanosec=int(clock[0]*1e9)))),
                     {'source_timestamp': 1})
+                joint_stamps.append([0, int(clock[0]*1e9)])
         node = SimpleNamespace(create_subscription=subscribe, count_publishers=Mock(return_value=1),
                                get_publishers_info_by_topic=lambda topic: [],
                                destroy_node=Mock())
@@ -133,6 +148,7 @@ class FrameTraceTests(unittest.TestCase):
                          {'lh_thumb_cmc_yaw', 'lh_thumb_cmc_pitch', 'lh_thumb_ip'})
         self.assertIs(qos_used['/test/arm_left/lh_thumb_cmc_yaw/cmd'], sensor_qos)
         self.assertEqual(result['hand_joint_states'][0]['position'], {'lh_thumb_cmc_yaw': .42})
+        self.assertEqual([row['stamp'] for row in result['hand_joint_states']], joint_stamps)
         self.assertEqual(result['hand_joint_states'][0]['message_info']['source_timestamp'], 1)
         self.assertEqual(next(iter(result['hand_samples'][0]['frames'].values()))['message_info']['source_timestamp'], 3)
         self.assertEqual(result['yaw_commands'][0]['message_info']['source_timestamp'], 5)
