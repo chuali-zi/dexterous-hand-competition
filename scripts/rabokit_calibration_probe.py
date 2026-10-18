@@ -31,7 +31,7 @@ def move(arm, goal):
     raise TimeoutError('Wrist joint feedback did not reach its target')
 
 
-def sample(arm, root, label, stereo=False, side_camera=False):
+def sample(arm, root, label, stereo=False, side_camera=False, hand_trace=False):
     folder = root / label
     folder.mkdir()
     before = measured(arm)
@@ -44,11 +44,11 @@ def sample(arm, root, label, stereo=False, side_camera=False):
         if not stereo:
             raise ValueError('Side-view sampling requires the synchronized stereo capture')
         camera_command.append('--side-camera')
-    for command in (
-        [str(scripts / 'rabokit_robot_frames.py'), '--seconds', '2',
-         '--output', str(folder / 'robot-frames.json')],
-        camera_command,
-    ):
+    frame_command = [str(scripts / 'rabokit_robot_frames.py'), '--seconds', '2',
+                     '--output', str(folder / 'robot-frames.json')]
+    if hand_trace:
+        frame_command.append('--hand-trace')
+    for command in (frame_command, camera_command):
         result = subprocess.run([sys.executable, *command], capture_output=True, text=True, timeout=15)
         (folder / (Path(command[0]).stem + '.log')).write_text(
             result.stdout + result.stderr, encoding='utf-8')

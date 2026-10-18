@@ -369,7 +369,8 @@ def main():
                 print(json.dumps({'completed': event['name'], 'measured': state}), flush=True)
                 if event['capture']:
                     try:
-                        sample(arm, args.output, event['name'], stereo=True, side_camera=args.side_camera)
+                        sample(arm, args.output, event['name'], stereo=True, side_camera=args.side_camera,
+                               hand_trace=args.limited_pinch)
                     except (RuntimeError, subprocess.TimeoutExpired) as error:
                         if args.seed_record:
                             raise RuntimeError(f'{event["name"]}: seeded route camera sampling failed') from error
