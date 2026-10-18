@@ -19,13 +19,33 @@ class GraspPlanTests(unittest.TestCase):
         self.assertEqual(staged[support_index - 1]['name'], 'aligned')
         self.assertGreater(staged[support_index - 1]['position'][2] - self.source[2], .25)
         self.assertEqual(staged[support_index + 1]['name'], 'approached')
-        self.assertEqual([e for e in staged if e['name'] != 'preshaped'], original)
+        self.assertEqual([e for e in staged if 'hand' not in e], [e for e in original if 'hand' not in e])
+        released = next(e for e in staged if e['name'] == 'released')
+        self.assertEqual(released['hand'], 'preshape_without_pinky')
+        self.assertEqual(released['preshape_feedback_key'], 'release_preshape_feedback')
+        contact_index = next(i for i, e in enumerate(staged) if e['name'] == 'contact')
+        self.assertFalse(any(e.get('hand') == 'open' for e in staged[contact_index:]))
         self.assertEqual(events, original)
         with self.assertRaises(ValueError):
             preshape_fingers_plan([e for e in events if e['name'] != 'closed'])
         reordered = [e for e in events if e['name'] != 'aligned'] + [next(e for e in events if e['name'] == 'aligned')]
         with self.assertRaises(ValueError):
             preshape_fingers_plan(reordered)
+
+    def test_known_empty_return_uses_the_same_half_shape_before_lowering(self):
+        events, _ = make_plan(self.start, self.source, .009, 'pickup')
+        release_index = next(i for i, e in enumerate(events) if e['name'] == 'source_release_position')
+        event = {'name': 'empty_pickup_open', 'hand': 'open', 'capture': False,
+                 'requires_tabletop_target': True, 'wait_open': True}
+        events.insert(release_index, event)
+        staged = preshape_fingers_plan(events)
+        empty = next(e for e in staged if e['name'] == 'empty_pickup_preshape')
+        self.assertTrue(empty['requires_tabletop_target'])
+        self.assertTrue(empty['capture'])
+        self.assertFalse(empty['wait_open'])
+        self.assertEqual(empty['hand'], 'preshape_without_pinky')
+        self.assertEqual(empty['preshape_feedback_key'], 'empty_return_preshape_feedback')
+        self.assertEqual(event['hand'], 'open')
 
     def setUp(self):
         self.start = {'pose': [[0, .222, -.6082], [0, 0, 0]]}

@@ -23,13 +23,25 @@ def pickup_offset(yaw, tool_offset_y=0., tool_offset_x=0.):
 
 
 def preshape_fingers_plan(events):
-    """Form a half-closed hand at the high aligned pose before descending."""
+    """Keep the half-shape near bricks during both approach and withdrawal."""
     names = [event['name'] for event in events]
-    if any(names.count(name) != 1 for name in ('aligned', 'contact', 'closed')) or not (
-            names.index('aligned') < names.index('contact') < names.index('closed')):
+    if any(names.count(name) != 1 for name in ('aligned', 'contact', 'closed', 'released')) or not (
+            names.index('aligned') < names.index('contact') < names.index('closed') < names.index('released')):
         raise ValueError('Preshape requires high alignment before contact and pickup closure')
-    i = names.index('aligned') + 1
-    return events[:i] + [{'name': 'preshaped', 'hand': 'preshape_without_pinky', 'capture': True}] + events[i:]
+    staged = []
+    for event in events:
+        if event['name'] == 'released':
+            event = {**event, 'hand': 'preshape_without_pinky',
+                     'preshape_feedback_key': 'release_preshape_feedback'}
+        elif event.get('requires_tabletop_target') and event.get('hand') == 'open':
+            event = {**event, 'name': 'empty_pickup_preshape', 'hand': 'preshape_without_pinky',
+                     'capture': True, 'wait_open': False,
+                     'preshape_feedback_key': 'empty_return_preshape_feedback'}
+        staged.append(event)
+        if event['name'] == 'aligned':
+            staged.append({'name': 'preshaped', 'hand': 'preshape_without_pinky', 'capture': True,
+                           'preshape_feedback_key': 'preshape_feedback'})
+    return staged
 
 
 def make_plan(start, point, uncertainty, stage, clearance=.03, yaw=-math.pi / 2):
@@ -318,13 +330,15 @@ def main():
                         pending = recover(f'{event["name"]}: camera sampling failed: {error}')
                         save()
                         continue
-                if event['name'] == 'preshaped':
+                if event.get('preshape_feedback_key'):
                     from rabokit_hand import hand_feedback, targets
-                    frames = json.loads((args.output / 'preshaped/robot-frames.json').read_text(encoding='utf-8'))['frames']
-                    report['preshape_feedback'] = hand_feedback(frames, targets('preshape_without_pinky'))
+                    frames = json.loads((args.output / event['name'] / 'robot-frames.json').read_text(encoding='utf-8'))['frames']
+                    feedback = hand_feedback(frames, targets('preshape_without_pinky'))
+                    report[event['preshape_feedback_key']] = feedback
                     save()
-                    if not report['preshape_feedback']['complete'] or report['preshape_feedback']['maximum_error_rad'] >= .03:
-                        raise RuntimeError('High finger preshape did not reach its targets; no descent started')
+                    if not feedback['complete'] or feedback['maximum_error_rad'] >= .03:
+                        raise RuntimeError(f'{event["name"]}: finger preshape did not reach its targets; arm continuation stopped')
+                if event['name'] == 'preshaped':
                     try:
                         report['preshape_observation'] = target_observation(args.output / 'preshaped')
                         if report['preshape_observation']['valid']:
@@ -360,6 +374,12 @@ def main():
             return_joints(arm, start['joints'])
             report['completed'].append({'name': 'restored', 'measured': measured(arm)})
             report['return_completed'] = True
+            save()
+            if args.preshape_fingers:
+                report['active_stage'] = 'retreat_open'
+                save()
+                report['retreat_open_feedback'] = hand_command('open', wait_open=True)
+                report['active_stage'] = 'restored'
             report['motion_sequence_completed'] = 'recovery_reason' not in report
             save()
             try:
