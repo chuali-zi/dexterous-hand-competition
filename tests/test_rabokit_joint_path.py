@@ -10,7 +10,7 @@ from rabokit_joint_path import interpolate_rotation, pickup_inspection_plan, pos
 
 
 class JointPathTests(unittest.TestCase):
-    def test_tool_y_adjustment_keeps_source_and_source_return_consistent(self):
+    def test_tool_xy_adjustment_keeps_source_and_source_return_consistent(self):
         def forward(joints):
             transform = np.eye(4)
             transform[:3, 3] = joints[:3]
@@ -22,9 +22,12 @@ class JointPathTests(unittest.TestCase):
         reference = {'completed': [{'name': 'contact', 'measured': {
             'joints': [.14875, .08125, point[2] + .035, 0., 0., 0., 0.]}}]}
         events, _ = seeded_approach_plan(start, point, .009, .035, reference, 'pickup', inverse, forward,
-                                         tool_offset_y=.01)
-        events, _ = pickup_inspection_plan(events, point, inverse, forward, tool_offset_y=.01)
+                                         tool_offset_y=.01, tool_offset_x=-.005)
+        events, _ = pickup_inspection_plan(events, point, inverse, forward,
+                                           tool_offset_y=.01, tool_offset_x=-.005)
         by_name = {event['name']: event for event in events}
+        for name in ('contact', 'followed', 'inspection_low', 'inspection_followed'):
+            self.assertAlmostEqual(by_name[name]['joints'][0], point[0] - .08 - .005)
         self.assertAlmostEqual(by_name['contact']['joints'][1], point[1] + .01)
         self.assertAlmostEqual(by_name['followed']['joints'][1], point[1] + .01)
         self.assertAlmostEqual(by_name['inspection_low']['joints'][1], point[1] + .01 - .08)
