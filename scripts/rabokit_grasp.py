@@ -164,7 +164,7 @@ def main():
     parser.add_argument('--preshape-fingers', action='store_true',
                         help='Seeded pickup: half-close fingers high, descend, then prepare thumb before closing')
     parser.add_argument('--limited-pinch', action='store_true',
-                        help='Preshaped inspection only: preposition thumb yaw high, use 45%% thumb / 65%% finger closure')
+                        help='Preshaped inspection only: preposition thumb yaw high, use 45%% thumb / 75%% finger closure')
     parser.add_argument('--side-camera', action='store_true',
                         help='Record synchronized side RGB at static stages for grasp visibility diagnosis')
     parser.add_argument('--inspect-pickup', action='store_true',

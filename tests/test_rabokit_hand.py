@@ -164,11 +164,11 @@ class HandTargetsTests(unittest.TestCase):
             elif name.startswith('lh_pinky_'):
                 self.assertEqual([shape[name] for shape in (high, ready, pinch)], [opened[name]] * 3)
             else:
-                fractions = (0., .45, .45) if name.startswith('lh_thumb_') else (.5, .5, .65)
+                fractions = (0., .45, .45) if name.startswith('lh_thumb_') else (.5, .5, .75)
                 for shape, fraction in zip((high, ready, pinch), fractions):
                     self.assertAlmostEqual(shape[name], opened[name] + fraction * (closed[name] - opened[name]))
-        self.assertAlmostEqual(pinch['lh_index_mcp_pitch'], 1.0763)
-        self.assertAlmostEqual(pinch['lh_index_dip'], .965205)
+        self.assertAlmostEqual(pinch['lh_index_mcp_pitch'], 1.2545)
+        self.assertAlmostEqual(pinch['lh_index_dip'], 1.126575)
         for pose in ('pinch_preshape_without_pinky', 'pinch_thumb_ready_without_pinky', 'pinch_without_pinky'):
             self.assertEqual(targets(pose, .6)['lh_thumb_cmc_yaw'], .6)
             with self.assertRaises(ValueError):
