@@ -376,6 +376,10 @@ def main():
                     save()
                     print(json.dumps({'pickup_evidence': report.get('pickup_evidence'),
                                       'pickup_scene_verified': report['pickup_scene_verified']}), flush=True)
+                    if args.inspect_pickup and not report['pickup_scene_verified']:
+                        report['inspection_stopped_early'] = True
+                        save()
+                        raise RuntimeError('RGB did not verify clean pickup; inspection trial stopped before low return')
             return_joints(arm, start['joints'])
             report['completed'].append({'name': 'restored', 'measured': measured(arm)})
             report['return_completed'] = True
