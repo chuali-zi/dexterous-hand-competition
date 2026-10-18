@@ -63,6 +63,19 @@ def hand_feedback(frames, values):
 
 def targets(pose, thumb_yaw=None):
     # Native radians observed on all 11 SDK /cmd topics in this scene, SDK 3.0.0.
+    if pose in ('pinch_preshape_without_pinky', 'pinch_thumb_ready_without_pinky', 'pinch_without_pinky'):
+        opened = targets('open')
+        closed = targets('close_without_pinky', .62 if thumb_yaw is None else thumb_yaw)
+        finger_fraction = .65 if pose == 'pinch_without_pinky' else .5
+        thumb_fraction = 0. if pose == 'pinch_preshape_without_pinky' else .45
+        result = dict(opened)
+        for name in result:
+            if name.startswith(('lh_index_', 'lh_middle_', 'lh_ring_')):
+                result[name] += finger_fraction * (closed[name] - opened[name])
+            elif name in ('lh_thumb_cmc_pitch', 'lh_thumb_ip'):
+                result[name] += thumb_fraction * (closed[name] - opened[name])
+        result['lh_thumb_cmc_yaw'] = closed['lh_thumb_cmc_yaw']
+        return result
     if pose == 'thumb_ready_without_pinky':
         result = targets('preshape_without_pinky')
         opened, closed = targets('open'), targets('close_without_pinky', thumb_yaw)
@@ -75,7 +88,7 @@ def targets(pose, thumb_yaw=None):
     elif pose in ('close', 'close_without_pinky', 'preshape_without_pinky'):
         mcp, dip, yaw, pitch, ip = 1.7, 1.53, .511764705882353, .4772, .8472
     else:
-        raise ValueError('Expected open, close, close_without_pinky, preshape_without_pinky or thumb_ready_without_pinky')
+        raise ValueError('Unknown hand pose')
     result = {f'lh_{finger}_{joint}': value for finger in ('index', 'middle', 'ring', 'pinky')
               for joint, value in (('mcp_pitch', mcp), ('dip', dip))}
     result.update(lh_thumb_cmc_yaw=yaw, lh_thumb_cmc_pitch=pitch, lh_thumb_ip=ip)
@@ -97,14 +110,15 @@ def preparation_feedback(frames, pose, thumb_yaw=None):
     feedback = hand_feedback(frames, targets(pose, thumb_yaw))
     # This low closure step can meet the brick. Joint goals are not a contact
     # sensor; retain all errors without requiring an empty-hand arrival pose.
-    feedback['goal_arrival_required'] = pose != 'thumb_ready_without_pinky'
+    feedback['goal_arrival_required'] = pose not in ('thumb_ready_without_pinky', 'pinch_thumb_ready_without_pinky')
     return feedback
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--pose', choices=('open', 'close', 'close_without_pinky', 'preshape_without_pinky',
-                                         'thumb_ready_without_pinky'), required=True)
+                                         'thumb_ready_without_pinky', 'pinch_preshape_without_pinky',
+                                         'pinch_thumb_ready_without_pinky', 'pinch_without_pinky'), required=True)
     parser.add_argument('--thumb-yaw', type=float, help='Thumb CMC yaw closure endpoint in native radians')
     parser.add_argument('--wait-open', action='store_true',
                         help='Require fresh robot TF to verify all open joints before returning')

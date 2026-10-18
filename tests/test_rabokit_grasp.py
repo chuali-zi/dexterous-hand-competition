@@ -9,6 +9,28 @@ from rabokit_pickup_vision import neighboring_layout, pickup_evidence
 
 
 class GraspPlanTests(unittest.TestCase):
+    def test_limited_pinch_uses_high_yaw_shape_and_symmetric_release_without_changing_arm_route(self):
+        events, _ = make_plan(self.start, self.source, .009, 'pickup')
+        release_index = next(i for i, e in enumerate(events) if e['name'] == 'source_release_position')
+        events.insert(release_index, {'name': 'empty_pickup_open', 'hand': 'open', 'capture': False,
+                                     'requires_tabletop_target': True, 'wait_open': True})
+        original = [dict(e) for e in events]
+        staged = preshape_fingers_plan(events, limited_pinch=True)
+        hands = {e['name']: e for e in staged if 'hand' in e}
+        self.assertEqual(hands['opened']['hand'], 'open')
+        self.assertEqual(hands['preshaped']['hand'], 'pinch_preshape_without_pinky')
+        self.assertEqual(hands['thumb_ready']['hand'], 'pinch_thumb_ready_without_pinky')
+        self.assertEqual(hands['closed']['hand'], 'pinch_without_pinky')
+        self.assertEqual(hands['released']['hand'], hands['preshaped']['hand'])
+        self.assertEqual(hands['empty_pickup_preshape']['hand'], hands['preshaped']['hand'])
+        self.assertTrue(hands['empty_pickup_preshape']['requires_tabletop_target'])
+        self.assertEqual([e for e in staged if 'hand' not in e], [e for e in events if 'hand' not in e])
+        names = [e['name'] for e in staged]
+        self.assertLess(names.index('aligned'), names.index('preshaped'))
+        self.assertLess(names.index('preshaped'), names.index('approached'))
+        self.assertEqual(names[names.index('contact') + 1:names.index('closed') + 1], ['thumb_ready', 'closed'])
+        self.assertEqual(events, original)
+
     def test_preshape_prepares_fingers_high_and_thumb_at_contact_before_closing(self):
         events, _ = make_plan(self.start, self.source, .009, 'pickup')
         original = [dict(event) for event in events]

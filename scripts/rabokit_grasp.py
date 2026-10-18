@@ -22,27 +22,31 @@ def pickup_offset(yaw, tool_offset_y=0., tool_offset_x=0.):
     return [-.08 * math.sin(yaw) - tool_offset_x, .08 * math.cos(yaw) - tool_offset_y]
 
 
-def preshape_fingers_plan(events):
-    """Descend half-shaped, approach with the thumb, then close together."""
+def preshape_fingers_plan(events, limited_pinch=False):
+    """Descend half-shaped, prepare the thumb, and mirror that shape on release."""
     names = [event['name'] for event in events]
     if any(names.count(name) != 1 for name in ('aligned', 'contact', 'closed', 'released')) or not (
             names.index('aligned') < names.index('contact') < names.index('closed') < names.index('released')):
         raise ValueError('Preshape requires high alignment before contact and pickup closure')
+    preshape = 'pinch_preshape_without_pinky' if limited_pinch else 'preshape_without_pinky'
+    thumb_ready = 'pinch_thumb_ready_without_pinky' if limited_pinch else 'thumb_ready_without_pinky'
     staged = []
     for event in events:
         if event['name'] == 'released':
-            event = {**event, 'hand': 'preshape_without_pinky',
+            event = {**event, 'hand': preshape,
                      'preshape_feedback_key': 'release_preshape_feedback'}
+        elif limited_pinch and event['name'] == 'closed':
+            event = {**event, 'hand': 'pinch_without_pinky'}
         elif event.get('requires_tabletop_target') and event.get('hand') == 'open':
-            event = {**event, 'name': 'empty_pickup_preshape', 'hand': 'preshape_without_pinky',
+            event = {**event, 'name': 'empty_pickup_preshape', 'hand': preshape,
                      'capture': True, 'wait_open': False,
                      'preshape_feedback_key': 'empty_return_preshape_feedback'}
         staged.append(event)
         if event['name'] == 'aligned':
-            staged.append({'name': 'preshaped', 'hand': 'preshape_without_pinky', 'capture': True,
+            staged.append({'name': 'preshaped', 'hand': preshape, 'capture': True,
                            'preshape_feedback_key': 'preshape_feedback'})
         elif event['name'] == 'contact':
-            staged.append({'name': 'thumb_ready', 'hand': 'thumb_ready_without_pinky', 'capture': True,
+            staged.append({'name': 'thumb_ready', 'hand': thumb_ready, 'capture': True,
                            'preshape_feedback_key': 'thumb_ready_feedback'})
     return staged
 
@@ -155,9 +159,11 @@ def main():
     parser.add_argument('--keep-pinky-open', action='store_true',
                         help='Close the other fingers while keeping the pinky at its measured open target')
     parser.add_argument('--thumb-yaw', type=float,
-                        help='Native thumb CMC yaw closure endpoint; leaves opening and other fingers unchanged')
+                        help='Native thumb yaw endpoint; limited pinch also holds it during preshape and release')
     parser.add_argument('--preshape-fingers', action='store_true',
                         help='Seeded pickup: half-close fingers high, descend, then prepare thumb before closing')
+    parser.add_argument('--limited-pinch', action='store_true',
+                        help='Preshaped inspection only: preposition thumb yaw high, use 45%% thumb / 65%% finger closure')
     parser.add_argument('--side-camera', action='store_true',
                         help='Record synchronized side RGB at static stages for grasp visibility diagnosis')
     parser.add_argument('--inspect-pickup', action='store_true',
@@ -175,6 +181,8 @@ def main():
         parser.error('Run only in the Rabokit simulation terminal')
     if args.preshape_fingers and (not args.seed_record or args.stage != 'pickup' or not args.keep_pinky_open):
         parser.error('--preshape-fingers requires --seed-record, --stage pickup and --keep-pinky-open')
+    if args.limited_pinch and not (args.preshape_fingers and args.inspect_pickup):
+        parser.error('--limited-pinch requires --preshape-fingers and --inspect-pickup')
     if args.thumb_yaw is not None:
         if args.stage not in ('pickup', 'grasp'):
             parser.error('--thumb-yaw requires pickup or grasp')
@@ -242,14 +250,16 @@ def main():
             raise RuntimeError('The RGB destination overlaps another observed brick')
         checks = check_plan(arm, start, events)
         if args.preshape_fingers:
-            events = preshape_fingers_plan(events)
+            events = preshape_fingers_plan(events, limited_pinch=args.limited_pinch)
         if args.keep_pinky_open:
             for event in events:
                 if event.get('hand') == 'close':
                     event['hand'] = 'close_without_pinky'
         if args.thumb_yaw is not None:
             for event in events:
-                if event.get('hand') in ('close', 'close_without_pinky', 'thumb_ready_without_pinky'):
+                if event.get('hand') in ('close', 'close_without_pinky', 'thumb_ready_without_pinky',
+                                         'pinch_preshape_without_pinky', 'pinch_thumb_ready_without_pinky',
+                                         'pinch_without_pinky'):
                     event['thumb_yaw_rad'] = args.thumb_yaw
         evidence_labels = ('inspection_low', 'inspection_followed') if args.inspect_pickup else ('lifted', 'followed')
         report = {'stage': args.stage, 'start': start, 'source_surface': surface,
@@ -259,6 +269,7 @@ def main():
                   'tool_offset_x_m': args.tool_offset_x,
                   'thumb_yaw_override_rad': args.thumb_yaw,
                   'preshape_fingers_requested': args.preshape_fingers,
+                  'limited_pinch_requested': args.limited_pinch,
                   'entry_yaw_deg': args.yaw_deg,
                   'seeded_path_checks': seeded_checks,
                   'fk_continuation_fallbacks': fk_continuations,
