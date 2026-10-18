@@ -13,14 +13,19 @@ from rabokit_calibration_probe import hand_command, initialize_empty_hand
 
 
 class HandTargetsTests(unittest.TestCase):
-    def test_support_closes_three_fingers_without_moving_thumb_or_pinky(self):
-        opened, closed = targets('open'), targets('close')
-        support = targets('support_without_pinky')
+    def test_preshape_uses_half_finger_targets_and_keeps_thumb_and_pinky_open(self):
+        opened = targets('open')
+        support = targets('preshape_without_pinky')
         self.assertEqual(set(support), set(opened))
         for name, value in support.items():
-            self.assertEqual(value, (opened if name.startswith(('lh_thumb_', 'lh_pinky_')) else closed)[name])
+            if name.startswith(('lh_thumb_', 'lh_pinky_')):
+                self.assertEqual(value, opened[name])
+            else:
+                self.assertAlmostEqual(value, .809 if name.endswith('mcp_pitch') else .72315)
         with self.assertRaises(ValueError):
-            targets('support_without_pinky', thumb_yaw=.62)
+            targets('preshape_without_pinky', thumb_yaw=.62)
+        with self.assertRaises(ValueError):
+            targets('support_without_pinky')
 
     def test_empty_initialization_checks_closure_and_always_attempts_verified_reopening(self):
         arm = SimpleNamespace(get_joint_angles=lambda: [0.] * 7,

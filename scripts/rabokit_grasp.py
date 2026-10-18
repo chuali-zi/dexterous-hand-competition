@@ -22,13 +22,14 @@ def pickup_offset(yaw, tool_offset_y=0., tool_offset_x=0.):
     return [-.08 * math.sin(yaw) - tool_offset_x, .08 * math.cos(yaw) - tool_offset_y]
 
 
-def fingers_first_plan(events):
-    """Insert a stationary finger-only closure before the existing thumb closure."""
-    indices = [i for i, event in enumerate(events) if event['name'] == 'closed' and event.get('hand') == 'close']
-    if len(indices) != 1:
-        raise ValueError('Expected one pickup closure for fingers-first staging')
-    i = indices[0]
-    return events[:i] + [{'name': 'fingers_closed', 'hand': 'support_without_pinky', 'capture': True}] + events[i:]
+def preshape_fingers_plan(events):
+    """Form a half-closed hand at the high aligned pose before descending."""
+    names = [event['name'] for event in events]
+    if any(names.count(name) != 1 for name in ('aligned', 'contact', 'closed')) or not (
+            names.index('aligned') < names.index('contact') < names.index('closed')):
+        raise ValueError('Preshape requires high alignment before contact and pickup closure')
+    i = names.index('aligned') + 1
+    return events[:i] + [{'name': 'preshaped', 'hand': 'preshape_without_pinky', 'capture': True}] + events[i:]
 
 
 def make_plan(start, point, uncertainty, stage, clearance=.03, yaw=-math.pi / 2):
@@ -140,8 +141,8 @@ def main():
                         help='Close the other fingers while keeping the pinky at its measured open target')
     parser.add_argument('--thumb-yaw', type=float,
                         help='Closure-only native thumb CMC yaw target; leaves opening and other fingers unchanged')
-    parser.add_argument('--fingers-first', action='store_true',
-                        help='Seeded pickup: close index/middle/ring with thumb and pinky open, capture, then close thumb')
+    parser.add_argument('--preshape-fingers', action='store_true',
+                        help='Seeded pickup: half-close index/middle/ring at high alignment before descending')
     parser.add_argument('--side-camera', action='store_true',
                         help='Record synchronized side RGB at static stages for grasp visibility diagnosis')
     parser.add_argument('--inspect-pickup', action='store_true',
@@ -157,8 +158,8 @@ def main():
     args = parser.parse_args()
     if not os.getenv('ROS2_NAMESPACE'):
         parser.error('Run only in the Rabokit simulation terminal')
-    if args.fingers_first and (not args.seed_record or args.stage != 'pickup' or not args.keep_pinky_open):
-        parser.error('--fingers-first requires --seed-record, --stage pickup and --keep-pinky-open')
+    if args.preshape_fingers and (not args.seed_record or args.stage != 'pickup' or not args.keep_pinky_open):
+        parser.error('--preshape-fingers requires --seed-record, --stage pickup and --keep-pinky-open')
     if args.thumb_yaw is not None:
         if args.stage not in ('pickup', 'grasp'):
             parser.error('--thumb-yaw requires pickup or grasp')
@@ -225,8 +226,8 @@ def main():
                for item in initial['matches'] if item['color'] != 'green'):
             raise RuntimeError('The RGB destination overlaps another observed brick')
         checks = check_plan(arm, start, events)
-        if args.fingers_first:
-            events = fingers_first_plan(events)
+        if args.preshape_fingers:
+            events = preshape_fingers_plan(events)
         if args.keep_pinky_open:
             for event in events:
                 if event.get('hand') == 'close':
@@ -242,7 +243,7 @@ def main():
                   'tool_offset_y_m': args.tool_offset_y,
                   'tool_offset_x_m': args.tool_offset_x,
                   'thumb_yaw_override_rad': args.thumb_yaw,
-                  'fingers_first_requested': args.fingers_first,
+                  'preshape_fingers_requested': args.preshape_fingers,
                   'entry_yaw_deg': args.yaw_deg,
                   'seeded_path_checks': seeded_checks,
                   'fk_continuation_fallbacks': fk_continuations,
@@ -317,14 +318,20 @@ def main():
                         pending = recover(f'{event["name"]}: camera sampling failed: {error}')
                         save()
                         continue
-                if event['name'] == 'fingers_closed':
+                if event['name'] == 'preshaped':
+                    from rabokit_hand import hand_feedback, targets
+                    frames = json.loads((args.output / 'preshaped/robot-frames.json').read_text(encoding='utf-8'))['frames']
+                    report['preshape_feedback'] = hand_feedback(frames, targets('preshape_without_pinky'))
+                    save()
+                    if not report['preshape_feedback']['complete'] or report['preshape_feedback']['maximum_error_rad'] >= .03:
+                        raise RuntimeError('High finger preshape did not reach its targets; no descent started')
                     try:
-                        report['pre_thumb_observation'] = target_observation(args.output / 'fingers_closed')
-                        if report['pre_thumb_observation']['valid']:
-                            report['pre_thumb_observation']['source_displacement_m'] = math.dist(
-                                point, report['pre_thumb_observation']['point'])
+                        report['preshape_observation'] = target_observation(args.output / 'preshaped')
+                        if report['preshape_observation']['valid']:
+                            report['preshape_observation']['source_displacement_m'] = math.dist(
+                                point, report['preshape_observation']['point'])
                     except (ValueError, KeyError, OSError) as error:
-                        report['pre_thumb_observation'] = {'valid': False, 'reason': str(error)}
+                        report['preshape_observation'] = {'valid': False, 'reason': str(error)}
                     save()
                 if event['name'] == evidence_labels[1]:
                     try:
