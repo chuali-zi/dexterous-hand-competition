@@ -44,7 +44,10 @@ class HandTargetsTests(unittest.TestCase):
         self.assertGreaterEqual(clock[0], 3.1)
         self.assertLess(clock[0], 4.)
         self.assertLess(max(published), 1.)
-        self.assertTrue(json.loads(output.call_args.args[0])['hand_arrival_verified'])
+        record = json.loads(output.call_args.args[0])
+        self.assertTrue(record['hand_arrival_verified'])
+        self.assertGreater(record['feedback_samples'][0]['maximum_error_rad'], .16)
+        self.assertLess(record['feedback']['maximum_error_rad'], .03)
 
     def test_high_wait_is_forwarded_and_contact_wait_is_rejected(self):
         with patch('rabokit_calibration_probe.subprocess.run', return_value=SimpleNamespace(

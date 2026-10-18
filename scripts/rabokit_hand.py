@@ -177,6 +177,7 @@ def main():
         deadline = started + (12 if wait_arrival else 1)
         stable_stamp = None
         feedback = None
+        feedback_samples = []
         arrived = False
         while time.monotonic() < deadline:
             # Preserve the original one-second command burst. Waiting for TF
@@ -187,6 +188,10 @@ def main():
             rclpy.spin_once(node, timeout_sec=.05)
             if wait_arrival:
                 feedback = hand_feedback(frames, values)
+                elapsed = time.monotonic() - started
+                if args.wait_arrival and feedback['complete'] and (not feedback_samples or
+                        elapsed - feedback_samples[-1]['wall_seconds'] >= .5):
+                    feedback_samples.append({'wall_seconds': elapsed, **feedback})
                 if (feedback['complete'] and feedback['maximum_error_rad'] < .03 and
                         feedback['stamp_min_sec'] > command_stamp and
                         feedback['stamp_max_sec'] - feedback['stamp_min_sec'] < .1):
@@ -201,7 +206,8 @@ def main():
                           'command_published': True, 'hand_arrival_verified': arrived,
                           'wall_seconds': time.monotonic() - started,
                           'feedback_start_stamp_sec': command_stamp,
-                          'stable_feedback_start_stamp_sec': stable_stamp, 'feedback': feedback}), flush=True)
+                          'stable_feedback_start_stamp_sec': stable_stamp, 'feedback': feedback,
+                          'feedback_samples': feedback_samples}), flush=True)
         if wait_arrival and not arrived:
             raise TimeoutError('Hand TF did not reach all targets; no arm continuation permitted')
     finally:
