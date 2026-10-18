@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Observe an empty-hand preshape at the tested initial arm pose; --motion is explicit."""
+"""Observe empty-hand goal holding at the tested initial arm pose; --motion is explicit."""
 import argparse
 import json
 import math
@@ -13,18 +13,19 @@ from rabokit_calibration_probe import hand_command, initialize_empty_hand, measu
 from rabokit_hand import hand_feedback, targets
 
 
-def run_motion(robot, output, seconds=20, prepared_thumb=False, force_limit=1.):
+def run_motion(robot, output, seconds=20, prepared_thumb=False, force_limit=1., sdk_close=False):
     arm = robot.left_arm
     before = measured(arm)
     if any(abs(value) > .01 for value in before['joints']):
         raise ValueError('Hand hold diagnostic requires the tested initial arm pose')
     if not math.isfinite(force_limit) or not 0 < force_limit <= 1:
         raise ValueError('Normalized force limit must be in (0, 1]')
-    pose = 'pinch_thumb_ready_without_pinky' if prepared_thumb else 'pinch_preshape_without_pinky'
+    pose = 'close' if sdk_close else 'pinch_thumb_ready_without_pinky' if prepared_thumb else 'pinch_preshape_without_pinky'
     goals = targets(pose)
     report = {'before': before, 'arm_motion_commanded': False, 'official_score': None,
               'pose': pose, 'native_targets_rad': goals, 'probe_force_limit_normalized': force_limit,
-              'initialization_force_limit_normalized': 1.}
+              'initialization_force_limit_normalized': 1.,
+              'command_driver': 'sdk_close' if sdk_close else 'native_float64'}
     trace = None
     ready_line = ''
     started = time.monotonic()
@@ -46,14 +47,20 @@ def run_motion(robot, output, seconds=20, prepared_thumb=False, force_limit=1.):
         report['preshape_command_wall_seconds'] = time.monotonic() - started
         report['preshape_command_monotonic'] = time.monotonic()
         try:
-            if prepared_thumb:
+            if sdk_close:
+                report['sdk_close_request_accepted'] = robot.left_hand.close(blocking=False)
+                if not report['sdk_close_request_accepted']:
+                    raise RuntimeError('SDK close request was rejected')
+            elif prepared_thumb:
                 hand_command(pose)
             else:
                 report['preshape_arrival'] = hand_command(pose, wait_arrival=True)
         except (RuntimeError, subprocess.SubprocessError) as error:
             report['preshape_error'] = f'{type(error).__name__}: {error}'
-        report['preshape_process_exit_wall_seconds'] = time.monotonic() - started
-        report['preshape_process_exit_monotonic'] = time.monotonic()
+        report['command_return_monotonic'] = time.monotonic()
+        if not sdk_close:
+            report['preshape_process_exit_wall_seconds'] = time.monotonic() - started
+            report['preshape_process_exit_monotonic'] = report['command_return_monotonic']
         stdout, stderr = trace.communicate(timeout=seconds + 5)
         (output / 'trace.log').write_text(ready_line + stdout + stderr, encoding='utf-8')
         if trace.returncode:
@@ -64,16 +71,16 @@ def run_motion(robot, output, seconds=20, prepared_thumb=False, force_limit=1.):
         feedbacks = [hand_feedback(row['frames'], goals) for row in data['hand_samples']] + [last]
         recent = [row for row in feedbacks if row['complete'] and last['complete'] and
                   last['stamp_min_sec'] - 1.5 <= row['stamp_min_sec'] <= last['stamp_min_sec']]
-        report['post_process_wall_seconds'] = (data['started_monotonic'] +
-            data['hand_samples'][-1]['wall_seconds'] - report['preshape_process_exit_monotonic'])
+        report['post_command_wall_seconds'] = (data['started_monotonic'] +
+            data['hand_samples'][-1]['wall_seconds'] - report['command_return_monotonic'])
         report['preshape_hold_verified'] = bool(recent and
             recent[-1]['stamp_min_sec'] - recent[0]['stamp_min_sec'] >= 1 and
-            report['post_process_wall_seconds'] >= 1 and
+            report['post_command_wall_seconds'] >= 1 and
             all(row['maximum_error_rad'] < .03 and row['stamp_max_sec'] - row['stamp_min_sec'] < .1 for row in recent) and
             all(max(row['joint_rotation_error_rad'][name] for row in recent) -
                 min(row['joint_rotation_error_rad'][name] for row in recent) <= .005 for name in goals))
         if report.get('preshape_error') or not report['preshape_hold_verified']:
-            raise RuntimeError('Preshape was not verified through the later observation; see saved trace')
+            raise RuntimeError('Hand target was not verified through the later observation; see saved trace')
         return report
     except Exception as error:
         report['error'] = f'{type(error).__name__}: {error}'
@@ -117,8 +124,10 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--seconds', type=float, default=20)
     parser.add_argument('--motion', action='store_true', help='Initialize, preshape, observe and reopen; no arm targets')
-    parser.add_argument('--prepared-thumb', action='store_true',
+    shape = parser.add_mutually_exclusive_group()
+    shape.add_argument('--prepared-thumb', action='store_true',
                         help='At the initial arm pose, compare 45%% thumb bending instead of an open thumb')
+    shape.add_argument('--sdk-close', action='store_true', help='Compare the SDK close route at the initial arm pose')
     parser.add_argument('--force-limit', type=float, default=1.,
                         help='SDK normalized limit for all six hand groups during observation; initialization uses 1')
     args = parser.parse_args()
@@ -140,7 +149,7 @@ def main():
     robot = LbotDualArm(mode='sim')
     try:
         time.sleep(1)
-        run_motion(robot, args.output, args.seconds, args.prepared_thumb, args.force_limit)
+        run_motion(robot, args.output, args.seconds, args.prepared_thumb, args.force_limit, args.sdk_close)
         print('PASS: initial-pose hand observation and verified reopening; no grasp or score', flush=True)
     finally:
         robot.shutdown()

@@ -22,7 +22,7 @@ class HandHoldTests(unittest.TestCase):
         return SimpleNamespace(left_arm=SimpleNamespace(
             get_joint_angles=lambda: joints or [0.] * 7,
             get_pose=lambda: [[0., .222, -.6082], [0.] * 3], enable=Mock(return_value=True)),
-            left_hand=SimpleNamespace(set_force=Mock(return_value=True)))
+            left_hand=SimpleNamespace(set_force=Mock(return_value=True), close=Mock(return_value=True)))
 
     def test_noninitial_arm_is_rejected_before_hand_or_recorder_commands(self):
         robot = self.robot([.02] + [0.] * 6)
@@ -49,9 +49,11 @@ class HandHoldTests(unittest.TestCase):
             output = Path(temporary)
             recorder = SimpleNamespace(stdout=io.StringIO('HAND_TRACE_READY\n'), returncode=0,
                 communicate=Mock(return_value=('PASS: recorded\n', '')), poll=lambda: 0)
-            for failed, prepared, recovery_failed, limit in ((False, False, False, 1.), (True, False, False, 1.),
-                    (False, True, False, 1.), (False, False, True, 1.), (False, True, False, .05)):
-                pose = 'pinch_thumb_ready_without_pinky' if prepared else 'pinch_preshape_without_pinky'
+            for failed, prepared, recovery_failed, limit, sdk in ((False, False, False, 1., False),
+                    (True, False, False, 1., False), (False, True, False, 1., False),
+                    (False, False, True, 1., False), (False, True, False, .05, False),
+                    (False, False, False, .05, True), (True, False, False, .05, True)):
+                pose = 'close' if sdk else 'pinch_thumb_ready_without_pinky' if prepared else 'pinch_preshape_without_pinky'
                 frames = {}
                 for name, angle in targets(pose).items():
                     child, parent, origin, axis = HAND_JOINTS[name]
@@ -68,6 +70,7 @@ class HandHoldTests(unittest.TestCase):
                     return {'hand_arrival_verified': True}
                 recorder.stdout.seek(0)
                 robot = self.robot()
+                robot.left_hand.close.return_value = not failed
                 def initialize_hand(arm, destination):
                     if destination.name == 'hand-recovery' and recovery_failed:
                         raise RuntimeError('Reopening not verified')
@@ -77,11 +80,15 @@ class HandHoldTests(unittest.TestCase):
                         patch('rabokit_hand_hold.hand_command', side_effect=command) as hand:
                     if failed or recovery_failed:
                         with self.assertRaises(RuntimeError):
-                            run_motion(robot, output, prepared_thumb=prepared, force_limit=limit)
+                            run_motion(robot, output, prepared_thumb=prepared, force_limit=limit, sdk_close=sdk)
                     else:
-                        run_motion(robot, output, prepared_thumb=prepared, force_limit=limit)
-                self.assertEqual(hand.call_args_list[0].args[0], pose)
-                self.assertEqual(hand.call_args_list[0].kwargs.get('wait_arrival', False), not prepared)
+                        run_motion(robot, output, prepared_thumb=prepared, force_limit=limit, sdk_close=sdk)
+                if sdk:
+                    robot.left_hand.close.assert_called_once_with(blocking=False)
+                    self.assertTrue(all(call.args == ('open',) for call in hand.call_args_list))
+                else:
+                    self.assertEqual(hand.call_args_list[0].args[0], pose)
+                    self.assertEqual(hand.call_args_list[0].kwargs.get('wait_arrival', False), not prepared)
                 self.assertEqual(initialize.call_count, 1 if limit != 1. else 2)
                 if limit == 1.:
                     self.assertEqual(initialize.call_args.args[1], output/'hand-recovery')
