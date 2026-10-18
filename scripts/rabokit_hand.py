@@ -2,11 +2,12 @@
 """Publish SDK-equivalent left-hand targets; requires simulation hand force setup."""
 import argparse
 import json
+import math
 import os
 import time
 
 
-def targets(pose):
+def targets(pose, thumb_yaw=None):
     # Native radians observed on all 11 SDK /cmd topics in this scene, SDK 3.0.0.
     if pose == 'open':
         mcp, dip, yaw, pitch, ip = -.082, -.0837, .34705882352941186, -.0922, -.0872
@@ -19,20 +20,28 @@ def targets(pose):
     result.update(lh_thumb_cmc_yaw=yaw, lh_thumb_cmc_pitch=pitch, lh_thumb_ip=ip)
     if pose == 'close_without_pinky':
         result.update(lh_pinky_mcp_pitch=-.082, lh_pinky_dip=-.0837)
+    if thumb_yaw is not None:
+        if pose == 'open' or not math.isfinite(thumb_yaw) or not 0 <= thumb_yaw <= 1.3:
+            raise ValueError('Thumb yaw override requires closure and a finite angle in [0, 1.3] rad')
+        result['lh_thumb_cmc_yaw'] = thumb_yaw
     return result
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--pose', choices=('open', 'close', 'close_without_pinky'), required=True)
+    parser.add_argument('--thumb-yaw', type=float, help='Closure-only thumb CMC yaw target in native radians')
     args = parser.parse_args()
+    try:
+        values = targets(args.pose, args.thumb_yaw)
+    except ValueError as error:
+        parser.error(str(error))
     namespace = os.getenv('ROS2_NAMESPACE', '').strip('/')
     if not namespace:
         parser.error('Run only in the Rabokit simulation terminal')
     import rclpy
     from std_msgs.msg import Float64
 
-    values = targets(args.pose)
     rclpy.init()
     node = rclpy.create_node('competition_left_hand_targets')
     try:

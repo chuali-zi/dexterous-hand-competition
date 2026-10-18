@@ -129,6 +129,8 @@ def main():
     parser.add_argument('--seed-record', type=Path, help='Use the achieved contact joint branch from a prior grasp.json')
     parser.add_argument('--keep-pinky-open', action='store_true',
                         help='Close the other fingers while keeping the pinky at its measured open target')
+    parser.add_argument('--thumb-yaw', type=float,
+                        help='Closure-only native thumb CMC yaw target; leaves opening and other fingers unchanged')
     parser.add_argument('--side-camera', action='store_true',
                         help='Record synchronized side RGB at static stages for grasp visibility diagnosis')
     parser.add_argument('--inspect-pickup', action='store_true',
@@ -142,6 +144,14 @@ def main():
     args = parser.parse_args()
     if not os.getenv('ROS2_NAMESPACE'):
         parser.error('Run only in the Rabokit simulation terminal')
+    if args.thumb_yaw is not None:
+        if args.stage not in ('pickup', 'grasp'):
+            parser.error('--thumb-yaw requires pickup or grasp')
+        from rabokit_hand import targets
+        try:
+            targets('close', args.thumb_yaw)
+        except ValueError as error:
+            parser.error(str(error))
     if not math.isfinite(args.tool_clearance) or not 0 < args.tool_clearance <= .10:
         parser.error('--tool-clearance must be in (0, .10]')
     if not math.isfinite(args.tool_offset_y) or abs(args.tool_offset_y) > .02:
@@ -199,11 +209,16 @@ def main():
             for event in events:
                 if event.get('hand') == 'close':
                     event['hand'] = 'close_without_pinky'
+        if args.thumb_yaw is not None:
+            for event in events:
+                if event.get('hand') in ('close', 'close_without_pinky'):
+                    event['thumb_yaw_rad'] = args.thumb_yaw
         evidence_labels = ('inspection_low', 'inspection_followed') if args.inspect_pickup else ('lifted', 'followed')
         report = {'stage': args.stage, 'start': start, 'source_surface': surface,
                   'destination_surface': destination, 'events': events, 'reachability_checks': checks,
                   'tool_clearance_m': args.tool_clearance, 'completed': [], 'physical_grasp_verified': False,
                   'tool_offset_y_m': args.tool_offset_y,
+                  'thumb_yaw_override_rad': args.thumb_yaw,
                   'entry_yaw_deg': args.yaw_deg,
                   'seeded_path_checks': seeded_checks,
                   'side_camera_capture': args.side_camera,
@@ -241,7 +256,7 @@ def main():
                     save()
                     continue
                 if 'hand' in event:
-                    hand_command(event['hand'])
+                    hand_command(event['hand'], thumb_yaw=event.get('thumb_yaw_rad'))
                     time.sleep(1)
                     state = measured(arm)
                 elif 'reverse_of' in event:

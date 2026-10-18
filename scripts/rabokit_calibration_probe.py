@@ -134,9 +134,11 @@ def main():
             robot.shutdown()
 
 
-def hand_command(pose):
-    result = subprocess.run([sys.executable, str(Path(__file__).with_name('rabokit_hand.py')),
-                             '--pose', pose], capture_output=True, text=True, timeout=10)
+def hand_command(pose, thumb_yaw=None):
+    command = [sys.executable, str(Path(__file__).with_name('rabokit_hand.py')), '--pose', pose]
+    if thumb_yaw is not None:
+        command.extend(('--thumb-yaw', str(thumb_yaw)))
+    result = subprocess.run(command, capture_output=True, text=True, timeout=10)
     print(result.stdout + result.stderr, end='', flush=True)
     result.check_returncode()
 
