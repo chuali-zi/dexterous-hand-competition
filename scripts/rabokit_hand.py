@@ -176,6 +176,7 @@ def main():
         started = time.monotonic()
         deadline = started + (12 if wait_arrival else 1)
         stable_stamp = None
+        stable_errors = None
         feedback = None
         feedback_samples = []
         arrived = False
@@ -195,13 +196,19 @@ def main():
                 if (feedback['complete'] and feedback['maximum_error_rad'] < .03 and
                         feedback['stamp_min_sec'] > command_stamp and
                         feedback['stamp_max_sec'] - feedback['stamp_min_sec'] < .1):
-                    if stable_stamp is None:
+                    errors = feedback['joint_rotation_error_rad']
+                    # The high thumb can pass through its goal before overshooting.
+                    # Require the errors to remain nearly constant, not just small.
+                    if stable_stamp is None or (args.wait_arrival and any(
+                            abs(errors[name] - stable_errors[name]) > .005 for name in errors)):
                         stable_stamp = feedback['stamp_min_sec']
-                    if feedback['stamp_min_sec'] - stable_stamp >= .1:
+                        stable_errors = dict(errors)
+                    if feedback['stamp_min_sec'] - stable_stamp >= (1. if args.wait_arrival else .1):
                         arrived = True
                         break
                 else:
                     stable_stamp = None
+                    stable_errors = None
         print(json.dumps({'pose': args.pose, 'native_targets_rad': values,
                           'command_published': True, 'hand_arrival_verified': arrived,
                           'wall_seconds': time.monotonic() - started,

@@ -13,14 +13,15 @@ from rabokit_calibration_probe import hand_command, initialize_empty_hand
 
 
 class HandTargetsTests(unittest.TestCase):
-    def test_high_preshape_waits_for_late_fresh_arrival_without_republishing(self):
+    def high_wait(self, overshoot=False):
         clock, callbacks, published = [0.], [], []
         values = targets('pinch_preshape_without_pinky')
         def spin(node, timeout_sec):
             clock[0] += timeout_sec
             transforms = []
             for name, (child, parent, origin, axis) in HAND_JOINTS.items():
-                angle = values[name] - (.163 if name == 'lh_thumb_cmc_yaw' and clock[0] < 3 else 0.)
+                offset = .163 if clock[0] < 3 else -.07334 if overshoot and clock[0] >= 3.4 else 0.
+                angle = values[name] - (offset if name == 'lh_thumb_cmc_yaw' else 0.)
                 q = target_quaternion(origin, axis, angle)
                 transforms.append(SimpleNamespace(child_frame_id='r136d7b_link_'+child,
                     header=SimpleNamespace(frame_id='r136d7b_link_'+parent,
@@ -40,14 +41,29 @@ class HandTargetsTests(unittest.TestCase):
         with patch.dict(sys.modules, modules), patch.dict('os.environ', {'ROS2_NAMESPACE': 'test'}), \
                 patch.object(sys, 'argv', ['rabokit_hand.py', '--pose', 'pinch_preshape_without_pinky', '--wait-arrival']), \
                 patch('rabokit_hand.time.monotonic', side_effect=lambda: clock[0]), patch('builtins.print') as output:
-            main()
-        self.assertGreaterEqual(clock[0], 3.1)
-        self.assertLess(clock[0], 4.)
-        self.assertLess(max(published), 1.)
+            if overshoot:
+                with self.assertRaises(TimeoutError):
+                    main()
+            else:
+                main()
         record = json.loads(output.call_args.args[0])
+        return record, clock[0], published
+
+    def test_high_preshape_waits_for_late_fresh_arrival_without_republishing(self):
+        record, elapsed, published = self.high_wait()
+        self.assertGreaterEqual(elapsed, 4.)
+        self.assertLess(elapsed, 5.)
+        self.assertLess(max(published), 1.)
         self.assertTrue(record['hand_arrival_verified'])
         self.assertGreater(record['feedback_samples'][0]['maximum_error_rad'], .16)
         self.assertLess(record['feedback']['maximum_error_rad'], .03)
+
+    def test_short_goal_crossing_followed_by_measured_scale_overshoot_does_not_verify_settling(self):
+        record, elapsed, published = self.high_wait(overshoot=True)
+        self.assertGreaterEqual(elapsed, 12.)
+        self.assertLess(max(published), 1.)
+        self.assertFalse(record['hand_arrival_verified'])
+        self.assertAlmostEqual(record['feedback']['joint_rotation_error_rad']['lh_thumb_cmc_yaw'], .07334)
 
     def test_high_wait_is_forwarded_and_contact_wait_is_rejected(self):
         with patch('rabokit_calibration_probe.subprocess.run', return_value=SimpleNamespace(
