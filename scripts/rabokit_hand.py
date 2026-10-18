@@ -223,11 +223,11 @@ def main():
                     errors = feedback['joint_rotation_error_rad']
                     # The high thumb can pass through its goal before overshooting.
                     # Require the errors to remain nearly constant, not just small.
-                    if stable_stamp is None or (args.wait_arrival and any(
+                    if stable_stamp is None or ((args.wait_arrival or args.ramp_seconds) and any(
                             abs(errors[name] - stable_errors[name]) > .005 for name in errors)):
                         stable_stamp = feedback['stamp_min_sec']
                         stable_errors = dict(errors)
-                    if feedback['stamp_min_sec'] - stable_stamp >= (1. if args.wait_arrival else .1):
+                    if feedback['stamp_min_sec'] - stable_stamp >= (1. if args.wait_arrival or args.ramp_seconds else .1):
                         arrived = True
                         break
                 else:

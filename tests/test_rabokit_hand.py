@@ -73,9 +73,9 @@ class HandTargetsTests(unittest.TestCase):
             hand_command('pinch_thumb_ready_without_pinky', ramp_seconds=.5)
             self.assertEqual(run.call_args.args[0][-2:], ['--ramp-seconds', '0.5'])
 
-    def high_wait(self, overshoot=False):
+    def high_wait(self, overshoot=False, ramped_open=False):
         clock, callbacks, published = [0.], [], []
-        values = targets('pinch_preshape_without_pinky')
+        values = targets('open' if ramped_open else 'pinch_preshape_without_pinky')
         def spin(node, timeout_sec):
             clock[0] += timeout_sec
             transforms = []
@@ -98,8 +98,10 @@ class HandTargetsTests(unittest.TestCase):
                    'rclpy.qos': SimpleNamespace(qos_profile_sensor_data=object()),
                    'std_msgs.msg': SimpleNamespace(Float64=SimpleNamespace),
                    'tf2_msgs.msg': SimpleNamespace(TFMessage=object)}
+        arguments = ['rabokit_hand.py', '--pose', 'open', '--wait-open', '--ramp-seconds', '.5'] if ramped_open else \
+                    ['rabokit_hand.py', '--pose', 'pinch_preshape_without_pinky', '--wait-arrival']
         with patch.dict(sys.modules, modules), patch.dict('os.environ', {'ROS2_NAMESPACE': 'test'}), \
-                patch.object(sys, 'argv', ['rabokit_hand.py', '--pose', 'pinch_preshape_without_pinky', '--wait-arrival']), \
+                patch.object(sys, 'argv', arguments), \
                 patch('rabokit_hand.time.monotonic', side_effect=lambda: clock[0]), patch('builtins.print') as output:
             if overshoot:
                 with self.assertRaises(TimeoutError):
@@ -119,11 +121,12 @@ class HandTargetsTests(unittest.TestCase):
         self.assertLess(record['feedback']['maximum_error_rad'], .03)
 
     def test_short_goal_crossing_followed_by_measured_scale_overshoot_does_not_verify_settling(self):
-        record, elapsed, published = self.high_wait(overshoot=True)
-        self.assertGreaterEqual(elapsed, 12.)
-        self.assertLess(max(published), 1.)
-        self.assertFalse(record['hand_arrival_verified'])
-        self.assertAlmostEqual(record['feedback']['joint_rotation_error_rad']['lh_thumb_cmc_yaw'], .07334)
+        for ramped_open in (False, True):
+            record, elapsed, published = self.high_wait(overshoot=True, ramped_open=ramped_open)
+            self.assertGreaterEqual(elapsed, 12.)
+            self.assertLess(max(published), 1.1 if ramped_open else 1.)
+            self.assertFalse(record['hand_arrival_verified'])
+            self.assertAlmostEqual(record['feedback']['joint_rotation_error_rad']['lh_thumb_cmc_yaw'], .07334)
 
     def test_high_wait_is_forwarded_and_contact_wait_is_rejected(self):
         with patch('rabokit_calibration_probe.subprocess.run', return_value=SimpleNamespace(
