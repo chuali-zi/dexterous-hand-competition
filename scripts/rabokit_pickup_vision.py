@@ -23,7 +23,7 @@ def saved_scene(folder, colors=None):
 
 
 def target_observation(folder):
-    # Only the selected color changes; all original component and stereo thresholds remain in force.
+    # Select green using the same component and stereo checks as the whole scene.
     observation = saved_scene(folder, colors={'green'})
     green = [item for item in observation['matches'] if item['color'] == 'green']
     if observation['issues'] or len(green) != 1:
