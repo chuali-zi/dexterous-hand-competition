@@ -136,6 +136,18 @@ def translation_path(start, goal, inverse, forward, spacing=.01, joint_step_limi
     return pose_path(start, target, inverse, forward, spacing, joint_step_limit)
 
 
+def _pose_path_with_refinement(start, goal, inverse, forward, spacing):
+    path = pose_path(start, goal, inverse, forward, spacing=spacing)
+    if not path['continuous'] and spacing > .005:
+        refined = pose_path(start, goal, inverse, forward, spacing=.005)
+        if refined['continuous']:
+            refined['translation_refinement'] = {
+                'spacing_m': .005, 'coarse_failure_reason': path.get('reason'),
+                'coarse_failed_step': path.get('failed_step')}
+            return refined
+    return path
+
+
 def seeded_approach_plan(start, point, uncertainty, clearance, reference, stage, inverse, forward,
                          tool_offset_y=0., tool_offset_x=0.):
     """Keep accepted routes; retry a rejected route once with 5 mm translations."""
@@ -195,8 +207,9 @@ def _seeded_approach_plan(start, point, uncertainty, clearance, reference, stage
         target[:3, 3] = xyz
         if vertical:
             target[:3, :3] = np.eye(3)
-        path = pose_path({'joints': joints, 'pose': [current['position'], current['orientation']]},
-                         target, inverse, forward, spacing=spacing)
+        path = _pose_path_with_refinement(
+            {'joints': joints, 'pose': [current['position'], current['orientation']]},
+            target, inverse, forward, spacing)
         checks.append({'stage': name, **{key: value for key, value in path.items() if key != 'points'},
                        'point_count': len(path['points'])})
         if not path['continuous']:
@@ -233,8 +246,9 @@ def _seeded_approach_plan(start, point, uncertainty, clearance, reference, stage
             current = node('current', joints)
             target = np.asarray(forward(joints)).copy()
             target[:3, 3] = [point[0] - .08, point[1], point[2] + height_offset]
-            path = pose_path({'joints': joints, 'pose': [current['position'], current['orientation']]},
-                             target, inverse, forward, spacing=spacing)
+            path = _pose_path_with_refinement(
+                {'joints': joints, 'pose': [current['position'], current['orientation']]},
+                target, inverse, forward, spacing)
             checks.append({'stage': name, **{key: value for key, value in path.items() if key != 'points'},
                            'point_count': len(path['points'])})
             if not path['continuous']:

@@ -77,8 +77,11 @@ class JointPathTests(unittest.TestCase):
         reference = {'completed': [{'name': 'contact', 'measured': {
             'joints': [.14875, .08125, (point[2] + .04) * 20, 0., 0., 0., 0.]}}]}
         events, checks = seeded_approach_plan(start, point, .009, .04, reference, 'pickup', inverse, forward)
-        self.assertEqual(checks[0]['spacing_m'], .005)
-        self.assertIn('changed branch', checks[0]['coarse_plan_rejection'])
+        self.assertEqual(checks[0]['stage'], 'approached')
+        refinements = [check['translation_refinement'] for check in checks if 'translation_refinement' in check]
+        self.assertTrue(refinements)
+        self.assertTrue(all(check['spacing_m'] == .005 for check in refinements))
+        self.assertTrue(all('changed branch' in check['coarse_failure_reason'] for check in refinements))
         previous = start['joints']
         for event in events:
             if 'joints' in event:
