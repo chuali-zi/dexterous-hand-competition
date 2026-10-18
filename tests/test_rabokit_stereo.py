@@ -1,5 +1,6 @@
 """Stereo matching checks independent of ROS and scene object truth."""
 from pathlib import Path
+import math
 import sys
 from types import SimpleNamespace
 import unittest
@@ -36,6 +37,33 @@ class StereoTests(unittest.TestCase):
         rotation = ((1, 0, 0), (0, -1, 0), (0, 0, -1))
         return [Camera(name, (x, 0, 2), rotation, 400, 400, 160, 120, 320, 240, 'test')
                 for name, x in (('first', .5), ('second', 0))]
+
+    def test_rotated_green_surfaces_reconstruct_without_accepting_merged_red(self):
+        pairs, metadata = {}, {}
+        frames = {LEFT_ROOT: {'parent': 'world', 'xyz': [0, .1, 1], 'xyzw': [0, 0, 0, 1]},
+                  RIGHT_ROOT: {'parent': 'world', 'xyz': [0, -.1, 1], 'xyzw': [0, 0, 0, 1]}}
+        c, s = math.cos(math.pi / 6), math.sin(math.pi / 6)
+        for name, center, origin in (('first', 100, [.5, 0, 2]), ('second', 200, [0, 0, 2])):
+            rgb = bytearray(320 * 240 * 3)
+            for y in range(75, 126):
+                for x in range(center - 25, center + 26):
+                    u, v = (x - center) * c + (y - 100) * s, -(x - center) * s + (y - 100) * c
+                    if abs(u) < 16 and abs(v) < 16:
+                        rgb[(y * 320 + x) * 3:(y * 320 + x) * 3 + 3] = b'\0\xff\0'
+            for y in range(150, 160):
+                for x in range(30, 70):
+                    rgb[(y * 320 + x) * 3:(y * 320 + x) * 3 + 3] = b'\xff\0\0'
+            pairs[name] = (SimpleNamespace(width=320, height=240, encoding='rgb8', step=960, data=rgb), None)
+            metadata[name] = {'frame_id': name, 'width': 320, 'height': 240,
+                              'k': [400, 0, 160, 0, 400, 120, 0, 0, 1]}
+            frames[name] = {'parent': 'world', 'xyz': origin, 'xyzw': [1, 0, 0, 0]}
+        target = reconstruct(pairs, metadata, frames, colors={'green'})
+        self.assertEqual(target['issues'], [])
+        self.assertEqual([m['color'] for m in target['matches']], ['green'])
+        for actual, expected in zip(target['matches'][0]['colored_surface_point_sdk_m'], (.2, .1, -1)):
+            self.assertAlmostEqual(actual, expected)
+        self.assertFalse(target['physical_grasp_verified'])
+        self.assertTrue(reconstruct(pairs, metadata, frames)['issues'])
 
     def test_known_scalar_projection_recovers_sdk_surface_point(self):
         # World point (.2,.1,0); pinhole equations with z depth 2 m.
