@@ -78,7 +78,7 @@ def quiet_joint_window(samples):
             all(max(values) - min(values) < .0005 for values in zip(*(s[1] for s in samples))))
 
 
-def move_joint_pose(arm, joints, forward, settle=.2):
+def move_joint_pose(arm, joints, forward, settle=.2, require_settled=True):
     """Track a preplanned short joint segment using the existing tool-pose tolerances."""
     import numpy as np
 
@@ -109,12 +109,16 @@ def move_joint_pose(arm, joints, forward, settle=.2):
         while len(recent) > 1 and recent[0][0] < now - .6:
             recent.popleft()
         quiet = quiet_joint_window(recent)
-        if (np.linalg.norm(xyz - goal) < .003 and angle < .01 and
-                max(abs(a - b) for a, b in zip(state['joints'], joints)) < .01 and quiet):
+        arrived = (np.linalg.norm(xyz - goal) < .003 and angle < .01 and
+                   max(abs(a - b) for a, b in zip(state['joints'], joints)) < .01)
+        if arrived and not require_settled:
+            return {**state, 'tracking_corrections': corrections, 'settled_verified': False,
+                    'observed_tool_position_bounds': {'minimum': minimum.tolist(), 'maximum': maximum.tolist()}}
+        if arrived and quiet:
             if quiet_since is None:
                 quiet_since = time.monotonic()
             elif time.monotonic() - quiet_since >= settle:
-                return {**state, 'tracking_corrections': corrections,
+                return {**state, 'tracking_corrections': corrections, 'settled_verified': True,
                         'observed_tool_position_bounds': {'minimum': minimum.tolist(), 'maximum': maximum.tolist()}}
         else:
             quiet_since = None

@@ -4,11 +4,25 @@ import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from rabokit_grasp import make_plan, pickup_offset, preshape_fingers_plan, relocation
+from rabokit_grasp import high_pass_through_plan, make_plan, pickup_offset, preshape_fingers_plan, relocation
 from rabokit_pickup_vision import neighboring_layout, pickup_evidence
 
 
 class GraspPlanTests(unittest.TestCase):
+    def test_pass_through_only_marks_high_uncaptured_outbound_joint_points(self):
+        def point(name, z, capture=False):
+            return {'name': name, 'joints': [0.] * 7, 'position': [0., 0., z], 'capture': capture}
+        events = [{'name': 'opened', 'hand': 'open', 'capture': True}, point('high1', .3),
+                  point('snapshot', .3, True), point('low', .1), point('rising', .3), point('high2', .3),
+                  point('before_hand', .3),
+                  {'name': 'preshaped', 'hand': 'pinch_preshape_without_pinky', 'capture': True},
+                  point('after_hand', .3)]
+        original = [dict(e) for e in events]
+        result = high_pass_through_plan(events, {'pose': [[0., 0., .3], [0.] * 3]}, 0.)
+        self.assertEqual([e['name'] for e in result if e.get('pass_through')], ['high1', 'high2'])
+        self.assertEqual(events, original)
+        self.assertEqual([{k: v for k, v in e.items() if k != 'pass_through'} for e in result], original)
+
     def test_limited_pinch_uses_high_yaw_shape_and_symmetric_release_without_changing_arm_route(self):
         events, _ = make_plan(self.start, self.source, .009, 'pickup')
         release_index = next(i for i, e in enumerate(events) if e['name'] == 'source_release_position')

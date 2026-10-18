@@ -22,6 +22,24 @@ def pickup_offset(yaw, tool_offset_y=0., tool_offset_x=0.):
     return [-.08 * math.sin(yaw) - tool_offset_x, .08 * math.cos(yaw) - tool_offset_y]
 
 
+def high_pass_through_plan(events, start, surface_z):
+    """Mark only high outbound intermediate joints before hand prepositioning."""
+    previous = start['pose'][0]
+    outbound = True
+    result = []
+    for index, event in enumerate(events):
+        if 'hand' in event and event['name'] != 'opened':
+            outbound = False
+        if outbound and 'joints' in event and 'position' in event:
+            before_hand = index + 1 < len(events) and 'hand' in events[index + 1]
+            if (not event.get('capture') and not before_hand and
+                    min(previous[2], event['position'][2]) >= surface_z + .15):
+                event = {**event, 'pass_through': True}
+            previous = event['position']
+        result.append(event)
+    return result
+
+
 def preshape_fingers_plan(events, limited_pinch=False):
     """Descend half-shaped, prepare the thumb, and mirror that shape on release."""
     names = [event['name'] for event in events]
@@ -165,6 +183,8 @@ def main():
                         help='Seeded pickup: half-close fingers high, descend, then prepare thumb before closing')
     parser.add_argument('--limited-pinch', action='store_true',
                         help='Preshaped inspection only: preposition thumb yaw high, use 45%% thumb / 75%% finger closure')
+    parser.add_argument('--pass-through-high', action='store_true',
+                        help='Limited pinch only: advance high intermediate joints without a stop at every point')
     parser.add_argument('--side-camera', action='store_true',
                         help='Record synchronized side RGB at static stages for grasp visibility diagnosis')
     parser.add_argument('--inspect-pickup', action='store_true',
@@ -184,6 +204,8 @@ def main():
         parser.error('--preshape-fingers requires --seed-record, --stage pickup and --keep-pinky-open')
     if args.limited_pinch and not (args.preshape_fingers and args.inspect_pickup):
         parser.error('--limited-pinch requires --preshape-fingers and --inspect-pickup')
+    if args.pass_through_high and not args.limited_pinch:
+        parser.error('--pass-through-high requires --limited-pinch')
     if args.thumb_yaw is not None:
         if args.stage not in ('pickup', 'grasp'):
             parser.error('--thumb-yaw requires pickup or grasp')
@@ -252,6 +274,8 @@ def main():
         checks = check_plan(arm, start, events)
         if args.preshape_fingers:
             events = preshape_fingers_plan(events, limited_pinch=args.limited_pinch)
+        if args.pass_through_high:
+            events = high_pass_through_plan(events, start, point[2])
         if args.keep_pinky_open:
             for event in events:
                 if event.get('hand') == 'close':
@@ -272,6 +296,8 @@ def main():
                   'preshape_fingers_requested': args.preshape_fingers,
                   'limited_pinch_requested': args.limited_pinch,
                   'hand_ramp_seconds': 2. if args.limited_pinch else 0.,
+                  'pass_through_high_requested': args.pass_through_high,
+                  'pass_through_joint_count': sum(bool(e.get('pass_through')) for e in events),
                   'entry_yaw_deg': args.yaw_deg,
                   'seeded_path_checks': seeded_checks,
                   'fk_continuation_fallbacks': fk_continuations,
@@ -333,7 +359,8 @@ def main():
                     state = (move_joint_pose(arm, joint_targets[event['reverse_of']], forward)
                              if args.seed_record else return_joints(arm, joint_targets[event['reverse_of']]))
                 elif 'joints' in event:
-                    state = move_joint_pose(arm, event['joints'], forward, settle=.5 if event['capture'] else .2)
+                    state = move_joint_pose(arm, event['joints'], forward, settle=.5 if event['capture'] else .2,
+                                            require_settled=not event.get('pass_through', False))
                 else:
                     state = move_pose(arm, event['position'], event['orientation'])
                 joint_targets[event['name']] = state['joints']
