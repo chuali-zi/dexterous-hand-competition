@@ -1,5 +1,6 @@
 """The hand-only diagnostic preserves the arm pose and reopens after failed holding."""
 import io
+import inspect
 import json
 from pathlib import Path
 import subprocess
@@ -40,7 +41,8 @@ class HandHoldTests(unittest.TestCase):
             output = Path(temporary)
             recorder = SimpleNamespace(stdout=io.StringIO('HAND_TRACE_READY\n'), returncode=0,
                 communicate=Mock(return_value=('PASS: recorded\n', '')), poll=lambda: 0)
-            for failed, prepared in ((False, False), (True, False), (False, True)):
+            for failed, prepared, recovery_failed in ((False, False, False), (True, False, False),
+                                                       (False, True, False), (False, False, True)):
                 pose = 'pinch_thumb_ready_without_pinky' if prepared else 'pinch_preshape_without_pinky'
                 frames = {}
                 for name, angle in targets(pose).items():
@@ -57,11 +59,14 @@ class HandHoldTests(unittest.TestCase):
                         return {'hand_arrival_verified': True, 'feedback': {'stamp_max_sec': 1.}}
                     return {'hand_arrival_verified': True}
                 recorder.stdout.seek(0)
-                with patch('rabokit_hand_hold.initialize_empty_hand', return_value={
-                        'initialized': True, 'opened': {'hand_arrival_verified': True}}) as initialize, \
+                def initialize_hand(arm, destination):
+                    if destination.name == 'hand-recovery' and recovery_failed:
+                        raise RuntimeError('Reopening not verified')
+                    return {'initialized': True, 'opened': {'hand_arrival_verified': True}}
+                with patch('rabokit_hand_hold.initialize_empty_hand', side_effect=initialize_hand) as initialize, \
                         patch('rabokit_hand_hold.subprocess.Popen', return_value=recorder), \
                         patch('rabokit_hand_hold.hand_command', side_effect=command) as hand:
-                    if failed:
+                    if failed or recovery_failed:
                         with self.assertRaises(RuntimeError):
                             run_motion(self.robot(), output, prepared_thumb=prepared)
                     else:
@@ -71,7 +76,9 @@ class HandHoldTests(unittest.TestCase):
                 self.assertEqual(initialize.call_count, 2)
                 self.assertEqual(initialize.call_args.args[1], output/'hand-recovery')
                 saved = json.loads((output/'hold.json').read_text())
-                self.assertTrue(saved['reopened']['hand_arrival_verified'])
+                self.assertEqual('reopen_error' in saved, recovery_failed)
+                if not recovery_failed:
+                    self.assertTrue(saved['reopened']['hand_arrival_verified'])
                 self.assertTrue(saved['preshape_hold_verified'])
                 self.assertEqual('error' in saved, failed)
                 self.assertFalse(saved['arm_motion_commanded'])
@@ -96,9 +103,14 @@ class FrameTraceTests(unittest.TestCase):
                 header=SimpleNamespace(frame_id=parent, stamp=SimpleNamespace(sec=0, nanosec=int(clock[0]*1e9))),
                 transform=SimpleNamespace(translation=SimpleNamespace(x=0., y=0., z=0.),
                     rotation=SimpleNamespace(x=0., y=0., z=0., w=1.))) for child, parent in parents.items()])
-            callbacks['/test/tf'](msg)
-            if len(callbacks) == 3:
-                callbacks['/test/arm_left/lh_thumb_cmc_yaw/cmd'](SimpleNamespace(data=.62))
+            callbacks['/test/tf'](msg, {'source_timestamp': 3})
+            if '/test/arm_left/lh_thumb_cmc_yaw/cmd' in callbacks:
+                for joint, value in (('lh_thumb_cmc_yaw', .62), ('lh_thumb_cmc_pitch', .16403), ('lh_thumb_ip', .33328)):
+                    callbacks[f'/test/arm_left/{joint}/cmd'](SimpleNamespace(data=value), {'source_timestamp': 5})
+                callbacks['/test/arm_left/joint_states'](SimpleNamespace(
+                    name=['lh_thumb_cmc_yaw', 'prop_hidden'], position=[.42, 99.], velocity=[], effort=[],
+                    header=SimpleNamespace(stamp=SimpleNamespace(sec=0, nanosec=int(clock[0]*1e9)))),
+                    {'source_timestamp': 1})
         node = SimpleNamespace(create_subscription=subscribe, count_publishers=Mock(return_value=1),
                                get_publishers_info_by_topic=lambda topic: [],
                                destroy_node=Mock())
@@ -107,6 +119,7 @@ class FrameTraceTests(unittest.TestCase):
         modules = {'rclpy': ros, 'rclpy.qos': SimpleNamespace(DurabilityPolicy=SimpleNamespace(TRANSIENT_LOCAL=1),
             ReliabilityPolicy=SimpleNamespace(RELIABLE=1), QoSProfile=SimpleNamespace, qos_profile_sensor_data=sensor_qos),
             'tf2_msgs.msg': SimpleNamespace(TFMessage=object), 'std_msgs.msg': SimpleNamespace(Float64=object)}
+        modules['sensor_msgs.msg'] = SimpleNamespace(JointState=object)
         with patch.dict(sys.modules, modules), patch.dict('os.environ', {'ROS2_NAMESPACE': 'test'}), \
                 patch('rabokit_robot_frames.time.monotonic', side_effect=lambda: clock[0]), \
                 patch('builtins.print') as output:
@@ -116,7 +129,16 @@ class FrameTraceTests(unittest.TestCase):
         self.assertEqual(len(result['hand_samples'][0]['frames']), 11)
         self.assertTrue(all(row['value'] == .62 for row in result['yaw_commands']))
         self.assertTrue(result['yaw_commands'])
+        self.assertEqual({row['joint'] for row in result['thumb_commands']},
+                         {'lh_thumb_cmc_yaw', 'lh_thumb_cmc_pitch', 'lh_thumb_ip'})
         self.assertIs(qos_used['/test/arm_left/lh_thumb_cmc_yaw/cmd'], sensor_qos)
+        self.assertEqual(result['hand_joint_states'][0]['position'], {'lh_thumb_cmc_yaw': .42})
+        self.assertEqual(result['hand_joint_states'][0]['message_info']['source_timestamp'], 1)
+        self.assertEqual(next(iter(result['hand_samples'][0]['frames'].values()))['message_info']['source_timestamp'], 3)
+        self.assertEqual(result['yaw_commands'][0]['message_info']['source_timestamp'], 5)
+        for topic in ('/test/tf', '/test/arm_left/joint_states', '/test/arm_left/lh_thumb_cmc_yaw/cmd'):
+            with self.assertRaises(TypeError):
+                inspect.signature(callbacks[topic]).bind(object())
         output.assert_called_once_with('HAND_TRACE_READY', flush=True)
         node.destroy_node.assert_called_once()
         ros.try_shutdown.assert_called_once()

@@ -88,6 +88,12 @@ def run_motion(robot, output, seconds=20, prepared_thumb=False):
             report['reopen_error'] = f'{type(error).__name__}: {error}'
             raise
         finally:
+            if 'after' not in report:
+                try:
+                    report['after'] = measured(arm)
+                    report['arm_joint_drift_rad'] = max(abs(a-b) for a, b in zip(before['joints'], report['after']['joints']))
+                except RuntimeError as error:
+                    report['arm_feedback_error'] = str(error)
             report['wall_seconds'] = time.monotonic() - started
             (output / 'hold.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
 

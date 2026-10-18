@@ -28,20 +28,42 @@ def capture(seconds, trace_hand=False):
     node = rclpy.create_node('competition_robot_frames')
     frames = {}
     subscriptions = []
-    hand_samples, commands = [], []
+    hand_samples, commands, joint_samples = [], [], []
     started = time.monotonic()
     ready = False
+    def message_info(info):
+        return {key: info.get(key) for key in ('source_timestamp', 'received_timestamp',
+                'publication_sequence_number', 'reception_sequence_number')}
     if trace_hand:
         from rabokit_hand import HAND_JOINTS
         from std_msgs.msg import Float64
+        from sensor_msgs.msg import JointState
         hand_children = ['r136d7b_link_' + item[0] for item in HAND_JOINTS.values()]
         command_topic = f'{namespace}/arm_left/lh_thumb_cmc_yaw/cmd'
-        def receive_command(msg):
-            commands.append({'wall_seconds': time.monotonic() - started, 'value': msg.data})
+        command_topics = {name: f'{namespace}/arm_left/{name}/cmd'
+                          for name in ('lh_thumb_cmc_yaw', 'lh_thumb_cmc_pitch', 'lh_thumb_ip')}
+        def receive_command(name, msg, info):
+            commands.append({'wall_seconds': time.monotonic() - started, 'joint': name, 'value': msg.data,
+                             'message_info': message_info(info)})
         # Best-effort requests accept both reliable and best-effort publishers.
-        subscriptions.append(node.create_subscription(Float64, command_topic, receive_command, qos_profile_sensor_data))
+        for name, topic in command_topics.items():
+            callback = lambda msg, info, name=name: receive_command(name, msg, info)
+            subscriptions.append(node.create_subscription(Float64, topic, callback, qos_profile_sensor_data))
+        def receive_joints(msg, info):
+            elapsed = time.monotonic() - started
+            if joint_samples and elapsed - joint_samples[-1]['wall_seconds'] < .25:
+                return
+            indices = {name: i for i, name in enumerate(msg.name) if name in HAND_JOINTS and i < len(msg.position)}
+            joint_samples.append({'wall_seconds': elapsed,
+                'stamp': [msg.header.stamp.sec, msg.header.stamp.nanosec],
+                'position': {name: msg.position[i] for name, i in indices.items()},
+                'velocity': {name: msg.velocity[i] for name, i in indices.items() if i < len(msg.velocity)},
+                'effort': {name: msg.effort[i] for name, i in indices.items() if i < len(msg.effort)},
+                'message_info': message_info(info)})
+        subscriptions.append(node.create_subscription(JointState, f'{namespace}/arm_left/joint_states',
+                                                     receive_joints, qos_profile_sensor_data))
 
-    def receive(msg):
+    def receive(msg, info):
         for item in msg.transforms:
             parent, child = item.header.frame_id, item.child_frame_id
             if not robot_frame(child) or not (parent == 'world' or robot_frame(parent)):
@@ -50,6 +72,8 @@ def capture(seconds, trace_hand=False):
             frames[child] = {'parent': parent, 'xyz': [t.x, t.y, t.z],
                              'xyzw': [q.x, q.y, q.z, q.w],
                              'stamp': [item.header.stamp.sec, item.header.stamp.nanosec]}
+            if trace_hand and info is not None:
+                frames[child]['message_info'] = message_info(info)
 
     try:
         for topic, qos in (
@@ -57,7 +81,8 @@ def capture(seconds, trace_hand=False):
                                     reliability=ReliabilityPolicy.RELIABLE)),
             ('tf', qos_profile_sensor_data),
         ):
-            subscriptions.append(node.create_subscription(TFMessage, f'{namespace}/{topic}', receive, qos))
+            callback = receive if trace_hand else lambda msg: receive(msg, None)
+            subscriptions.append(node.create_subscription(TFMessage, f'{namespace}/{topic}', callback, qos))
         deadline = time.monotonic() + seconds
         while time.monotonic() < deadline:
             rclpy.spin_once(node, timeout_sec=0.1)
@@ -78,11 +103,20 @@ def capture(seconds, trace_hand=False):
                 'source': 'robot kinematics and manually installed camera; no object transforms',
                 'extrinsics_validated': False}
         if trace_hand:
-            report.update(hand_samples=hand_samples, yaw_commands=commands, yaw_command_topic=command_topic,
+            def publishers(topic):
+                return [{'node': item.node_name, 'namespace': item.node_namespace,
+                         'gid': list(item.endpoint_gid),
+                         'reliability': getattr(item.qos_profile.reliability, 'name', str(item.qos_profile.reliability))}
+                        for item in node.get_publishers_info_by_topic(topic)]
+            report.update(hand_samples=hand_samples,
+                          yaw_commands=[row for row in commands if row['joint'] == 'lh_thumb_cmc_yaw'],
+                          yaw_command_topic=command_topic, thumb_commands=commands,
+                          thumb_command_publishers={name: publishers(topic) for name, topic in command_topics.items()},
                           started_monotonic=started,
-                          yaw_publishers=[{'node': item.node_name, 'namespace': item.node_namespace,
-                              'reliability': getattr(item.qos_profile.reliability, 'name', str(item.qos_profile.reliability))}
-                              for item in node.get_publishers_info_by_topic(command_topic)])
+                          yaw_publishers=publishers(command_topic),
+                          hand_joint_states=joint_samples,
+                          tf_publishers=publishers(f'{namespace}/tf'),
+                          joint_state_publishers=publishers(f'{namespace}/arm_left/joint_states'))
         return report
     finally:
         node.destroy_node()
@@ -93,7 +127,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--seconds', type=float, default=4)
-    parser.add_argument('--hand-trace', action='store_true', help='Also record known hand TF and thumb-yaw commands; read-only')
+    parser.add_argument('--hand-trace', action='store_true', help='Record hand TF, JointState and native thumb commands; read-only')
     args = parser.parse_args()
     if not os.getenv('ROS2_NAMESPACE'):
         parser.error('Run in the Rabokit cloud simulation terminal')
