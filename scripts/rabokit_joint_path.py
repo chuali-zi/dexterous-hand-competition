@@ -26,6 +26,54 @@ def interpolate_rotation(start, goal, fraction):
     return start @ (np.eye(3) + math.sin(theta) * skew + (1 - math.cos(theta)) * (skew @ skew))
 
 
+def continuous_inverse(target, seed, inverse, forward, limits, fallbacks=None):
+    """Keep accepted SDK solutions; try bounded local FK solving after a branch jump."""
+    import numpy as np
+
+    seed = np.asarray(seed, dtype=float)
+    solved = inverse(target, seed.tolist())
+    valid = solved is not None and len(solved) == len(seed) and np.all(np.isfinite(solved))
+    jump = float(np.max(np.abs(np.asarray(solved) - seed))) if valid else None
+    if valid and jump <= .15 and all(lo <= value <= hi for value, (lo, hi) in zip(solved, limits)):
+        return list(solved)
+    lower = np.maximum(seed - .1499, [lo for lo, hi in limits])
+    upper = np.minimum(seed + .1499, [hi for lo, hi in limits])
+    if np.any(lower > upper):
+        return None
+    target = np.asarray(target, dtype=float)
+
+    def residual(joints):
+        actual = np.asarray(forward(joints.tolist()), dtype=float)
+        delta = target[:3, :3].T @ actual[:3, :3]
+        spin = np.array([delta[2, 1] - delta[1, 2], delta[0, 2] - delta[2, 0],
+                         delta[1, 0] - delta[0, 1]]) / 2
+        angle = math.acos(max(-1., min(1., float((np.trace(delta) - 1) / 2))))
+        position = actual[:3, 3] - target[:3, 3]
+        return np.r_[position / .003, spin / .01], float(np.linalg.norm(position)), angle
+
+    joints = np.clip(seed, lower, upper)
+    for _ in range(60):
+        error, position_error, angle_error = residual(joints)
+        if position_error < 1e-5 and angle_error < 1e-4:
+            if fallbacks is not None:
+                fallbacks.append({'sdk_joint_step_rad': jump,
+                                  'local_joint_step_rad': float(np.max(np.abs(joints - seed))),
+                                  'position_error_m': position_error, 'orientation_error_rad': angle_error})
+            return joints.tolist()
+        jacobian = np.column_stack([(residual(joints + np.eye(len(seed))[axis] * 1e-5)[0] - error) / 1e-5
+                                    for axis in range(len(seed))])
+        step = -np.linalg.lstsq(jacobian, error, rcond=1e-6)[0]
+        step *= min(1., .03 / max(float(np.max(np.abs(step))), 1e-12))
+        for scale in (1., .5, .25, .125):
+            candidate = np.clip(joints + scale * step, lower, upper)
+            if np.linalg.norm(residual(candidate)[0]) < np.linalg.norm(error):
+                joints = candidate
+                break
+        else:
+            return None
+    return None
+
+
 def pose_path(start, goal, inverse, forward, spacing=.01, joint_step_limit=.15):
     """Plan translation and rotation with seeded IK; never send controller commands."""
     import numpy as np

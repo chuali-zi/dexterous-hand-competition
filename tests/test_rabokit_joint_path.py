@@ -6,10 +6,38 @@ import unittest
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from rabokit_joint_path import interpolate_rotation, pickup_inspection_plan, pose_path, seeded_approach_plan, translation_path
+from rabokit_joint_path import continuous_inverse, interpolate_rotation, pickup_inspection_plan, pose_path, seeded_approach_plan, translation_path
 
 
 class JointPathTests(unittest.TestCase):
+    def test_fk_continuation_preserves_accepted_sdk_solution_without_extra_work(self):
+        solution = [.04, 0., 0., 0., 0., 0., 0.]
+        def unexpected_forward(joints):
+            self.fail('An accepted SDK result should not trigger local solving')
+        result = continuous_inverse(np.eye(4), [0.] * 7, lambda t, s: solution,
+                                    unexpected_forward, [(-1., 1.)] * 7)
+        self.assertEqual(result, solution)
+
+    def test_fk_continuation_recovers_a_close_pose_but_rejects_bounds(self):
+        def forward(joints):
+            pose = np.eye(4)
+            angle = joints[3]
+            pose[:3, :3] = [[np.cos(angle), -np.sin(angle), 0.],
+                            [np.sin(angle), np.cos(angle), 0.], [0., 0., 1.]]
+            pose[:3, 3] = joints[:3]
+            return pose
+        target = forward([.04, .02, .01, .07, 0., 0., 0.])
+        jumped = lambda t, s: [2.] * 7
+        recorded = []
+        solved = continuous_inverse(target, [0.] * 7, jumped, forward, [(-1., 1.)] * 7, recorded)
+        np.testing.assert_allclose(forward(solved), target, atol=1e-5)
+        self.assertLess(max(abs(value) for value in solved), .15)
+        self.assertEqual(len(recorded), 1)
+        self.assertIsNone(continuous_inverse(target, [0.] * 7, jumped, forward,
+                                            [(-.03, .03)] + [(-1., 1.)] * 6))
+        target[0, 3] = .2
+        self.assertIsNone(continuous_inverse(target, [0.] * 7, jumped, forward, [(-1., 1.)] * 7))
+
     def test_tool_xy_adjustment_keeps_source_and_source_return_consistent(self):
         def forward(joints):
             transform = np.eye(4)

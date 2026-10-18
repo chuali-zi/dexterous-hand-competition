@@ -188,18 +188,21 @@ def main():
         events, destination = make_plan(start, point, surface['half_pixel_perturbation_radius_m'],
                                         args.stage, args.tool_clearance, math.radians(args.yaw_deg))
         seeded_checks = None
+        fk_continuations = []
         if args.seed_record:
-            from rabokit_joint_path import seeded_approach_plan
+            from rabokit_joint_path import continuous_inverse, seeded_approach_plan
             from _robolib_core.arms import _lbot_kinematics as k
             forward = lambda joints: k.forward_kinematics('left', joints)
+            sdk_inverse = lambda target, seed: k.inverse_kinematics('left', target, seed_real=seed)
+            inverse = lambda target, seed: continuous_inverse(target, seed, sdk_inverse, forward,
+                                                              k.REAL_JOINT_LIMITS_LEFT, fk_continuations)
             events, seeded_checks = seeded_approach_plan(start, point, surface['half_pixel_perturbation_radius_m'],
                 args.tool_clearance, json.loads(args.seed_record.read_text(encoding='utf-8')), args.stage,
-                lambda target, seed: k.inverse_kinematics('left', target, seed_real=seed), forward,
+                inverse, forward,
                 tool_offset_y=args.tool_offset_y, tool_offset_x=args.tool_offset_x)
             if args.inspect_pickup:
                 from rabokit_joint_path import pickup_inspection_plan
-                events, inspection_checks = pickup_inspection_plan(events, point,
-                    lambda target, seed: k.inverse_kinematics('left', target, seed_real=seed), forward,
+                events, inspection_checks = pickup_inspection_plan(events, point, inverse, forward,
                     tool_offset_y=args.tool_offset_y, tool_offset_x=args.tool_offset_x)
                 seeded_checks.extend(inspection_checks)
             if any(not low <= value <= high for event in events if 'joints' in event
@@ -226,6 +229,7 @@ def main():
                   'thumb_yaw_override_rad': args.thumb_yaw,
                   'entry_yaw_deg': args.yaw_deg,
                   'seeded_path_checks': seeded_checks,
+                  'fk_continuation_fallbacks': fk_continuations,
                   'side_camera_capture': args.side_camera,
                   'inspection_requested': args.inspect_pickup, 'pickup_observation_stages': list(evidence_labels),
                   'official_score': None, 'path_note': 'SDK joint interpolation; sampled IK is not collision checking'}
