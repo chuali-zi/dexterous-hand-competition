@@ -23,7 +23,7 @@ def pickup_offset(yaw, tool_offset_y=0., tool_offset_x=0.):
 
 
 def preshape_fingers_plan(events):
-    """Keep the half-shape near bricks during both approach and withdrawal."""
+    """Descend half-shaped, approach with the thumb, then close together."""
     names = [event['name'] for event in events]
     if any(names.count(name) != 1 for name in ('aligned', 'contact', 'closed', 'released')) or not (
             names.index('aligned') < names.index('contact') < names.index('closed') < names.index('released')):
@@ -41,6 +41,9 @@ def preshape_fingers_plan(events):
         if event['name'] == 'aligned':
             staged.append({'name': 'preshaped', 'hand': 'preshape_without_pinky', 'capture': True,
                            'preshape_feedback_key': 'preshape_feedback'})
+        elif event['name'] == 'contact':
+            staged.append({'name': 'thumb_ready', 'hand': 'thumb_ready_without_pinky', 'capture': True,
+                           'preshape_feedback_key': 'thumb_ready_feedback'})
     return staged
 
 
@@ -152,9 +155,9 @@ def main():
     parser.add_argument('--keep-pinky-open', action='store_true',
                         help='Close the other fingers while keeping the pinky at its measured open target')
     parser.add_argument('--thumb-yaw', type=float,
-                        help='Closure-only native thumb CMC yaw target; leaves opening and other fingers unchanged')
+                        help='Native thumb CMC yaw closure endpoint; leaves opening and other fingers unchanged')
     parser.add_argument('--preshape-fingers', action='store_true',
-                        help='Seeded pickup: half-close index/middle/ring at high alignment before descending')
+                        help='Seeded pickup: half-close fingers high, descend, then prepare thumb before closing')
     parser.add_argument('--side-camera', action='store_true',
                         help='Record synchronized side RGB at static stages for grasp visibility diagnosis')
     parser.add_argument('--inspect-pickup', action='store_true',
@@ -246,7 +249,7 @@ def main():
                     event['hand'] = 'close_without_pinky'
         if args.thumb_yaw is not None:
             for event in events:
-                if event.get('hand') in ('close', 'close_without_pinky'):
+                if event.get('hand') in ('close', 'close_without_pinky', 'thumb_ready_without_pinky'):
                     event['thumb_yaw_rad'] = args.thumb_yaw
         evidence_labels = ('inspection_low', 'inspection_followed') if args.inspect_pickup else ('lifted', 'followed')
         report = {'stage': args.stage, 'start': start, 'source_surface': surface,
@@ -333,19 +336,20 @@ def main():
                 if event.get('preshape_feedback_key'):
                     from rabokit_hand import hand_feedback, targets
                     frames = json.loads((args.output / event['name'] / 'robot-frames.json').read_text(encoding='utf-8'))['frames']
-                    feedback = hand_feedback(frames, targets('preshape_without_pinky'))
+                    feedback = hand_feedback(frames, targets(event['hand'], event.get('thumb_yaw_rad')))
                     report[event['preshape_feedback_key']] = feedback
                     save()
                     if not feedback['complete'] or feedback['maximum_error_rad'] >= .03:
-                        raise RuntimeError(f'{event["name"]}: finger preshape did not reach its targets; arm continuation stopped')
-                if event['name'] == 'preshaped':
+                        raise RuntimeError(f'{event["name"]}: hand preshape did not reach its targets; arm continuation stopped')
+                if event['name'] in ('preshaped', 'thumb_ready'):
+                    observation_key = event['name'] + '_observation' if event['name'] == 'thumb_ready' else 'preshape_observation'
                     try:
-                        report['preshape_observation'] = target_observation(args.output / 'preshaped')
-                        if report['preshape_observation']['valid']:
-                            report['preshape_observation']['source_displacement_m'] = math.dist(
-                                point, report['preshape_observation']['point'])
+                        report[observation_key] = target_observation(args.output / event['name'])
+                        if report[observation_key]['valid']:
+                            report[observation_key]['source_displacement_m'] = math.dist(
+                                point, report[observation_key]['point'])
                     except (ValueError, KeyError, OSError) as error:
-                        report['preshape_observation'] = {'valid': False, 'reason': str(error)}
+                        report[observation_key] = {'valid': False, 'reason': str(error)}
                     save()
                 if event['name'] == evidence_labels[1]:
                     try:

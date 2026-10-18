@@ -63,12 +63,19 @@ def hand_feedback(frames, values):
 
 def targets(pose, thumb_yaw=None):
     # Native radians observed on all 11 SDK /cmd topics in this scene, SDK 3.0.0.
+    if pose == 'thumb_ready_without_pinky':
+        result = targets('preshape_without_pinky')
+        opened, closed = targets('open'), targets('close_without_pinky', thumb_yaw)
+        for name in result:
+            if name.startswith('lh_thumb_'):
+                result[name] = opened[name] + .45 * (closed[name] - opened[name])
+        return result
     if pose == 'open':
         mcp, dip, yaw, pitch, ip = -.082, -.0837, .34705882352941186, -.0922, -.0872
     elif pose in ('close', 'close_without_pinky', 'preshape_without_pinky'):
         mcp, dip, yaw, pitch, ip = 1.7, 1.53, .511764705882353, .4772, .8472
     else:
-        raise ValueError('Expected open, close, close_without_pinky or preshape_without_pinky')
+        raise ValueError('Expected open, close, close_without_pinky, preshape_without_pinky or thumb_ready_without_pinky')
     result = {f'lh_{finger}_{joint}': value for finger in ('index', 'middle', 'ring', 'pinky')
               for joint, value in (('mcp_pitch', mcp), ('dip', dip))}
     result.update(lh_thumb_cmc_yaw=yaw, lh_thumb_cmc_pitch=pitch, lh_thumb_ip=ip)
@@ -88,8 +95,9 @@ def targets(pose, thumb_yaw=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--pose', choices=('open', 'close', 'close_without_pinky', 'preshape_without_pinky'), required=True)
-    parser.add_argument('--thumb-yaw', type=float, help='Closure-only thumb CMC yaw target in native radians')
+    parser.add_argument('--pose', choices=('open', 'close', 'close_without_pinky', 'preshape_without_pinky',
+                                         'thumb_ready_without_pinky'), required=True)
+    parser.add_argument('--thumb-yaw', type=float, help='Thumb CMC yaw closure endpoint in native radians')
     parser.add_argument('--wait-open', action='store_true',
                         help='Require fresh robot TF to verify all open joints before returning')
     args = parser.parse_args()

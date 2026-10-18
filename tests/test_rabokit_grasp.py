@@ -9,7 +9,7 @@ from rabokit_pickup_vision import neighboring_layout, pickup_evidence
 
 
 class GraspPlanTests(unittest.TestCase):
-    def test_preshape_adds_only_one_high_capture_before_descent(self):
+    def test_preshape_prepares_fingers_high_and_thumb_at_contact_before_closing(self):
         events, _ = make_plan(self.start, self.source, .009, 'pickup')
         original = [dict(event) for event in events]
         staged = preshape_fingers_plan(events)
@@ -24,6 +24,12 @@ class GraspPlanTests(unittest.TestCase):
         self.assertEqual(released['hand'], 'preshape_without_pinky')
         self.assertEqual(released['preshape_feedback_key'], 'release_preshape_feedback')
         contact_index = next(i for i, e in enumerate(staged) if e['name'] == 'contact')
+        ready = staged[contact_index + 1]
+        self.assertEqual(ready['name'], 'thumb_ready')
+        self.assertEqual(ready['hand'], 'thumb_ready_without_pinky')
+        self.assertTrue(ready['capture'])
+        self.assertEqual(ready['preshape_feedback_key'], 'thumb_ready_feedback')
+        self.assertEqual(staged[contact_index + 2]['name'], 'closed')
         self.assertFalse(any(e.get('hand') == 'open' for e in staged[contact_index:]))
         self.assertEqual(events, original)
         with self.assertRaises(ValueError):

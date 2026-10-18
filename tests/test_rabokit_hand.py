@@ -27,6 +27,18 @@ class HandTargetsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             targets('support_without_pinky')
 
+    def test_thumb_preparation_uses_the_closure_endpoint_and_keeps_fingers_half_shaped(self):
+        opened, closed = targets('open'), targets('close_without_pinky', .62)
+        half, ready = targets('preshape_without_pinky'), targets('thumb_ready_without_pinky', .62)
+        for name, value in ready.items():
+            if name.startswith('lh_thumb_'):
+                self.assertAlmostEqual(value, opened[name] + .45 * (closed[name] - opened[name]))
+            else:
+                self.assertEqual(value, half[name])
+        for invalid in (float('nan'), -.01, 1.31):
+            with self.assertRaises(ValueError):
+                targets('thumb_ready_without_pinky', invalid)
+
     def test_empty_initialization_checks_closure_and_always_attempts_verified_reopening(self):
         arm = SimpleNamespace(get_joint_angles=lambda: [0.] * 7,
                               get_pose=lambda: [[0., .222, -.6082], [0.] * 3])
