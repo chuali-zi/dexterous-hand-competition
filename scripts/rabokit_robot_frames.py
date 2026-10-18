@@ -38,7 +38,8 @@ def capture(seconds, trace_hand=False):
         command_topic = f'{namespace}/arm_left/lh_thumb_cmc_yaw/cmd'
         def receive_command(msg):
             commands.append({'wall_seconds': time.monotonic() - started, 'value': msg.data})
-        subscriptions.append(node.create_subscription(Float64, command_topic, receive_command, 10))
+        # Best-effort requests accept both reliable and best-effort publishers.
+        subscriptions.append(node.create_subscription(Float64, command_topic, receive_command, qos_profile_sensor_data))
 
     def receive(msg):
         for item in msg.transforms:
@@ -78,7 +79,10 @@ def capture(seconds, trace_hand=False):
                 'extrinsics_validated': False}
         if trace_hand:
             report.update(hand_samples=hand_samples, yaw_commands=commands, yaw_command_topic=command_topic,
-                          started_monotonic=started)
+                          started_monotonic=started,
+                          yaw_publishers=[{'node': item.node_name, 'namespace': item.node_namespace,
+                              'reliability': getattr(item.qos_profile.reliability, 'name', str(item.qos_profile.reliability))}
+                              for item in node.get_publishers_info_by_topic(command_topic)])
         return report
     finally:
         node.destroy_node()

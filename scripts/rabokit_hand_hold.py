@@ -12,12 +12,15 @@ from rabokit_calibration_probe import hand_command, initialize_empty_hand, measu
 from rabokit_hand import hand_feedback, targets
 
 
-def run_motion(robot, output, seconds=20):
+def run_motion(robot, output, seconds=20, prepared_thumb=False):
     arm = robot.left_arm
     before = measured(arm)
     if any(abs(value) > .01 for value in before['joints']):
         raise ValueError('Hand hold diagnostic requires the tested initial arm pose')
-    report = {'before': before, 'arm_motion_commanded': False, 'official_score': None}
+    pose = 'pinch_thumb_ready_without_pinky' if prepared_thumb else 'pinch_preshape_without_pinky'
+    goals = targets(pose)
+    report = {'before': before, 'arm_motion_commanded': False, 'official_score': None,
+              'pose': pose, 'native_targets_rad': goals}
     trace = None
     ready_line = ''
     started = time.monotonic()
@@ -34,7 +37,10 @@ def run_motion(robot, output, seconds=20):
         report['preshape_command_wall_seconds'] = time.monotonic() - started
         report['preshape_command_monotonic'] = time.monotonic()
         try:
-            report['preshape_arrival'] = hand_command('pinch_preshape_without_pinky', wait_arrival=True)
+            if prepared_thumb:
+                hand_command(pose)
+            else:
+                report['preshape_arrival'] = hand_command(pose, wait_arrival=True)
         except (RuntimeError, subprocess.SubprocessError) as error:
             report['preshape_error'] = f'{type(error).__name__}: {error}'
         report['preshape_process_exit_wall_seconds'] = time.monotonic() - started
@@ -44,11 +50,20 @@ def run_motion(robot, output, seconds=20):
         if trace.returncode:
             raise RuntimeError(f'Hand recorder exited {trace.returncode}')
         data = json.loads((output / 'trace.json').read_text(encoding='utf-8'))
-        report['post_process_preshape'] = hand_feedback(data['frames'], targets('pinch_preshape_without_pinky'))
-        if (report.get('preshape_error') or not report['post_process_preshape']['complete'] or
-                report['post_process_preshape']['maximum_error_rad'] >= .03 or
-                report['post_process_preshape']['stamp_min_sec'] <
-                    report['preshape_arrival']['feedback']['stamp_max_sec'] + 1):
+        report['post_process_preshape'] = hand_feedback(data['frames'], goals)
+        last = report['post_process_preshape']
+        feedbacks = [hand_feedback(row['frames'], goals) for row in data['hand_samples']] + [last]
+        recent = [row for row in feedbacks if row['complete'] and last['complete'] and
+                  last['stamp_min_sec'] - 1.5 <= row['stamp_min_sec'] <= last['stamp_min_sec']]
+        report['post_process_wall_seconds'] = (data['started_monotonic'] +
+            data['hand_samples'][-1]['wall_seconds'] - report['preshape_process_exit_monotonic'])
+        report['preshape_hold_verified'] = bool(recent and
+            recent[-1]['stamp_min_sec'] - recent[0]['stamp_min_sec'] >= 1 and
+            report['post_process_wall_seconds'] >= 1 and
+            all(row['maximum_error_rad'] < .03 and row['stamp_max_sec'] - row['stamp_min_sec'] < .1 for row in recent) and
+            all(max(row['joint_rotation_error_rad'][name] for row in recent) -
+                min(row['joint_rotation_error_rad'][name] for row in recent) <= .005 for name in goals))
+        if report.get('preshape_error') or not report['preshape_hold_verified']:
             raise RuntimeError('Preshape was not verified through the later observation; see saved trace')
         return report
     except Exception as error:
@@ -63,7 +78,8 @@ def run_motion(robot, output, seconds=20):
                 trace.kill()
                 trace.communicate(timeout=3)
         try:
-            report['reopened'] = hand_command('open', wait_open=True)
+            report['recovery'] = initialize_empty_hand(arm, output / 'hand-recovery')
+            report['reopened'] = report['recovery']['opened']
             report['after'] = measured(arm)
             report['arm_joint_drift_rad'] = max(abs(a-b) for a, b in zip(before['joints'], report['after']['joints']))
             if report['arm_joint_drift_rad'] > .005:
@@ -81,6 +97,8 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--seconds', type=float, default=20)
     parser.add_argument('--motion', action='store_true', help='Initialize, preshape, observe and reopen; no arm targets')
+    parser.add_argument('--prepared-thumb', action='store_true',
+                        help='At the initial arm pose, compare 45%% thumb bending instead of an open thumb')
     args = parser.parse_args()
     if not 15 <= args.seconds <= 25:
         parser.error('--seconds must be in [15, 25]')
@@ -98,7 +116,7 @@ def main():
     robot = LbotDualArm(mode='sim')
     try:
         time.sleep(1)
-        run_motion(robot, args.output, args.seconds)
+        run_motion(robot, args.output, args.seconds, args.prepared_thumb)
         print('PASS: initial-pose hand observation and verified reopening; no grasp or score', flush=True)
     finally:
         robot.shutdown()
