@@ -138,8 +138,11 @@ def main():
         feedback = None
         arrived = False
         while time.monotonic() < deadline:
-            for name, pub in publishers.items():
-                pub.publish(Float64(data=values[name]))
+            # Preserve the original one-second command burst. Waiting for TF
+            # must not keep resubmitting goals throughout the observation.
+            if time.monotonic() - started < 1:
+                for name, pub in publishers.items():
+                    pub.publish(Float64(data=values[name]))
             rclpy.spin_once(node, timeout_sec=.05)
             if args.wait_open:
                 feedback = hand_feedback(frames, values)
@@ -155,7 +158,9 @@ def main():
                     stable_stamp = None
         print(json.dumps({'pose': args.pose, 'native_targets_rad': values,
                           'command_published': True, 'hand_arrival_verified': arrived,
-                          'wall_seconds': time.monotonic() - started, 'feedback': feedback}), flush=True)
+                          'wall_seconds': time.monotonic() - started,
+                          'feedback_start_stamp_sec': command_stamp,
+                          'stable_feedback_start_stamp_sec': stable_stamp, 'feedback': feedback}), flush=True)
         if args.wait_open and not arrived:
             raise TimeoutError('Open-hand TF did not reach all targets; no arm continuation permitted')
     finally:

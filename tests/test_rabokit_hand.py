@@ -6,11 +6,38 @@ from unittest.mock import patch
 from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from rabokit_hand import hand_feedback, targets
+from rabokit_hand import hand_feedback, main, targets
 from rabokit_calibration_probe import hand_command
 
 
 class HandTargetsTests(unittest.TestCase):
+    def test_open_feedback_timeout_stops_commands_after_the_original_burst(self):
+        clock, published = [0.], []
+        def spin(node, timeout_sec):
+            clock[0] += timeout_sec
+        publisher = SimpleNamespace(get_subscription_count=lambda: 1,
+                                    publish=lambda msg: published.append(clock[0]))
+        node = SimpleNamespace(
+            create_subscription=lambda *args: object(),
+            get_topic_names_and_types=lambda: [(f'/test/arm_left/{name}/cmd', ['std_msgs/msg/Float64'])
+                                               for name in targets('open')],
+            create_publisher=lambda *args: publisher, destroy_node=lambda: None)
+        ros = SimpleNamespace(init=lambda: None, create_node=lambda name: node,
+                              spin_once=spin, shutdown=lambda: None)
+        modules = {'rclpy': ros, 'rclpy.qos': SimpleNamespace(qos_profile_sensor_data=object()),
+                   'std_msgs.msg': SimpleNamespace(Float64=SimpleNamespace),
+                   'tf2_msgs.msg': SimpleNamespace(TFMessage=object)}
+        with patch.dict(sys.modules, modules), patch.dict('os.environ', {'ROS2_NAMESPACE': 'test'}), \
+                patch.object(sys, 'argv', ['rabokit_hand.py', '--pose', 'open', '--wait-open']), \
+                patch('rabokit_hand.time.monotonic', side_effect=lambda: clock[0]), \
+                patch('builtins.print') as output:
+            with self.assertRaises(TimeoutError):
+                main()
+        self.assertTrue(published)
+        self.assertLess(max(published), 1.)
+        self.assertGreaterEqual(clock[0], 12.)
+        self.assertIn('"hand_arrival_verified": false', output.call_args.args[0])
+
     def test_robot_tf_checks_native_open_rotations_including_fixed_mounts(self):
         # Actual empty-hand TF, native-03 opened, not an angle-generated fixture.
         frames = {
