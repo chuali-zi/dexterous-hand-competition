@@ -4,6 +4,7 @@ import argparse
 import json
 import math
 import os
+from pathlib import Path
 import time
 
 
@@ -124,6 +125,8 @@ def main():
     parser.add_argument('--thumb-yaw', type=float, help='Thumb CMC yaw closure endpoint in native radians')
     parser.add_argument('--ramp-seconds', type=float, default=0.,
                         help='Ramp over [0,3] robot TF simulation seconds, then publish the endpoint for at least 0.5 seconds')
+    parser.add_argument('--trace-output', type=Path,
+                        help='Record known hand joint feedback during the ramp without extending it')
     waiting = parser.add_mutually_exclusive_group()
     waiting.add_argument('--wait-open', action='store_true',
                         help='Require fresh robot TF to verify all open joints before returning')
@@ -132,6 +135,8 @@ def main():
     args = parser.parse_args()
     if not math.isfinite(args.ramp_seconds) or not 0 <= args.ramp_seconds <= 3:
         parser.error('--ramp-seconds must be in [0,3]')
+    if args.trace_output and (not args.ramp_seconds or args.trace_output.exists()):
+        parser.error('--trace-output requires a ramp and a new output file')
     if args.wait_open and args.pose != 'open':
         parser.error('--wait-open requires --pose open; a blocked grasp need not reach its closure targets')
     if args.wait_arrival and args.pose not in ('preshape_without_pinky', 'pinch_preshape_without_pinky',
@@ -150,6 +155,10 @@ def main():
 
     rclpy.init()
     node = rclpy.create_node('competition_left_hand_targets')
+    trace_started = time.monotonic()
+    trace = {'pose': args.pose, 'native_targets_rad': values, 'ramp_seconds': args.ramp_seconds,
+             'ramp_start_rad': None, 'command_start_stamp_sec': None,
+             'command_complete': False, 'joint_samples': []}
     try:
         frames = {}
         if wait_arrival or args.ramp_seconds:
@@ -165,6 +174,18 @@ def main():
                             'stamp': [item.header.stamp.sec, item.header.stamp.nanosec]}
             subscription = node.create_subscription(TFMessage, f'/{namespace}/tf', receive,
                                                      qos_profile_sensor_data)
+        if args.trace_output:
+            from sensor_msgs.msg import JointState
+            def receive_joints(msg):
+                indices = {name: i for i, name in enumerate(msg.name)
+                           if name in HAND_JOINTS and i < len(msg.position)}
+                trace['joint_samples'].append({'wall_seconds': time.monotonic()-trace_started,
+                    'stamp': [msg.header.stamp.sec, msg.header.stamp.nanosec],
+                    'position': {name: msg.position[i] for name, i in indices.items()},
+                    'velocity': {name: msg.velocity[i] for name, i in indices.items() if i < len(msg.velocity)},
+                    'effort': {name: msg.effort[i] for name, i in indices.items() if i < len(msg.effort)}})
+            joint_subscription = node.create_subscription(JointState, f'/{namespace}/arm_left/joint_states',
+                                                         receive_joints, qos_profile_sensor_data)
         topics = {name: f'/{namespace}/arm_left/{name}/cmd' for name in values}
         deadline = time.monotonic() + 3
         available = dict(node.get_topic_names_and_types())
@@ -196,6 +217,7 @@ def main():
                                                frames['r136d7b_link_' + child]['xyzw'])
                 ramp_start[name] = math.remainder(2 * math.atan2(relative[axis], relative[3]), 2 * math.pi)
         command_stamp = max((f['stamp'][0] + f['stamp'][1] * 1e-9 for f in frames.values()), default=-1.)
+        trace.update(command_start_stamp_sec=command_stamp, ramp_start_rad=ramp_start)
         started = time.monotonic()
         command_seconds = max(1., args.ramp_seconds + .5)
         deadline = started + (12 if wait_arrival or ramp_start else command_seconds)
@@ -258,9 +280,18 @@ def main():
             raise TimeoutError('Hand TF did not reach all targets; no arm continuation permitted')
         if ramp_start and not wait_arrival and not command_complete:
             raise TimeoutError('Simulation did not complete the ramp publication window within 12 wall seconds')
+        trace['command_complete'] = True
+    except Exception as error:
+        trace['error'] = f'{type(error).__name__}: {error}'
+        raise
     finally:
-        node.destroy_node()
-        rclpy.shutdown()
+        try:
+            if args.trace_output:
+                args.trace_output.parent.mkdir(parents=True, exist_ok=True)
+                args.trace_output.write_text(json.dumps(trace, indent=2)+'\n', encoding='utf-8')
+        finally:
+            node.destroy_node()
+            rclpy.shutdown()
 
 
 if __name__ == '__main__':

@@ -86,7 +86,7 @@ class HandTargetsTests(unittest.TestCase):
             self.assertEqual(run.call_args.args[0][-2:], ['--ramp-seconds', '0.5'])
             self.assertEqual(run.call_args.kwargs['timeout'], 25)
 
-    def high_wait(self, overshoot=False, ramped_open=False, pose='pinch_preshape_without_pinky'):
+    def high_wait(self, overshoot=False, ramped_open=False, pose='pinch_preshape_without_pinky', record_ramp=False):
         clock, callbacks, published = [0.], [], []
         values = targets('open' if ramped_open else pose)
         def spin(node, timeout_sec):
@@ -101,6 +101,12 @@ class HandTargetsTests(unittest.TestCase):
                         stamp=SimpleNamespace(sec=int(clock[0]), nanosec=int((clock[0] % 1)*1e9))),
                     transform=SimpleNamespace(rotation=SimpleNamespace(x=q[0], y=q[1], z=q[2], w=q[3]))))
             callbacks[0](SimpleNamespace(transforms=transforms))
+            if record_ramp:
+                names = [*values, 'unrelated_joint']
+                callbacks[1](SimpleNamespace(name=names,
+                    header=SimpleNamespace(stamp=SimpleNamespace(sec=int(clock[0]), nanosec=int((clock[0] % 1)*1e9))),
+                    position=[values.get(name, 999.) for name in names], velocity=[0.] * len(names),
+                    effort=[1. if clock[0] < 3 else 0.] * len(names)))
         publisher = SimpleNamespace(get_subscription_count=lambda: 1,
                                     publish=lambda msg: published.append(clock[0]))
         node = SimpleNamespace(create_subscription=lambda kind, topic, callback, qos: callbacks.append(callback),
@@ -110,19 +116,44 @@ class HandTargetsTests(unittest.TestCase):
                         spin_once=spin, shutdown=lambda: None),
                    'rclpy.qos': SimpleNamespace(qos_profile_sensor_data=object()),
                    'std_msgs.msg': SimpleNamespace(Float64=SimpleNamespace),
+                   'sensor_msgs.msg': SimpleNamespace(JointState=object),
                    'tf2_msgs.msg': SimpleNamespace(TFMessage=object)}
         arguments = ['rabokit_hand.py', '--pose', 'open', '--wait-open', '--ramp-seconds', '.5'] if ramped_open else \
                     ['rabokit_hand.py', '--pose', pose, '--wait-arrival']
-        with patch.dict(sys.modules, modules), patch.dict('os.environ', {'ROS2_NAMESPACE': 'test'}), \
-                patch.object(sys, 'argv', arguments), \
-                patch('rabokit_hand.time.monotonic', side_effect=lambda: clock[0]), patch('builtins.print') as output:
-            if overshoot:
-                with self.assertRaises(TimeoutError):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parents[1] / 'runs') as folder:
+            trace_path = Path(folder) / 'command.json'
+            if record_ramp:
+                arguments.extend(('--ramp-seconds', '.5', '--trace-output', str(trace_path)))
+            with patch.dict(sys.modules, modules), patch.dict('os.environ', {'ROS2_NAMESPACE': 'test'}), \
+                    patch.object(sys, 'argv', arguments), \
+                    patch('rabokit_hand.time.monotonic', side_effect=lambda: clock[0]), patch('builtins.print') as output:
+                if overshoot:
+                    with self.assertRaises(TimeoutError):
+                        main()
+                else:
                     main()
-            else:
-                main()
+            trace = json.loads(trace_path.read_text()) if record_ramp else None
         record = json.loads(output.call_args.args[0])
+        if record_ramp:
+            record['saved_trace'] = trace
         return record, clock[0], published
+
+    def test_command_trace_retains_transient_load_and_partial_feedback_on_timeout(self):
+        for overshoot in (False, True):
+            record, elapsed, _ = self.high_wait(overshoot=overshoot, record_ramp=True)
+            trace = record['saved_trace']
+            self.assertEqual(trace['command_complete'], not overshoot)
+            if overshoot:
+                self.assertIn('error', trace)
+            else:
+                self.assertNotIn('error', trace)
+            self.assertIsNotNone(trace['command_start_stamp_sec'])
+            self.assertEqual(set(trace['ramp_start_rad']), set(HAND_JOINTS))
+            self.assertTrue(all(set(row['position']) == set(HAND_JOINTS) for row in trace['joint_samples']))
+            effort = [row['effort']['lh_thumb_cmc_yaw'] for row in trace['joint_samples']]
+            self.assertEqual(set(effort), {0., 1.})
+            self.assertEqual(effort[-1], 0.)
+            self.assertLess(elapsed, 12.1 if overshoot else 5.)
 
     def test_high_preshape_waits_for_late_fresh_arrival_without_republishing(self):
         record, elapsed, published = self.high_wait()

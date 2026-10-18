@@ -359,7 +359,9 @@ def main():
                     feedback = hand_command(event['hand'], thumb_yaw=event.get('thumb_yaw_rad'),
                                             wait_open=event.get('wait_open', False),
                                             wait_arrival=event.get('wait_arrival', False),
-                                            ramp_seconds=event.get('hand_ramp_seconds', report['hand_ramp_seconds']))
+                                            ramp_seconds=event.get('hand_ramp_seconds', report['hand_ramp_seconds']),
+                                            trace_output=(args.output / 'closed-command.json'
+                                                if args.limited_pinch and event['name'] == 'closed' else None))
                     if not (event.get('wait_open') or event.get('wait_arrival')):
                         time.sleep(1)
                     state = measured(arm)

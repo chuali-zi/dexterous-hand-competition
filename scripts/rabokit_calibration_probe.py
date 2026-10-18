@@ -134,12 +134,14 @@ def main():
             robot.shutdown()
 
 
-def hand_command(pose, thumb_yaw=None, wait_open=False, wait_arrival=False, ramp_seconds=0.):
+def hand_command(pose, thumb_yaw=None, wait_open=False, wait_arrival=False, ramp_seconds=0., trace_output=None):
     command = [sys.executable, str(Path(__file__).with_name('rabokit_hand.py')), '--pose', pose]
     if thumb_yaw is not None:
         command.extend(('--thumb-yaw', str(thumb_yaw)))
     if ramp_seconds:
         command.extend(('--ramp-seconds', str(ramp_seconds)))
+    if trace_output is not None:
+        command.extend(('--trace-output', str(trace_output)))
     if wait_open:
         command.append('--wait-open')
     if wait_arrival:
