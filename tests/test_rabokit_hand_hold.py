@@ -101,12 +101,14 @@ class HandHoldTests(unittest.TestCase):
                     self.assertEqual(hand.call_args_list[0].kwargs['thumb_yaw'], yaw)
                     self.assertEqual(hand.call_args_list[0].kwargs['ramp_seconds'], .5 if yaw is not None else 0.)
                     self.assertEqual(hand.call_args_list[0].kwargs.get('wait_arrival', False), not prepared)
-                self.assertEqual(initialize.call_count, 1 if limit != 1. else 2)
-                if limit == 1.:
+                self.assertEqual(initialize.call_count, 1 if limit != 1. or yaw is not None else 2)
+                if limit == 1. and yaw is None:
                     self.assertEqual(initialize.call_args.args[1], output/'hand-recovery')
                 else:
                     self.assertEqual(hand.call_args.args, ('open',))
                     self.assertTrue(hand.call_args.kwargs['wait_open'])
+                    if yaw is not None:
+                        self.assertEqual(hand.call_args.kwargs['ramp_seconds'], .5)
                 self.assertEqual(robot.left_hand.set_force.call_args.args, ([limit]*6,))
                 saved = json.loads((output/'hold.json').read_text())
                 self.assertEqual(saved['native_targets_rad'], targets(pose, yaw))

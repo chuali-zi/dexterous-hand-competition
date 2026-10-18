@@ -99,7 +99,10 @@ def run_motion(robot, output, seconds=20, prepared_thumb=False, force_limit=1., 
                 trace.kill()
                 trace.communicate(timeout=3)
         try:
-            if report.get('force_limit_request_accepted') and force_limit != 1.:
+            if ramp_seconds:
+                report['recovery_kind'] = 'direct_ramped_open'
+                report['reopened'] = hand_command('open', wait_open=True, ramp_seconds=ramp_seconds)
+            elif report.get('force_limit_request_accepted') and force_limit != 1.:
                 report['recovery_kind'] = 'direct_open_after_force_limit_request'
                 report['reopened'] = hand_command('open', wait_open=True)
             else:
