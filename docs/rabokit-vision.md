@@ -467,3 +467,28 @@ python competition/scripts/rabokit_stereo.py --output /tmp/brick-rgb-640-01
 本地新增显式 `--thumb-yaw`：只覆盖闭指的 `lh_thumb_cmc_yaw`，张手释放保留原目标，事件和报告记录覆盖角度。手部入口按厂商 O6 URDF 的 `[0,1.3]` rad 做有限数值检查，拒绝张手覆盖；抓取入口仅允许 pickup/grasp，默认无覆盖。通过必要的手部、抓取、标定与观察共 **19 项**本地测试，语法及参数帮助检查通过，另外 3 项非法调用在创建输出目录及初始化 ROS/控制器前拒绝。尚未做本次代码的云端测试。
 
 下一次仅检查这一个候选：`--stage pickup --plan-only --tool-clearance .035 --tool-offset-y .007 --thumb-yaw .62 --seed-record /tmp/brick-inspected-pickup-035-01/grasp.json --keep-pinky-open --side-camera --inspect-pickup`。先用保存输入在停止仿真时检查 SDK 完整路线，再决定必要的实时验证。此前 3.5 cm 的 initial 至 settled 相机时间戳约相差 **867 秒（14.45 分钟）**；这是仿真时间，不能当作实际计费时长或保证新的运行耗时。当前没有发起新的云端接触或宣称抓取成功。
+
+### 拇指 0.62 / Y +7 mm 候选的云端检查及一次实测
+
+先确认场景停止、两个云端仓库干净，640 RGB 和 3.5 cm 接触参考仍在。网络 `pull --ff-only` 在 40 秒上限以 **124** 超时，未将其记为同步成功；随后通过本地从 `a4fbc02` 到 `4bf72c5` 的增量 Git bundle 快进至同一提交，没有修改远端。云端必要的手部、抓取、标定与观察 **19 项**测试退出 0，语法检查退出 0。
+
+仿真停止时，仅用保存的 640 RGB、上次 restored 起始关节和上次 contact 参考调用 SDK FK/IK 及生产规划器，未构造控制器。`THUMB_ROUTE_EXIT=0`：**500 个计划事件**，最大相邻关节步长约 **0.14966838 rad**；SDK 关节限制、低位/两高度观察位置、原位张手顺序及反向引用均通过。检查结果已取回本地 `runs/brick-rgb-640-01/thumb-route-check.json`。该检查不证明实际避碰或抓持。
+
+只安排一次实际试验，启动仿真且关闭自动运行平台入口，确认输出目录不存在、无旧控制器后执行：
+
+```bash
+python competition/scripts/rabokit_grasp.py --output /tmp/brick-thumb062-y007-01 \
+  --stage pickup --tool-clearance .035 --tool-offset-y .007 --thumb-yaw .62 \
+  --seed-record /tmp/brick-inspected-pickup-035-01/grasp.json \
+  --keep-pinky-open --side-camera --inspect-pickup
+```
+
+实时初始 RGB 完整匹配 10 块，重新规划通过后才启用运动；实际源码 `4bf72c5`。进程始终为同一 PID 17822，没有重启或追加候选。实际 `THUMB_PICKUP_EXIT=1`，500 个计划事件及最终 restored 共 **501 条**完成记录，58 段使用有界反馈修正，`return_completed` 和 `motion_sequence_completed` 均为 true；最大最终关节残差约 **5.89e-5 rad**。实际 contact 工具高度相对本轮初始 RGB 表面约 **35.202 mm**；拇指本体偏航在 closed/lifted 约 **0.6141/0.6192 rad**，与 0.62 目标接近，但不表示接触或受力已验证。
+
+两个观察高度都获得有效绿色双目点，且均为 SDK `(0.235013746,0.144213272,-0.503613489)` m。工具移动约 **48.817 mm**，绿色点保持不变；最小离地估计 **2.555 mm**、随动误差 **48.817 mm**、工具附着误差 **254.105 mm**，原判定明确拒绝抓持。绿色点相对同轮初始 RGB 的 XYZ 估计变化约 `(+5.709,+63.660,+2.555)` mm，平面约 **63.916 mm**；这些是 RGB 几何估计，不是物体位姿真值，也不能仅凭该结果确定推动发生在接近还是闭指瞬间。
+
+final/settled 两次完整布局都只接受 **7 个匹配**（蓝 2、黄 3、红 1、绿 1），并报告两台俯视均有被拒色块。原邻砖、放回及最终一致性判定均未通过。两次局部绿色估计虽与观察位相同，也不能绕过完整布局失败。实际最终相机 PNG 的编辑器预览显示绿色离开原位、邻近红色区域连在一起；不能根据红色接受数量从 4 降为 1 就断言有三块红砖实际移动。
+
+程序完整返回并退出后立即停止仿真，停止操作时界面仿真时钟约 **15 分半**；这不是账单时长或费用。随后确认“启动仿真”“无修改”，无遗留本轮抓取控制器，两个仓库干净；未更改原照明/物理条件，双目保持 640×480、侧视保持原值。错误为 `RGB did not verify clean pickup and release; measured return completed`，SDK 退出仍有 Destroyable 清理警告。
+
+完整 **97 个 JSON** 已取回本地 `runs/brick-thumb062-y007-01/`，另保存 `result-summary.json`、实际错误尾部、`stopped-scene.png` 和实际最终 RGB 文件的 `final-rgb-preview.png`。后者是原图编辑器的界面截图，不是原始 PNG；原始 RGB 仍在云端输出目录。本轮仅该一次接触试验，结果是否定的，不原样重跑。下一步先在本地复核开口、接近和闭指阶段的本体包络与目标推动方向，不能把静态名义包覆当作实际抓持。
