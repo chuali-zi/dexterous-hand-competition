@@ -9,6 +9,24 @@ from rabokit_pickup_vision import neighboring_layout, pickup_evidence
 
 
 class GraspPlanTests(unittest.TestCase):
+    def test_empty_closure_comparison_restores_high_shape_before_any_descent(self):
+        events, _ = make_plan(self.start, self.source, .009, 'pickup')
+        old = preshape_fingers_plan(events, limited_pinch=True, prepare_thumb_high=True)
+        new = preshape_fingers_plan(events, limited_pinch=True, prepare_thumb_high=True,
+                                   compare_empty_closure=True)
+        names = [e['name'] for e in new]
+        i = names.index('preshaped')
+        self.assertEqual(names[i:i+4], ['preshaped', 'empty_closed', 'empty_reprepared', 'approached'])
+        self.assertEqual([e for e in new if e['name'] not in ('empty_closed', 'empty_reprepared')], old)
+        baseline, restored = new[i+1:i+3]
+        self.assertEqual(baseline['hand'], 'pinch_without_pinky')
+        self.assertEqual(baseline['preshape_feedback_key'], 'empty_closed_feedback')
+        self.assertEqual(restored['hand'], new[i]['hand'])
+        self.assertTrue(restored['wait_arrival'])
+        self.assertTrue(all(e['hand_only'] and e['hand_ramp_seconds'] == 2. for e in (baseline, restored)))
+        with self.assertRaises(ValueError):
+            preshape_fingers_plan(events, limited_pinch=True, compare_empty_closure=True)
+
     def test_high_thumb_preparation_changes_only_the_high_hand_event(self):
         events, _ = make_plan(self.start, self.source, .009, 'pickup')
         old = preshape_fingers_plan(events, limited_pinch=True)

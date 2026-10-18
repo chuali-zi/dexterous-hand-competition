@@ -9,10 +9,29 @@ from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from rabokit_hand import HAND_JOINTS, hand_feedback, main, preparation_feedback, target_quaternion, targets
-from rabokit_calibration_probe import hand_command, initialize_empty_hand
+from rabokit_calibration_probe import hand_command, initialize_empty_hand, sample
 
 
 class HandTargetsTests(unittest.TestCase):
+    def test_hand_only_sample_skips_cameras_and_still_rejects_arm_drift(self):
+        before = {'joints': [0.] * 7, 'pose': [[0.] * 3, [0.] * 3]}
+        for drift in (0., .01):
+            after = {**before, 'joints': [drift] + [0.] * 6}
+            with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parents[1] / 'runs') as folder, \
+                    patch('rabokit_calibration_probe.measured', side_effect=[before, after]), \
+                    patch('rabokit_calibration_probe.subprocess.run', return_value=SimpleNamespace(
+                        stdout='', stderr='', returncode=0)) as run, patch('builtins.print'):
+                if drift:
+                    with self.assertRaisesRegex(RuntimeError, 'arm drifted'):
+                        sample(None, Path(folder), 'baseline', hand_trace=True, hand_only=True)
+                else:
+                    result = sample(None, Path(folder), 'baseline', hand_trace=True, hand_only=True)
+                    self.assertEqual(result['max_joint_drift_rad'], 0.)
+                self.assertEqual(run.call_count, 1)
+                command = run.call_args.args[0]
+                self.assertTrue(command[1].endswith('rabokit_robot_frames.py'))
+                self.assertIn('--hand-trace', command)
+
     def test_ramp_starts_at_measured_angles_reaches_goal_and_requires_complete_feedback(self):
         start, goal = targets('open'), targets('pinch_thumb_ready_without_pinky', .511764705882353)
         start['lh_thumb_cmc_yaw'] += .012

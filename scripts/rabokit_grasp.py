@@ -40,10 +40,12 @@ def high_pass_through_plan(events, start, surface_z):
     return result
 
 
-def preshape_fingers_plan(events, limited_pinch=False, prepare_thumb_high=False):
+def preshape_fingers_plan(events, limited_pinch=False, prepare_thumb_high=False, compare_empty_closure=False):
     """Prepare fingers high, optionally bend the thumb high, and retain the release shape."""
     if prepare_thumb_high and not limited_pinch:
         raise ValueError('High thumb preparation requires limited pinch')
+    if compare_empty_closure and not prepare_thumb_high:
+        raise ValueError('Empty closure comparison requires high thumb preparation')
     names = [event['name'] for event in events]
     if any(names.count(name) != 1 for name in ('aligned', 'contact', 'closed', 'released')) or not (
             names.index('aligned') < names.index('contact') < names.index('closed') < names.index('released')):
@@ -67,6 +69,13 @@ def preshape_fingers_plan(events, limited_pinch=False, prepare_thumb_high=False)
             staged.append({'name': 'preshaped', 'hand': high_preshape, 'capture': True,
                            'wait_arrival': limited_pinch,
                            'preshape_feedback_key': 'preshape_feedback'})
+            if compare_empty_closure:
+                staged.extend((
+                    {'name': 'empty_closed', 'hand': 'pinch_without_pinky', 'capture': True,
+                     'hand_only': True, 'preshape_feedback_key': 'empty_closed_feedback'},
+                    {'name': 'empty_reprepared', 'hand': high_preshape, 'capture': True,
+                     'hand_only': True, 'wait_arrival': True,
+                     'preshape_feedback_key': 'empty_high_restored_feedback'}))
         elif event['name'] == 'contact':
             staged.append({'name': 'thumb_ready', 'hand': thumb_ready, 'capture': True,
                            'preshape_feedback_key': 'thumb_ready_feedback'})
@@ -190,6 +199,8 @@ def main():
                         help='Limited pinch only: advance high intermediate joints without a stop at every point')
     parser.add_argument('--prepare-thumb-high', action='store_true',
                         help='Limited pinch only: bend the thumb to its 45%% ready target before descending')
+    parser.add_argument('--compare-empty-closure', action='store_true',
+                        help='With high thumb preparation, record one high empty closure and restore before descending')
     parser.add_argument('--side-camera', action='store_true',
                         help='Record synchronized side RGB at static stages for grasp visibility diagnosis')
     parser.add_argument('--inspect-pickup', action='store_true',
@@ -213,6 +224,8 @@ def main():
         parser.error('--pass-through-high requires --limited-pinch')
     if args.prepare_thumb_high and not args.limited_pinch:
         parser.error('--prepare-thumb-high requires --limited-pinch')
+    if args.compare_empty_closure and not args.prepare_thumb_high:
+        parser.error('--compare-empty-closure requires --prepare-thumb-high')
     if args.thumb_yaw is not None:
         if args.stage not in ('pickup', 'grasp'):
             parser.error('--thumb-yaw requires pickup or grasp')
@@ -281,7 +294,8 @@ def main():
         checks = check_plan(arm, start, events)
         if args.preshape_fingers:
             events = preshape_fingers_plan(events, limited_pinch=args.limited_pinch,
-                                          prepare_thumb_high=args.prepare_thumb_high)
+                                          prepare_thumb_high=args.prepare_thumb_high,
+                                          compare_empty_closure=args.compare_empty_closure)
         if args.pass_through_high:
             events = high_pass_through_plan(events, start, point[2])
         if args.keep_pinky_open:
@@ -305,6 +319,7 @@ def main():
                   'preshape_fingers_requested': args.preshape_fingers,
                   'limited_pinch_requested': args.limited_pinch,
                   'prepare_thumb_high_requested': args.prepare_thumb_high,
+                  'compare_empty_closure_requested': args.compare_empty_closure,
                   'hand_ramp_seconds': 2. if args.limited_pinch else 0.,
                   'pass_through_high_requested': args.pass_through_high,
                   'pass_through_joint_count': sum(bool(e.get('pass_through')) for e in events),
@@ -360,8 +375,8 @@ def main():
                                             wait_open=event.get('wait_open', False),
                                             wait_arrival=event.get('wait_arrival', False),
                                             ramp_seconds=event.get('hand_ramp_seconds', report['hand_ramp_seconds']),
-                                            trace_output=(args.output / 'closed-command.json'
-                                                if args.limited_pinch and event['name'] == 'closed' else None))
+                                            trace_output=(args.output / (event['name'] + '-command.json')
+                                                if args.limited_pinch and event['name'] in ('empty_closed', 'closed') else None))
                     if not (event.get('wait_open') or event.get('wait_arrival')):
                         time.sleep(1)
                     state = measured(arm)
@@ -382,7 +397,7 @@ def main():
                 if event['capture']:
                     try:
                         sample(arm, args.output, event['name'], stereo=True, side_camera=args.side_camera,
-                               hand_trace=args.limited_pinch)
+                               hand_trace=args.limited_pinch, hand_only=event.get('hand_only', False))
                     except (RuntimeError, subprocess.TimeoutExpired) as error:
                         if args.seed_record:
                             raise RuntimeError(f'{event["name"]}: seeded route camera sampling failed') from error
