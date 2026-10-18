@@ -1,16 +1,56 @@
 """A narrower closure leaves the neighboring-row finger open."""
 from pathlib import Path
+import json
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from rabokit_hand import hand_feedback, main, targets
-from rabokit_calibration_probe import hand_command
+from rabokit_calibration_probe import hand_command, initialize_empty_hand
 
 
 class HandTargetsTests(unittest.TestCase):
+    def test_empty_initialization_checks_closure_and_always_attempts_verified_reopening(self):
+        arm = SimpleNamespace(get_joint_angles=lambda: [0.] * 7,
+                              get_pose=lambda: [[0., .222, -.6082], [0.] * 3])
+        def capture(command, **kwargs):
+            Path(command[-1]).write_text('{"frames": {}}')
+        workspace_runs = Path(__file__).resolve().parents[1] / 'runs'
+        workspace_runs.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=workspace_runs, prefix='hand-init-test-') as temporary:
+            for error in (.001, .1):
+                output = Path(temporary) / str(error)
+                with patch('rabokit_calibration_probe.hand_command',
+                           return_value={'hand_arrival_verified': True}) as hand, \
+                        patch('rabokit_calibration_probe.subprocess.run', side_effect=capture) as run, \
+                        patch('rabokit_calibration_probe.time.sleep'), \
+                        patch('rabokit_hand.hand_feedback',
+                              return_value={'complete': True, 'maximum_error_rad': error}):
+                    if error < .03:
+                        self.assertTrue(initialize_empty_hand(arm, output)['initialized'])
+                    else:
+                        with self.assertRaisesRegex(RuntimeError, 'closure was not verified'):
+                            initialize_empty_hand(arm, output)
+                    self.assertEqual(hand.call_args_list[0].args, ('close',))
+                    self.assertEqual(hand.call_args_list[0].kwargs, {'thumb_yaw': .62})
+                    self.assertEqual(hand.call_args_list[1].args, ('open',))
+                    self.assertTrue(hand.call_args_list[1].kwargs['wait_open'])
+                    self.assertEqual(Path(run.call_args.args[0][1]).name, 'rabokit_robot_frames.py')
+                    saved = json.loads((output / 'initialization.json').read_text())
+                    self.assertEqual(saved['initialized'], error < .03)
+                    self.assertFalse(saved['arm_motion_commanded'])
+
+    def test_empty_initialization_rejects_an_unverified_arm_position_before_hand_commands(self):
+        arm = SimpleNamespace(get_joint_angles=lambda: [.02] + [0.] * 6,
+                              get_pose=lambda: [[0., .222, -.6082], [0.] * 3])
+        with patch('rabokit_calibration_probe.hand_command') as hand:
+            with self.assertRaisesRegex(ValueError, 'tested initial arm pose'):
+                initialize_empty_hand(arm, 'unused-initialization-directory')
+            hand.assert_not_called()
+
     def test_open_feedback_timeout_stops_commands_after_the_original_burst(self):
         clock, published = [0.], []
         def spin(node, timeout_sec):

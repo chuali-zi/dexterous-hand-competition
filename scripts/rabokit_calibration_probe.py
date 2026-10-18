@@ -150,5 +150,47 @@ def hand_command(pose, thumb_yaw=None, wait_open=False):
         return feedback
 
 
+def initialize_empty_hand(arm, output):
+    """Close/reopen at the tested rear initial pose; caller sets the hand force limit."""
+    from rabokit_hand import hand_feedback, targets
+
+    initial = measured(arm)
+    if any(abs(q) > .01 for q in initial['joints']):
+        raise ValueError('Empty-hand initialization requires the tested initial arm pose')
+    output = Path(output)
+    output.mkdir()
+    report = {'initial': initial, 'arm_motion_commanded': False, 'initialized': False}
+
+    def capture_frames(label):
+        frame_file = output / (label + '-frames.json')
+        subprocess.run([sys.executable, str(Path(__file__).with_name('rabokit_robot_frames.py')),
+                        '--seconds', '1', '--output', str(frame_file)],
+                       capture_output=True, text=True, check=True, timeout=8)
+        return json.loads(frame_file.read_text(encoding='utf-8'))['frames']
+
+    try:
+        report['initial_open_error'] = hand_feedback(capture_frames('initial'), targets('open'))
+        try:
+            hand_command('close', thumb_yaw=.62)
+            time.sleep(1)
+            report['closed'] = hand_feedback(capture_frames('closed'), targets('close', .62))
+            if not report['closed']['complete'] or report['closed']['maximum_error_rad'] >= .03:
+                raise RuntimeError('Empty-hand closure was not verified; no arm motion started')
+        finally:
+            report['opened'] = hand_command('open', wait_open=True)
+        report['final'] = measured(arm)
+        report['arm_joint_drift_rad'] = max(abs(a-b) for a,b in
+            zip(initial['joints'], report['final']['joints']))
+        if report['arm_joint_drift_rad'] > .005:
+            raise RuntimeError('Arm drifted during empty-hand initialization')
+        report['initialized'] = True
+        return report
+    except Exception as error:
+        report['error'] = f'{type(error).__name__}: {error}'
+        raise
+    finally:
+        (output / 'initialization.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
+
+
 if __name__ == '__main__':
     main()

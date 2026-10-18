@@ -9,7 +9,7 @@ import subprocess
 import sys
 import time
 
-from rabokit_calibration_probe import hand_command, measured, sample
+from rabokit_calibration_probe import hand_command, initialize_empty_hand, measured, sample
 from rabokit_hover import hover_waypoints, move_joint_pose, move_pose, return_joints
 from rabokit_pickup_vision import neighboring_layout, pickup_evidence, saved_scene, target_observation
 
@@ -244,6 +244,9 @@ def main():
         if motion:
             if not arm.enable() or not robot.left_hand.set_force([1.] * 6):
                 raise RuntimeError('Arm enable or hand force-limit setup failed')
+            if args.seed_record and args.stage == 'pickup':
+                report['hand_initialization'] = initialize_empty_hand(arm, args.output / 'hand-initialization')
+                save()
             joint_targets = {}
             pending = list(events)
             recovery_plan, _ = make_plan(start, point, surface['half_pixel_perturbation_radius_m'],
