@@ -44,7 +44,9 @@ class HandHoldTests(unittest.TestCase):
 
         for options in ({'thumb_yaw': float('nan')}, {'thumb_yaw': 1.4},
                         {'thumb_yaw': .51, 'sdk_close': True}, {'ramp_seconds': 1.},
-                        {'ramp_seconds': float('nan')}, {'ramp_seconds': .5, 'sdk_close': True}):
+                        {'ramp_seconds': float('nan')}, {'ramp_seconds': .5, 'sdk_close': True},
+                        {'reopen_ramp_seconds': 2.}, {'ramp_seconds': .5, 'reopen_ramp_seconds': 3.1},
+                        {'ramp_seconds': .5, 'reopen_ramp_seconds': float('nan')}):
             robot = self.robot()
             with self.assertRaises(ValueError):
                 run_motion(robot, Path('unused'), **options)
@@ -57,11 +59,12 @@ class HandHoldTests(unittest.TestCase):
             output = Path(temporary)
             recorder = SimpleNamespace(stdout=io.StringIO('HAND_TRACE_READY\n'), returncode=0,
                 communicate=Mock(return_value=('PASS: recorded\n', '')), poll=lambda: 0)
-            for failed, prepared, recovery_failed, limit, sdk, yaw in ((False, False, False, 1., False, None),
-                    (True, False, False, 1., False, None), (False, True, False, 1., False, None),
-                    (False, False, True, 1., False, None), (False, True, False, .05, False, None),
-                    (False, False, False, .05, True, None), (True, False, False, .05, True, None),
-                    (False, True, False, 1., False, .511764705882353)):
+            for failed, prepared, recovery_failed, limit, sdk, yaw, reopen_ramp in ((False, False, False, 1., False, None, None),
+                    (True, False, False, 1., False, None, None), (False, True, False, 1., False, None, None),
+                    (False, False, True, 1., False, None, None), (False, True, False, .05, False, None, None),
+                    (False, False, False, .05, True, None, None), (True, False, False, .05, True, None, None),
+                    (False, True, False, 1., False, .511764705882353, None),
+                    (False, True, False, 1., False, .511764705882353, 2.)):
                 pose = 'close' if sdk else 'pinch_thumb_ready_without_pinky' if prepared else 'pinch_preshape_without_pinky'
                 frames = {}
                 for name, angle in targets(pose, yaw).items():
@@ -92,7 +95,7 @@ class HandHoldTests(unittest.TestCase):
                             run_motion(robot, output, prepared_thumb=prepared, force_limit=limit, sdk_close=sdk, thumb_yaw=yaw)
                     else:
                         run_motion(robot, output, prepared_thumb=prepared, force_limit=limit, sdk_close=sdk,
-                                   thumb_yaw=yaw, ramp_seconds=.5 if yaw is not None else 0.)
+                                   thumb_yaw=yaw, ramp_seconds=.5 if yaw is not None else 0., reopen_ramp_seconds=reopen_ramp)
                 if sdk:
                     robot.left_hand.close.assert_called_once_with(blocking=False)
                     self.assertTrue(all(call.args == ('open',) for call in hand.call_args_list))
@@ -108,7 +111,7 @@ class HandHoldTests(unittest.TestCase):
                     self.assertEqual(hand.call_args.args, ('open',))
                     self.assertTrue(hand.call_args.kwargs['wait_open'])
                     if yaw is not None:
-                        self.assertEqual(hand.call_args.kwargs['ramp_seconds'], .5)
+                        self.assertEqual(hand.call_args.kwargs['ramp_seconds'], .5 if reopen_ramp is None else reopen_ramp)
                 self.assertEqual(robot.left_hand.set_force.call_args.args, ([limit]*6,))
                 saved = json.loads((output/'hold.json').read_text())
                 self.assertEqual(saved['native_targets_rad'], targets(pose, yaw))

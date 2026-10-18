@@ -16,7 +16,7 @@ class HandTargetsTests(unittest.TestCase):
     def test_ramp_starts_at_measured_angles_reaches_goal_and_requires_complete_feedback(self):
         start, goal = targets('open'), targets('pinch_thumb_ready_without_pinky', .511764705882353)
         start['lh_thumb_cmc_yaw'] += .012
-        for missing in (False, True):
+        for missing, ramp_duration in ((False, .5), (False, 2.), (True, .5)):
             clock, callbacks, published = [0.], [], {name: [] for name in goal}
             def spin(node, timeout_sec):
                 clock[0] += timeout_sec
@@ -50,7 +50,7 @@ class HandTargetsTests(unittest.TestCase):
                        'tf2_msgs.msg': SimpleNamespace(TFMessage=object)}
             with patch.dict(sys.modules, modules), patch.dict('os.environ', {'ROS2_NAMESPACE': 'test'}), \
                     patch.object(sys, 'argv', ['rabokit_hand.py', '--pose', 'pinch_thumb_ready_without_pinky',
-                        '--thumb-yaw', '.511764705882353', '--ramp-seconds', '.5']), \
+                        '--thumb-yaw', '.511764705882353', '--ramp-seconds', str(ramp_duration)]), \
                     patch('rabokit_hand.time.monotonic', side_effect=lambda: clock[0]), patch('builtins.print') as output:
                 if missing:
                     with self.assertRaises(TimeoutError):
@@ -65,7 +65,10 @@ class HandTargetsTests(unittest.TestCase):
                 self.assertAlmostEqual(rows[-1][1], goal[name])
                 self.assertTrue(any(min(start[name], goal[name]) < v < max(start[name], goal[name])
                     for _, v in rows) or abs(start[name]-goal[name]) < 1e-6)
-                self.assertLess(rows[-1][0] - rows[0][0], 1.)
+                self.assertLess(rows[-1][0] - rows[0][0], max(1., ramp_duration + .5) + 1e-8)
+                if abs(start[name]-goal[name]) > 1e-6:
+                    first_endpoint = next(t for t, v in rows if abs(v-goal[name]) < 1e-8)
+                    self.assertGreaterEqual(first_endpoint - rows[0][0], ramp_duration - .06)
             self.assertEqual(record['native_targets_rad'], goal)
             self.assertFalse(record['hand_arrival_verified'])
         with patch('rabokit_calibration_probe.subprocess.run', return_value=SimpleNamespace(stdout='', stderr='',

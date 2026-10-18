@@ -13,7 +13,8 @@ from rabokit_calibration_probe import hand_command, initialize_empty_hand, measu
 from rabokit_hand import hand_feedback, targets
 
 
-def run_motion(robot, output, seconds=20, prepared_thumb=False, force_limit=1., sdk_close=False, thumb_yaw=None, ramp_seconds=0.):
+def run_motion(robot, output, seconds=20, prepared_thumb=False, force_limit=1., sdk_close=False, thumb_yaw=None,
+               ramp_seconds=0., reopen_ramp_seconds=None):
     arm = robot.left_arm
     before = measured(arm)
     if any(abs(value) > .01 for value in before['joints']):
@@ -24,12 +25,17 @@ def run_motion(robot, output, seconds=20, prepared_thumb=False, force_limit=1., 
         raise ValueError('Ramp seconds must be in [0,1)')
     if sdk_close and (thumb_yaw is not None or ramp_seconds):
         raise ValueError('Thumb yaw override and ramp require native commands')
+    if reopen_ramp_seconds is not None and (not ramp_seconds or
+            not math.isfinite(reopen_ramp_seconds) or not 0 <= reopen_ramp_seconds <= 3):
+        raise ValueError('Reopening ramp requires a native ramp and duration in [0,3]')
+    reopen_ramp_seconds = ramp_seconds if reopen_ramp_seconds is None else reopen_ramp_seconds
     pose = 'close' if sdk_close else 'pinch_thumb_ready_without_pinky' if prepared_thumb else 'pinch_preshape_without_pinky'
     goals = targets(pose, thumb_yaw)
     report = {'before': before, 'arm_motion_commanded': False, 'official_score': None,
               'pose': pose, 'native_targets_rad': goals, 'probe_force_limit_normalized': force_limit,
               'initialization_force_limit_normalized': 1.,
               'ramp_seconds': ramp_seconds,
+              'reopen_ramp_seconds': reopen_ramp_seconds,
               'command_driver': 'sdk_close' if sdk_close else 'native_float64'}
     trace = None
     ready_line = ''
@@ -101,7 +107,7 @@ def run_motion(robot, output, seconds=20, prepared_thumb=False, force_limit=1., 
         try:
             if ramp_seconds:
                 report['recovery_kind'] = 'direct_ramped_open'
-                report['reopened'] = hand_command('open', wait_open=True, ramp_seconds=ramp_seconds)
+                report['reopened'] = hand_command('open', wait_open=True, ramp_seconds=reopen_ramp_seconds)
             elif report.get('force_limit_request_accepted') and force_limit != 1.:
                 report['recovery_kind'] = 'direct_open_after_force_limit_request'
                 report['reopened'] = hand_command('open', wait_open=True)
@@ -138,6 +144,8 @@ def main():
     shape.add_argument('--sdk-close', action='store_true', help='Compare the SDK close route at the initial arm pose')
     parser.add_argument('--thumb-yaw', type=float, help='Native preshape yaw endpoint in radians; excludes SDK close')
     parser.add_argument('--ramp-seconds', type=float, default=0., help='Native ramp duration in [0,1) seconds')
+    parser.add_argument('--reopen-ramp-seconds', type=float,
+                        help='Reopening duration in [0,3] seconds; defaults to --ramp-seconds and requires it')
     parser.add_argument('--force-limit', type=float, default=1.,
                         help='SDK normalized limit for all six hand groups during observation; initialization uses 1')
     args = parser.parse_args()
@@ -149,6 +157,9 @@ def main():
         parser.error('--ramp-seconds must be in [0,1)')
     if args.sdk_close and args.ramp_seconds:
         parser.error('--ramp-seconds excludes --sdk-close')
+    if args.reopen_ramp_seconds is not None and (not args.ramp_seconds or
+            not math.isfinite(args.reopen_ramp_seconds) or not 0 <= args.reopen_ramp_seconds <= 3):
+        parser.error('--reopen-ramp-seconds requires --ramp-seconds and must be in [0,3]')
     if args.thumb_yaw is not None:
         if args.sdk_close:
             parser.error('--thumb-yaw excludes --sdk-close')
@@ -171,7 +182,7 @@ def main():
     try:
         time.sleep(1)
         run_motion(robot, args.output, args.seconds, args.prepared_thumb, args.force_limit, args.sdk_close,
-                   args.thumb_yaw, args.ramp_seconds)
+                   args.thumb_yaw, args.ramp_seconds, args.reopen_ramp_seconds)
         print('PASS: initial-pose hand observation and verified reopening; no grasp or score', flush=True)
     finally:
         robot.shutdown()

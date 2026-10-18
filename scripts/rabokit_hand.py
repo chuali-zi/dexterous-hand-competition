@@ -121,15 +121,15 @@ def main():
                                          'pinch_thumb_ready_without_pinky', 'pinch_without_pinky'), required=True)
     parser.add_argument('--thumb-yaw', type=float, help='Thumb CMC yaw closure endpoint in native radians')
     parser.add_argument('--ramp-seconds', type=float, default=0.,
-                        help='Ramp from measured robot TF over [0,1) seconds within the original one-second burst')
+                        help='Ramp from measured robot TF over [0,3] seconds, then publish the endpoint for at least 0.5 seconds')
     waiting = parser.add_mutually_exclusive_group()
     waiting.add_argument('--wait-open', action='store_true',
                         help='Require fresh robot TF to verify all open joints before returning')
     waiting.add_argument('--wait-arrival', action='store_true',
                          help='Wait for fresh TF at an empty-hand high preshape; not a contact pose')
     args = parser.parse_args()
-    if not math.isfinite(args.ramp_seconds) or not 0 <= args.ramp_seconds < 1:
-        parser.error('--ramp-seconds must be in [0,1)')
+    if not math.isfinite(args.ramp_seconds) or not 0 <= args.ramp_seconds <= 3:
+        parser.error('--ramp-seconds must be in [0,3]')
     if args.wait_open and args.pose != 'open':
         parser.error('--wait-open requires --pose open; a blocked grasp need not reach its closure targets')
     if args.wait_arrival and args.pose not in ('preshape_without_pinky', 'pinch_preshape_without_pinky'):
@@ -196,16 +196,17 @@ def main():
                 node.destroy_subscription(subscription)
         command_stamp = max((f['stamp'][0] + f['stamp'][1] * 1e-9 for f in frames.values()), default=-1.)
         started = time.monotonic()
-        deadline = started + (12 if wait_arrival else 1)
+        command_seconds = max(1., args.ramp_seconds + .5)
+        deadline = started + (12 if wait_arrival else command_seconds)
         stable_stamp = None
         stable_errors = None
         feedback = None
         feedback_samples = []
         arrived = False
         while time.monotonic() < deadline:
-            # Preserve the original one-second command burst. Waiting for TF
-            # must not keep resubmitting goals throughout the observation.
-            if time.monotonic() - started < 1:
+            # Longer ramps finish before the endpoint burst. Feedback waiting
+            # does not extend command publication through the observation.
+            if time.monotonic() - started < command_seconds:
                 fraction = min(1., (time.monotonic() - started) / args.ramp_seconds) if ramp_start else 1.
                 for name, pub in publishers.items():
                     value = ramp_start[name] + fraction * (values[name] - ramp_start[name]) if ramp_start else values[name]
