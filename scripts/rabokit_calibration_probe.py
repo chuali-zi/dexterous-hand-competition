@@ -155,8 +155,8 @@ def hand_command(pose, thumb_yaw=None, wait_open=False, wait_arrival=False, ramp
         return feedback
 
 
-def initialize_empty_hand(arm, output):
-    """Close/reopen at the tested rear initial pose; caller sets the hand force limit."""
+def initialize_empty_hand(arm, output, ramp_seconds=0.):
+    """Initialize at the tested rear pose; an optional ramp opens directly."""
     from rabokit_hand import hand_feedback, targets
 
     initial = measured(arm)
@@ -174,15 +174,19 @@ def initialize_empty_hand(arm, output):
         return json.loads(frame_file.read_text(encoding='utf-8'))['frames']
 
     try:
-        report['initial_open_error'] = hand_feedback(capture_frames('initial'), targets('open'))
-        try:
-            hand_command('close', thumb_yaw=.62)
-            time.sleep(1)
-            report['closed'] = hand_feedback(capture_frames('closed'), targets('close', .62))
-            if not report['closed']['complete'] or report['closed']['maximum_error_rad'] >= .03:
-                raise RuntimeError('Empty-hand closure was not verified; no arm motion started')
-        finally:
-            report['opened'] = hand_command('open', wait_open=True)
+        if ramp_seconds:
+            report['kind'] = 'direct_ramped_open'
+            report['opened'] = hand_command('open', wait_open=True, ramp_seconds=ramp_seconds)
+        else:
+            report['initial_open_error'] = hand_feedback(capture_frames('initial'), targets('open'))
+            try:
+                hand_command('close', thumb_yaw=.62)
+                time.sleep(1)
+                report['closed'] = hand_feedback(capture_frames('closed'), targets('close', .62))
+                if not report['closed']['complete'] or report['closed']['maximum_error_rad'] >= .03:
+                    raise RuntimeError('Empty-hand closure was not verified; no arm motion started')
+            finally:
+                report['opened'] = hand_command('open', wait_open=True)
         report['final'] = measured(arm)
         report['arm_joint_drift_rad'] = max(abs(a-b) for a,b in
             zip(initial['joints'], report['final']['joints']))

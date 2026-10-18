@@ -24,6 +24,7 @@ class GraspPlanTests(unittest.TestCase):
         self.assertFalse(hands['thumb_ready'].get('wait_arrival', False))
         self.assertEqual(hands['closed']['hand'], 'pinch_without_pinky')
         self.assertEqual(hands['released']['hand'], hands['preshaped']['hand'])
+        self.assertTrue(all(event['hand_ramp_seconds'] == 2. for event in hands.values()))
         self.assertEqual(hands['empty_pickup_preshape']['hand'], hands['preshaped']['hand'])
         self.assertTrue(hands['empty_pickup_preshape']['requires_tabletop_target'])
         self.assertEqual([e for e in staged if 'hand' not in e], [e for e in events if 'hand' not in e])

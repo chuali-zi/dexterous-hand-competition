@@ -49,7 +49,7 @@ def preshape_fingers_plan(events, limited_pinch=False):
         elif event['name'] == 'contact':
             staged.append({'name': 'thumb_ready', 'hand': thumb_ready, 'capture': True,
                            'preshape_feedback_key': 'thumb_ready_feedback'})
-    return staged
+    return [{**event, 'hand_ramp_seconds': 2.} if limited_pinch and 'hand' in event else event for event in staged]
 
 
 def make_plan(start, point, uncertainty, stage, clearance=.03, yaw=-math.pi / 2):
@@ -271,6 +271,7 @@ def main():
                   'thumb_yaw_override_rad': args.thumb_yaw,
                   'preshape_fingers_requested': args.preshape_fingers,
                   'limited_pinch_requested': args.limited_pinch,
+                  'hand_ramp_seconds': 2. if args.limited_pinch else 0.,
                   'entry_yaw_deg': args.yaw_deg,
                   'seeded_path_checks': seeded_checks,
                   'fk_continuation_fallbacks': fk_continuations,
@@ -289,7 +290,8 @@ def main():
             if not arm.enable() or not robot.left_hand.set_force([1.] * 6):
                 raise RuntimeError('Arm enable or hand force-limit setup failed')
             if args.seed_record and args.stage == 'pickup':
-                report['hand_initialization'] = initialize_empty_hand(arm, args.output / 'hand-initialization')
+                report['hand_initialization'] = initialize_empty_hand(arm, args.output / 'hand-initialization',
+                                                                      ramp_seconds=report['hand_ramp_seconds'])
                 save()
             joint_targets = {}
             pending = list(events)
@@ -320,7 +322,8 @@ def main():
                 if 'hand' in event:
                     feedback = hand_command(event['hand'], thumb_yaw=event.get('thumb_yaw_rad'),
                                             wait_open=event.get('wait_open', False),
-                                            wait_arrival=event.get('wait_arrival', False))
+                                            wait_arrival=event.get('wait_arrival', False),
+                                            ramp_seconds=event.get('hand_ramp_seconds', report['hand_ramp_seconds']))
                     if not (event.get('wait_open') or event.get('wait_arrival')):
                         time.sleep(1)
                     state = measured(arm)
@@ -400,7 +403,8 @@ def main():
             if args.preshape_fingers:
                 report['active_stage'] = 'retreat_open'
                 save()
-                report['retreat_open_feedback'] = hand_command('open', wait_open=True)
+                report['retreat_open_feedback'] = hand_command('open', wait_open=True,
+                                                               ramp_seconds=report['hand_ramp_seconds'])
                 report['active_stage'] = 'restored'
             report['motion_sequence_completed'] = 'recovery_reason' not in report
             save()

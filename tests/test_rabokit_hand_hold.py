@@ -83,7 +83,7 @@ class HandHoldTests(unittest.TestCase):
                 recorder.stdout.seek(0)
                 robot = self.robot()
                 robot.left_hand.close.return_value = not failed
-                def initialize_hand(arm, destination):
+                def initialize_hand(arm, destination, ramp_seconds=0.):
                     if destination.name == 'hand-recovery' and recovery_failed:
                         raise RuntimeError('Reopening not verified')
                     return {'initialized': True, 'opened': {'hand_arrival_verified': True}}
@@ -101,13 +101,15 @@ class HandHoldTests(unittest.TestCase):
                     robot.left_hand.close.assert_called_once_with(blocking=False)
                     self.assertTrue(all(call.args == ('open',) for call in hand.call_args_list))
                 else:
-                    motion_call = hand.call_args_list[1 if yaw is not None else 0]
+                    motion_call = hand.call_args_list[0]
                     self.assertEqual(motion_call.args[0], pose)
                     self.assertEqual(motion_call.kwargs['thumb_yaw'], yaw)
                     self.assertEqual(motion_call.kwargs['ramp_seconds'],
                                      2. if reopen_ramp is not None else .5 if yaw is not None else 0.)
                     self.assertEqual(motion_call.kwargs.get('wait_arrival', False), not prepared)
-                self.assertEqual(initialize.call_count, 0 if yaw is not None else 1 if limit != 1. else 2)
+                self.assertEqual(initialize.call_count, 1 if yaw is not None or limit != 1. else 2)
+                if yaw is not None:
+                    self.assertEqual(initialize.call_args.kwargs['ramp_seconds'], .5 if reopen_ramp is None else reopen_ramp)
                 if limit == 1. and yaw is None:
                     self.assertEqual(initialize.call_args.args[1], output/'hand-recovery')
                 else:
@@ -115,7 +117,6 @@ class HandHoldTests(unittest.TestCase):
                     self.assertTrue(hand.call_args.kwargs['wait_open'])
                     if yaw is not None:
                         self.assertEqual(hand.call_args.kwargs['ramp_seconds'], .5 if reopen_ramp is None else reopen_ramp)
-                        self.assertEqual(hand.call_args_list[0], hand.call_args_list[-1])
                 self.assertEqual(robot.left_hand.set_force.call_args.args, ([limit]*6,))
                 saved = json.loads((output/'hold.json').read_text())
                 self.assertTrue(saved['initialization']['initialized'])

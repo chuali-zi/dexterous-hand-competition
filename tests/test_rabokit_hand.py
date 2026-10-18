@@ -270,6 +270,27 @@ class HandTargetsTests(unittest.TestCase):
                 initialize_empty_hand(arm, 'unused-initialization-directory')
             hand.assert_not_called()
 
+    def test_ramped_initialization_opens_directly_and_records_failures(self):
+        arm = SimpleNamespace(get_joint_angles=lambda: [0.] * 7,
+                              get_pose=lambda: [[0., .222, -.6082], [0.] * 3])
+        runs = Path(__file__).resolve().parents[1] / 'runs'
+        with tempfile.TemporaryDirectory(dir=runs) as temporary:
+            for fail in (False, True):
+                output = Path(temporary) / str(fail)
+                with patch('rabokit_calibration_probe.hand_command', return_value={'hand_arrival_verified': True},
+                        side_effect=RuntimeError('opening failed') if fail else None) as hand, \
+                        patch('rabokit_calibration_probe.subprocess.run') as recorder:
+                    if fail:
+                        with self.assertRaisesRegex(RuntimeError, 'opening failed'):
+                            initialize_empty_hand(arm, output, ramp_seconds=2.)
+                    else:
+                        self.assertTrue(initialize_empty_hand(arm, output, ramp_seconds=2.)['initialized'])
+                    hand.assert_called_once_with('open', wait_open=True, ramp_seconds=2.)
+                    recorder.assert_not_called()
+                saved = json.loads((output/'initialization.json').read_text())
+                self.assertEqual(saved['initialized'], not fail)
+                self.assertEqual(saved['kind'], 'direct_ramped_open')
+
     def test_open_feedback_timeout_stops_commands_after_the_original_burst(self):
         clock, published = [0.], []
         def spin(node, timeout_sec):
