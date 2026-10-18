@@ -44,6 +44,7 @@ def preshape_fingers_plan(events, limited_pinch=False):
         staged.append(event)
         if event['name'] == 'aligned':
             staged.append({'name': 'preshaped', 'hand': preshape, 'capture': True,
+                           'wait_arrival': limited_pinch,
                            'preshape_feedback_key': 'preshape_feedback'})
         elif event['name'] == 'contact':
             staged.append({'name': 'thumb_ready', 'hand': thumb_ready, 'capture': True,
@@ -318,8 +319,9 @@ def main():
                     continue
                 if 'hand' in event:
                     feedback = hand_command(event['hand'], thumb_yaw=event.get('thumb_yaw_rad'),
-                                            wait_open=event.get('wait_open', False))
-                    if not event.get('wait_open'):
+                                            wait_open=event.get('wait_open', False),
+                                            wait_arrival=event.get('wait_arrival', False))
+                    if not (event.get('wait_open') or event.get('wait_arrival')):
                         time.sleep(1)
                     state = measured(arm)
                     if feedback is not None:

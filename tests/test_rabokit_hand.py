@@ -13,6 +13,51 @@ from rabokit_calibration_probe import hand_command, initialize_empty_hand
 
 
 class HandTargetsTests(unittest.TestCase):
+    def test_high_preshape_waits_for_late_fresh_arrival_without_republishing(self):
+        clock, callbacks, published = [0.], [], []
+        values = targets('pinch_preshape_without_pinky')
+        def spin(node, timeout_sec):
+            clock[0] += timeout_sec
+            transforms = []
+            for name, (child, parent, origin, axis) in HAND_JOINTS.items():
+                angle = values[name] - (.163 if name == 'lh_thumb_cmc_yaw' and clock[0] < 3 else 0.)
+                q = target_quaternion(origin, axis, angle)
+                transforms.append(SimpleNamespace(child_frame_id='r136d7b_link_'+child,
+                    header=SimpleNamespace(frame_id='r136d7b_link_'+parent,
+                        stamp=SimpleNamespace(sec=int(clock[0]), nanosec=int((clock[0] % 1)*1e9))),
+                    transform=SimpleNamespace(rotation=SimpleNamespace(x=q[0], y=q[1], z=q[2], w=q[3]))))
+            callbacks[0](SimpleNamespace(transforms=transforms))
+        publisher = SimpleNamespace(get_subscription_count=lambda: 1,
+                                    publish=lambda msg: published.append(clock[0]))
+        node = SimpleNamespace(create_subscription=lambda kind, topic, callback, qos: callbacks.append(callback),
+            get_topic_names_and_types=lambda: [(f'/test/arm_left/{name}/cmd', ['std_msgs/msg/Float64']) for name in values],
+            create_publisher=lambda *args: publisher, destroy_node=lambda: None)
+        modules = {'rclpy': SimpleNamespace(init=lambda: None, create_node=lambda name: node,
+                        spin_once=spin, shutdown=lambda: None),
+                   'rclpy.qos': SimpleNamespace(qos_profile_sensor_data=object()),
+                   'std_msgs.msg': SimpleNamespace(Float64=SimpleNamespace),
+                   'tf2_msgs.msg': SimpleNamespace(TFMessage=object)}
+        with patch.dict(sys.modules, modules), patch.dict('os.environ', {'ROS2_NAMESPACE': 'test'}), \
+                patch.object(sys, 'argv', ['rabokit_hand.py', '--pose', 'pinch_preshape_without_pinky', '--wait-arrival']), \
+                patch('rabokit_hand.time.monotonic', side_effect=lambda: clock[0]), patch('builtins.print') as output:
+            main()
+        self.assertGreaterEqual(clock[0], 3.1)
+        self.assertLess(clock[0], 4.)
+        self.assertLess(max(published), 1.)
+        self.assertTrue(json.loads(output.call_args.args[0])['hand_arrival_verified'])
+
+    def test_high_wait_is_forwarded_and_contact_wait_is_rejected(self):
+        with patch('rabokit_calibration_probe.subprocess.run', return_value=SimpleNamespace(
+                stdout='{"hand_arrival_verified": true}\n', stderr='', check_returncode=lambda: None)) as run:
+            self.assertTrue(hand_command('pinch_preshape_without_pinky', wait_arrival=True)['hand_arrival_verified'])
+            self.assertEqual(run.call_args.args[0][-1], '--wait-arrival')
+            self.assertEqual(run.call_args.kwargs['timeout'], 22)
+        with patch.object(sys, 'argv', ['rabokit_hand.py', '--pose', 'pinch_thumb_ready_without_pinky', '--wait-arrival']), \
+                patch('sys.stderr'):
+            with self.assertRaises(SystemExit) as error:
+                main()
+            self.assertEqual(error.exception.code, 2)
+
     def test_limited_pinch_prepositions_yaw_and_preserves_coupled_bending(self):
         opened, closed = targets('open'), targets('close_without_pinky', .62)
         high = targets('pinch_preshape_without_pinky')

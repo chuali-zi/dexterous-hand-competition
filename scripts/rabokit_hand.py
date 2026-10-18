@@ -120,11 +120,17 @@ def main():
                                          'thumb_ready_without_pinky', 'pinch_preshape_without_pinky',
                                          'pinch_thumb_ready_without_pinky', 'pinch_without_pinky'), required=True)
     parser.add_argument('--thumb-yaw', type=float, help='Thumb CMC yaw closure endpoint in native radians')
-    parser.add_argument('--wait-open', action='store_true',
+    waiting = parser.add_mutually_exclusive_group()
+    waiting.add_argument('--wait-open', action='store_true',
                         help='Require fresh robot TF to verify all open joints before returning')
+    waiting.add_argument('--wait-arrival', action='store_true',
+                         help='Wait for fresh TF at an empty-hand high preshape; not a contact pose')
     args = parser.parse_args()
     if args.wait_open and args.pose != 'open':
         parser.error('--wait-open requires --pose open; a blocked grasp need not reach its closure targets')
+    if args.wait_arrival and args.pose not in ('preshape_without_pinky', 'pinch_preshape_without_pinky'):
+        parser.error('--wait-arrival requires an empty-hand preshape')
+    wait_arrival = args.wait_open or args.wait_arrival
     try:
         values = targets(args.pose, args.thumb_yaw)
     except ValueError as error:
@@ -139,7 +145,7 @@ def main():
     node = rclpy.create_node('competition_left_hand_targets')
     try:
         frames = {}
-        if args.wait_open:
+        if wait_arrival:
             from rclpy.qos import qos_profile_sensor_data
             from tf2_msgs.msg import TFMessage
             allowed = {'r136d7b_link_' + item[0] for item in HAND_JOINTS.values()}
@@ -168,7 +174,7 @@ def main():
             rclpy.spin_once(node, timeout_sec=.05)
         command_stamp = max((f['stamp'][0] + f['stamp'][1] * 1e-9 for f in frames.values()), default=-1.)
         started = time.monotonic()
-        deadline = started + (12 if args.wait_open else 1)
+        deadline = started + (12 if wait_arrival else 1)
         stable_stamp = None
         feedback = None
         arrived = False
@@ -179,7 +185,7 @@ def main():
                 for name, pub in publishers.items():
                     pub.publish(Float64(data=values[name]))
             rclpy.spin_once(node, timeout_sec=.05)
-            if args.wait_open:
+            if wait_arrival:
                 feedback = hand_feedback(frames, values)
                 if (feedback['complete'] and feedback['maximum_error_rad'] < .03 and
                         feedback['stamp_min_sec'] > command_stamp and
@@ -196,8 +202,8 @@ def main():
                           'wall_seconds': time.monotonic() - started,
                           'feedback_start_stamp_sec': command_stamp,
                           'stable_feedback_start_stamp_sec': stable_stamp, 'feedback': feedback}), flush=True)
-        if args.wait_open and not arrived:
-            raise TimeoutError('Open-hand TF did not reach all targets; no arm continuation permitted')
+        if wait_arrival and not arrived:
+            raise TimeoutError('Hand TF did not reach all targets; no arm continuation permitted')
     finally:
         node.destroy_node()
         rclpy.shutdown()

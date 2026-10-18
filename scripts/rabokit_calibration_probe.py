@@ -134,19 +134,21 @@ def main():
             robot.shutdown()
 
 
-def hand_command(pose, thumb_yaw=None, wait_open=False):
+def hand_command(pose, thumb_yaw=None, wait_open=False, wait_arrival=False):
     command = [sys.executable, str(Path(__file__).with_name('rabokit_hand.py')), '--pose', pose]
     if thumb_yaw is not None:
         command.extend(('--thumb-yaw', str(thumb_yaw)))
     if wait_open:
         command.append('--wait-open')
-    result = subprocess.run(command, capture_output=True, text=True, timeout=22 if wait_open else 10)
+    if wait_arrival:
+        command.append('--wait-arrival')
+    result = subprocess.run(command, capture_output=True, text=True, timeout=22 if wait_open or wait_arrival else 10)
     print(result.stdout + result.stderr, end='', flush=True)
     result.check_returncode()
-    if wait_open:
+    if wait_open or wait_arrival:
         feedback = json.loads(result.stdout.strip().splitlines()[-1])
         if not feedback.get('hand_arrival_verified'):
-            raise RuntimeError('Open-hand subprocess did not verify arrival')
+            raise RuntimeError('Hand subprocess did not verify arrival')
         return feedback
 
 
