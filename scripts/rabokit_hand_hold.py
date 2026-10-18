@@ -43,7 +43,12 @@ def run_motion(robot, output, seconds=20, prepared_thumb=False, force_limit=1., 
     try:
         if not arm.enable() or not robot.left_hand.set_force([1.] * 6):
             raise RuntimeError('Arm enable or hand force-limit setup failed')
-        report['initialization'] = initialize_empty_hand(arm, output / 'hand-initialization')
+        if ramp_seconds:
+            report['initialization'] = {'kind': 'direct_ramped_open', 'initialized': False}
+            report['initialization']['opened'] = hand_command('open', wait_open=True, ramp_seconds=reopen_ramp_seconds)
+            report['initialization']['initialized'] = True
+        else:
+            report['initialization'] = initialize_empty_hand(arm, output / 'hand-initialization')
         trace = subprocess.Popen([sys.executable, str(Path(__file__).with_name('rabokit_robot_frames.py')),
             '--hand-trace', '--seconds', str(seconds), '--output', str(output / 'trace.json')],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
