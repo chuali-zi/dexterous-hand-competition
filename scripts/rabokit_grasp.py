@@ -334,12 +334,13 @@ def main():
                         save()
                         continue
                 if event.get('preshape_feedback_key'):
-                    from rabokit_hand import hand_feedback, targets
+                    from rabokit_hand import preparation_feedback
                     frames = json.loads((args.output / event['name'] / 'robot-frames.json').read_text(encoding='utf-8'))['frames']
-                    feedback = hand_feedback(frames, targets(event['hand'], event.get('thumb_yaw_rad')))
+                    feedback = preparation_feedback(frames, event['hand'], event.get('thumb_yaw_rad'))
                     report[event['preshape_feedback_key']] = feedback
                     save()
-                    if not feedback['complete'] or feedback['maximum_error_rad'] >= .03:
+                    required = feedback.get('required_feedback', feedback)
+                    if not feedback['complete'] or not required['complete'] or required['maximum_error_rad'] >= .03:
                         raise RuntimeError(f'{event["name"]}: hand preshape did not reach its targets; arm continuation stopped')
                 if event['name'] in ('preshaped', 'thumb_ready'):
                     observation_key = event['name'] + '_observation' if event['name'] == 'thumb_ready' else 'preshape_observation'

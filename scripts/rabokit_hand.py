@@ -93,6 +93,18 @@ def targets(pose, thumb_yaw=None):
     return result
 
 
+def preparation_feedback(frames, pose, thumb_yaw=None):
+    values = targets(pose, thumb_yaw)
+    feedback = hand_feedback(frames, values)
+    if pose == 'thumb_ready_without_pinky':
+        # Pitch approaches the brick and may stop before its goal. Preserve its
+        # measured error, but check the axes that define the approach shape.
+        values.pop('lh_thumb_cmc_pitch')
+        feedback['required_feedback'] = hand_feedback(frames, values)
+        feedback['thumb_pitch_goal_required'] = False
+    return feedback
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--pose', choices=('open', 'close', 'close_without_pinky', 'preshape_without_pinky',

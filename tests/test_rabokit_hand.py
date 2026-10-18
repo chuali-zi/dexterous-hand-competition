@@ -8,11 +8,30 @@ from unittest.mock import patch
 from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from rabokit_hand import hand_feedback, main, targets
+from rabokit_hand import HAND_JOINTS, hand_feedback, main, preparation_feedback, target_quaternion, targets
 from rabokit_calibration_probe import hand_command, initialize_empty_hand
 
 
 class HandTargetsTests(unittest.TestCase):
+    def test_contact_preparation_records_blocked_pitch_but_requires_the_other_axes(self):
+        values = targets('thumb_ready_without_pinky', .62)
+        frames = {}
+        for name, (child, parent, origin, axis) in HAND_JOINTS.items():
+            angle = .127688 if name == 'lh_thumb_cmc_pitch' else values[name]
+            frames['r136d7b_link_' + child] = {'parent': 'r136d7b_link_' + parent,
+                'xyzw': target_quaternion(origin, axis, angle), 'stamp': [446, 720000001]}
+        feedback = preparation_feedback(frames, 'thumb_ready_without_pinky', .62)
+        self.assertGreater(feedback['maximum_error_rad'], .03)
+        self.assertLess(feedback['required_feedback']['maximum_error_rad'], .001)
+        self.assertFalse(feedback['thumb_pitch_goal_required'])
+        self.assertNotIn('required_feedback', preparation_feedback(frames, 'preshape_without_pinky'))
+        child, _, origin, axis = HAND_JOINTS['lh_index_mcp_pitch']
+        frames['r136d7b_link_' + child]['xyzw'] = target_quaternion(origin, axis, values['lh_index_mcp_pitch'] + .05)
+        self.assertGreater(preparation_feedback(frames, 'thumb_ready_without_pinky', .62)
+                           ['required_feedback']['maximum_error_rad'], .03)
+        frames.pop('r136d7b_link_' + HAND_JOINTS['lh_thumb_cmc_pitch'][0])
+        self.assertFalse(preparation_feedback(frames, 'thumb_ready_without_pinky', .62)['complete'])
+
     def test_preshape_uses_half_finger_targets_and_keeps_thumb_and_pinky_open(self):
         opened = targets('open')
         support = targets('preshape_without_pinky')
