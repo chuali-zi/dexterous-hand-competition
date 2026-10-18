@@ -21,8 +21,8 @@ def run_motion(robot, output, seconds=20, prepared_thumb=False, force_limit=1., 
         raise ValueError('Hand hold diagnostic requires the tested initial arm pose')
     if not math.isfinite(force_limit) or not 0 < force_limit <= 1:
         raise ValueError('Normalized force limit must be in (0, 1]')
-    if not math.isfinite(ramp_seconds) or not 0 <= ramp_seconds < 1:
-        raise ValueError('Ramp seconds must be in [0,1)')
+    if not math.isfinite(ramp_seconds) or not 0 <= ramp_seconds <= 3:
+        raise ValueError('Ramp seconds must be in [0,3]')
     if sdk_close and (thumb_yaw is not None or ramp_seconds):
         raise ValueError('Thumb yaw override and ramp require native commands')
     if reopen_ramp_seconds is not None and (not ramp_seconds or
@@ -143,7 +143,7 @@ def main():
                         help='At the initial arm pose, compare 45%% thumb bending instead of an open thumb')
     shape.add_argument('--sdk-close', action='store_true', help='Compare the SDK close route at the initial arm pose')
     parser.add_argument('--thumb-yaw', type=float, help='Native preshape yaw endpoint in radians; excludes SDK close')
-    parser.add_argument('--ramp-seconds', type=float, default=0., help='Native ramp duration in [0,1) simulation seconds')
+    parser.add_argument('--ramp-seconds', type=float, default=0., help='Native ramp duration in [0,3] simulation seconds')
     parser.add_argument('--reopen-ramp-seconds', type=float,
                         help='Reopening duration in [0,3] simulation seconds; defaults to --ramp-seconds and requires it')
     parser.add_argument('--force-limit', type=float, default=1.,
@@ -153,8 +153,8 @@ def main():
         parser.error('--seconds must be in [15, 25]')
     if not math.isfinite(args.force_limit) or not 0 < args.force_limit <= 1:
         parser.error('--force-limit must be in (0, 1]')
-    if not math.isfinite(args.ramp_seconds) or not 0 <= args.ramp_seconds < 1:
-        parser.error('--ramp-seconds must be in [0,1)')
+    if not math.isfinite(args.ramp_seconds) or not 0 <= args.ramp_seconds <= 3:
+        parser.error('--ramp-seconds must be in [0,3]')
     if args.sdk_close and args.ramp_seconds:
         parser.error('--ramp-seconds excludes --sdk-close')
     if args.reopen_ramp_seconds is not None and (not args.ramp_seconds or
