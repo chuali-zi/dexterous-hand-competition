@@ -143,9 +143,9 @@ def main():
                         help='At the initial arm pose, compare 45%% thumb bending instead of an open thumb')
     shape.add_argument('--sdk-close', action='store_true', help='Compare the SDK close route at the initial arm pose')
     parser.add_argument('--thumb-yaw', type=float, help='Native preshape yaw endpoint in radians; excludes SDK close')
-    parser.add_argument('--ramp-seconds', type=float, default=0., help='Native ramp duration in [0,1) seconds')
+    parser.add_argument('--ramp-seconds', type=float, default=0., help='Native ramp duration in [0,1) simulation seconds')
     parser.add_argument('--reopen-ramp-seconds', type=float,
-                        help='Reopening duration in [0,3] seconds; defaults to --ramp-seconds and requires it')
+                        help='Reopening duration in [0,3] simulation seconds; defaults to --ramp-seconds and requires it')
     parser.add_argument('--force-limit', type=float, default=1.,
                         help='SDK normalized limit for all six hand groups during observation; initialization uses 1')
     args = parser.parse_args()

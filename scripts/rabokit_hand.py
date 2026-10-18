@@ -121,7 +121,7 @@ def main():
                                          'pinch_thumb_ready_without_pinky', 'pinch_without_pinky'), required=True)
     parser.add_argument('--thumb-yaw', type=float, help='Thumb CMC yaw closure endpoint in native radians')
     parser.add_argument('--ramp-seconds', type=float, default=0.,
-                        help='Ramp from measured robot TF over [0,3] seconds, then publish the endpoint for at least 0.5 seconds')
+                        help='Ramp over [0,3] robot TF simulation seconds, then publish the endpoint for at least 0.5 seconds')
     waiting = parser.add_mutually_exclusive_group()
     waiting.add_argument('--wait-open', action='store_true',
                         help='Require fresh robot TF to verify all open joints before returning')
@@ -192,25 +192,33 @@ def main():
                 relative = quaternion_product([-v for v in rest[:3]] + [rest[3]],
                                                frames['r136d7b_link_' + child]['xyzw'])
                 ramp_start[name] = math.remainder(2 * math.atan2(relative[axis], relative[3]), 2 * math.pi)
-            if not wait_arrival:
-                node.destroy_subscription(subscription)
         command_stamp = max((f['stamp'][0] + f['stamp'][1] * 1e-9 for f in frames.values()), default=-1.)
         started = time.monotonic()
         command_seconds = max(1., args.ramp_seconds + .5)
-        deadline = started + (12 if wait_arrival else command_seconds)
+        deadline = started + (12 if wait_arrival or ramp_start else command_seconds)
+        next_publish = 0.
+        command_complete = False
+        progress = 0.
         stable_stamp = None
         stable_errors = None
         feedback = None
         feedback_samples = []
         arrived = False
         while time.monotonic() < deadline:
-            # Longer ramps finish before the endpoint burst. Feedback waiting
-            # does not extend command publication through the observation.
-            if time.monotonic() - started < command_seconds:
-                fraction = min(1., (time.monotonic() - started) / args.ramp_seconds) if ramp_start else 1.
+            # TF time follows slow or paused physics. Wall time only bounds
+            # waiting; it must not accelerate a ramp when simulation slows.
+            progress = (min(f['stamp'][0] + f['stamp'][1] * 1e-9 for f in frames.values()) - command_stamp
+                        if ramp_start else time.monotonic() - started)
+            if progress < command_seconds and (not ramp_start or progress >= next_publish):
+                fraction = min(1., max(0., progress) / args.ramp_seconds) if ramp_start else 1.
                 for name, pub in publishers.items():
                     value = ramp_start[name] + fraction * (values[name] - ramp_start[name]) if ramp_start else values[name]
                     pub.publish(Float64(data=value))
+                next_publish = max(next_publish + .05, progress)
+            if ramp_start and progress >= command_seconds:
+                command_complete = True
+                if not wait_arrival:
+                    break
             rclpy.spin_once(node, timeout_sec=.05)
             if wait_arrival:
                 feedback = hand_feedback(frames, values)
@@ -218,7 +226,7 @@ def main():
                 if args.wait_arrival and feedback['complete'] and (not feedback_samples or
                         elapsed - feedback_samples[-1]['wall_seconds'] >= .5):
                     feedback_samples.append({'wall_seconds': elapsed, **feedback})
-                if (elapsed >= args.ramp_seconds and feedback['complete'] and feedback['maximum_error_rad'] < .03 and
+                if (progress >= args.ramp_seconds and feedback['complete'] and feedback['maximum_error_rad'] < .03 and
                         feedback['stamp_min_sec'] > command_stamp and
                         feedback['stamp_max_sec'] - feedback['stamp_min_sec'] < .1):
                     errors = feedback['joint_rotation_error_rad']
@@ -236,6 +244,8 @@ def main():
                     stable_errors = None
         print(json.dumps({'pose': args.pose, 'native_targets_rad': values,
                           'ramp_seconds': args.ramp_seconds, 'ramp_start_rad': ramp_start,
+                          'ramp_time_basis': 'robot_tf_simulation' if ramp_start else None,
+                          'command_progress_seconds': progress,
                           'command_published': True, 'hand_arrival_verified': arrived,
                           'wall_seconds': time.monotonic() - started,
                           'feedback_start_stamp_sec': command_stamp,
@@ -243,6 +253,8 @@ def main():
                           'feedback_samples': feedback_samples}), flush=True)
         if wait_arrival and not arrived:
             raise TimeoutError('Hand TF did not reach all targets; no arm continuation permitted')
+        if ramp_start and not wait_arrival and not command_complete:
+            raise TimeoutError('Simulation did not complete the ramp publication window within 12 wall seconds')
     finally:
         node.destroy_node()
         rclpy.shutdown()

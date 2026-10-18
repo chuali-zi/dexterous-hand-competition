@@ -16,18 +16,20 @@ class HandTargetsTests(unittest.TestCase):
     def test_ramp_starts_at_measured_angles_reaches_goal_and_requires_complete_feedback(self):
         start, goal = targets('open'), targets('pinch_thumb_ready_without_pinky', .511764705882353)
         start['lh_thumb_cmc_yaw'] += .012
-        for missing, ramp_duration in ((False, .5), (False, 2.), (True, .5)):
+        for missing, ramp_duration, sim_rate in ((False, .5, 1.), (False, 2., 1.),
+                (False, .5, .4), (False, .5, 0.), (True, .5, 1.)):
             clock, callbacks, published = [0.], [], {name: [] for name in goal}
             def spin(node, timeout_sec):
                 clock[0] += timeout_sec
                 if missing:
                     return
                 transforms = []
+                stamp = 2 + clock[0] * sim_rate
                 for name, (child, parent, origin, axis) in HAND_JOINTS.items():
                     q = target_quaternion(origin, axis, start[name])
                     transforms.append(SimpleNamespace(child_frame_id='r136d7b_link_'+child,
                         header=SimpleNamespace(frame_id='r136d7b_link_'+parent,
-                            stamp=SimpleNamespace(sec=2, nanosec=0)),
+                            stamp=SimpleNamespace(sec=int(stamp), nanosec=int((stamp % 1)*1e9))),
                         transform=SimpleNamespace(rotation=SimpleNamespace(x=q[0], y=q[1], z=q[2], w=q[3]))))
                 callbacks[0](SimpleNamespace(transforms=transforms))
             def publisher(kind, topic, qos):
@@ -58,6 +60,12 @@ class HandTargetsTests(unittest.TestCase):
                     self.assertTrue(all(not rows for rows in published.values()))
                     self.assertLess(clock[0], 3.1)
                     continue
+                if not sim_rate:
+                    with self.assertRaises(TimeoutError):
+                        main()
+                    self.assertTrue(all(len(rows) == 1 for rows in published.values()))
+                    self.assertLess(clock[0], 12.2)
+                    continue
                 main()
             record = json.loads(output.call_args.args[0])
             for name, rows in published.items():
@@ -65,16 +73,18 @@ class HandTargetsTests(unittest.TestCase):
                 self.assertAlmostEqual(rows[-1][1], goal[name])
                 self.assertTrue(any(min(start[name], goal[name]) < v < max(start[name], goal[name])
                     for _, v in rows) or abs(start[name]-goal[name]) < 1e-6)
-                self.assertLess(rows[-1][0] - rows[0][0], max(1., ramp_duration + .5) + 1e-8)
+                self.assertLess((rows[-1][0] - rows[0][0]) * sim_rate, max(1., ramp_duration + .5) + 1e-8)
                 if abs(start[name]-goal[name]) > 1e-6:
                     first_endpoint = next(t for t, v in rows if abs(v-goal[name]) < 1e-8)
-                    self.assertGreaterEqual(first_endpoint - rows[0][0], ramp_duration - .06)
+                    self.assertGreaterEqual((first_endpoint - rows[0][0]) * sim_rate, ramp_duration - .06)
             self.assertEqual(record['native_targets_rad'], goal)
+            self.assertEqual(record['ramp_time_basis'], 'robot_tf_simulation')
             self.assertFalse(record['hand_arrival_verified'])
         with patch('rabokit_calibration_probe.subprocess.run', return_value=SimpleNamespace(stdout='', stderr='',
                 check_returncode=lambda: None)) as run:
             hand_command('pinch_thumb_ready_without_pinky', ramp_seconds=.5)
             self.assertEqual(run.call_args.args[0][-2:], ['--ramp-seconds', '0.5'])
+            self.assertEqual(run.call_args.kwargs['timeout'], 25)
 
     def high_wait(self, overshoot=False, ramped_open=False):
         clock, callbacks, published = [0.], [], []

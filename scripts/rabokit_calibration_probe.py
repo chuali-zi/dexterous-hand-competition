@@ -144,7 +144,8 @@ def hand_command(pose, thumb_yaw=None, wait_open=False, wait_arrival=False, ramp
         command.append('--wait-open')
     if wait_arrival:
         command.append('--wait-arrival')
-    result = subprocess.run(command, capture_output=True, text=True, timeout=22 if wait_open or wait_arrival else 10)
+    result = subprocess.run(command, capture_output=True, text=True,
+                            timeout=25 if ramp_seconds else 22 if wait_open or wait_arrival else 10)
     print(result.stdout + result.stderr, end='', flush=True)
     result.check_returncode()
     if wait_open or wait_arrival:
