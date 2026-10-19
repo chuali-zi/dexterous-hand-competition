@@ -41,7 +41,7 @@ def high_pass_through_plan(events, start, surface_z):
 
 
 def preshape_fingers_plan(events, limited_pinch=False, prepare_thumb_high=False, compare_empty_closure=False):
-    """Prepare fingers high, optionally bend the thumb high, and retain the release shape."""
+    """Prepare high; limited closure opposes the thumb and releases to preparation."""
     if prepare_thumb_high and not limited_pinch:
         raise ValueError('High thumb preparation requires limited pinch')
     if compare_empty_closure and not prepare_thumb_high:
@@ -56,10 +56,11 @@ def preshape_fingers_plan(events, limited_pinch=False, prepare_thumb_high=False,
     staged = []
     for event in events:
         if event['name'] == 'released':
-            event = {**event, 'hand': preshape,
+            # Keep the thumb prepared near the table; fully open after retreat.
+            event = {**event, 'hand': 'pinch_high_thumb_ready_without_pinky' if limited_pinch else preshape,
                      'preshape_feedback_key': 'release_preshape_feedback'}
         elif limited_pinch and event['name'] == 'closed':
-            event = {**event, 'hand': 'pinch_without_pinky'}
+            event = {**event, 'hand': 'pinch_without_pinky', 'thumb_yaw_rad': .70}
         elif event.get('requires_tabletop_target') and event.get('hand') == 'open':
             event = {**event, 'name': 'empty_pickup_preshape', 'hand': preshape,
                      'capture': True, 'wait_open': False,
@@ -72,7 +73,8 @@ def preshape_fingers_plan(events, limited_pinch=False, prepare_thumb_high=False,
             if compare_empty_closure:
                 staged.extend((
                     {'name': 'empty_closed', 'hand': 'pinch_without_pinky', 'capture': True,
-                     'hand_only': True, 'preshape_feedback_key': 'empty_closed_feedback'},
+                     'hand_only': True, 'thumb_yaw_rad': .70,
+                     'preshape_feedback_key': 'empty_closed_feedback'},
                     {'name': 'empty_reprepared', 'hand': high_preshape, 'capture': True,
                      'hand_only': True, 'wait_arrival': True,
                      'preshape_feedback_key': 'empty_high_restored_feedback'}))
@@ -190,11 +192,11 @@ def main():
     parser.add_argument('--keep-pinky-open', action='store_true',
                         help='Close the other fingers while keeping the pinky at its measured open target')
     parser.add_argument('--thumb-yaw', type=float,
-                        help='Native thumb yaw endpoint; limited pinch also holds it during preshape and release')
+                        help='Thumb yaw in native radians; limited pinch uses this for preparation and its own final yaw')
     parser.add_argument('--preshape-fingers', action='store_true',
                         help='Seeded pickup: half-close fingers high, descend, then prepare thumb before closing')
     parser.add_argument('--limited-pinch', action='store_true',
-                        help='Preshaped inspection only: preposition thumb yaw high, use 45%% thumb / 74%% MCP with constant fingertip pitch')
+                        help='Preshaped inspection only: 65%% thumb at yaw 0.70 rad / 74%% MCP with constant fingertip pitch')
     parser.add_argument('--pass-through-high', action='store_true',
                         help='Limited pinch only: advance high intermediate joints without a stop at every point')
     parser.add_argument('--prepare-thumb-high', action='store_true',
@@ -308,7 +310,7 @@ def main():
                                          'pinch_high_thumb_ready_without_pinky',
                                          'pinch_preshape_without_pinky', 'pinch_thumb_ready_without_pinky',
                                          'pinch_without_pinky'):
-                    event['thumb_yaw_rad'] = args.thumb_yaw
+                    event.setdefault('thumb_yaw_rad', args.thumb_yaw)
         evidence_labels = ('inspection_low', 'inspection_followed') if args.inspect_pickup else ('lifted', 'followed')
         report = {'stage': args.stage, 'start': start, 'source_surface': surface,
                   'destination_surface': destination, 'events': events, 'reachability_checks': checks,

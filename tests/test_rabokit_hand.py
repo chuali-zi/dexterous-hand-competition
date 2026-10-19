@@ -221,11 +221,11 @@ class HandTargetsTests(unittest.TestCase):
         pinch = targets('pinch_without_pinky')
         for name in opened:
             if name == 'lh_thumb_cmc_yaw':
-                self.assertEqual([shape[name] for shape in (high, ready, pinch)], [.62] * 3)
+                self.assertEqual([shape[name] for shape in (high, ready, pinch)], [.62, .62, .70])
             elif name.startswith('lh_pinky_'):
                 self.assertEqual([shape[name] for shape in (high, ready, pinch)], [opened[name]] * 3)
             else:
-                fractions = ((0., .45, .45) if name.startswith('lh_thumb_') else
+                fractions = ((0., .45, .65) if name.startswith('lh_thumb_') else
                              (.5, .5, .37917/1.6137 if name.endswith('_dip') else .74))
                 for shape, fraction in zip((high, ready, pinch), fractions):
                     self.assertAlmostEqual(shape[name], opened[name] + fraction * (closed[name] - opened[name]))

@@ -67,13 +67,15 @@ def targets(pose, thumb_yaw=None):
     if pose in ('pinch_preshape_without_pinky', 'pinch_high_thumb_ready_without_pinky',
                 'pinch_thumb_ready_without_pinky', 'pinch_without_pinky'):
         opened = targets('open')
-        closed = targets('close_without_pinky', .62 if thumb_yaw is None else thumb_yaw)
+        default_yaw = .70 if pose == 'pinch_without_pinky' else .62
+        closed = targets('close_without_pinky', default_yaw if thumb_yaw is None else thumb_yaw)
         proximal_fraction = .74 if pose == 'pinch_without_pinky' else .5
         # Opposite pitch changes preserve the distal orientation from preshape.
         distal_fraction = .5 - (proximal_fraction-.5) * (
             closed['lh_index_mcp_pitch']-opened['lh_index_mcp_pitch']) / (
             closed['lh_index_dip']-opened['lh_index_dip'])
-        thumb_fraction = 0. if pose == 'pinch_preshape_without_pinky' else .45
+        thumb_fraction = (0. if pose == 'pinch_preshape_without_pinky' else
+                          .65 if pose == 'pinch_without_pinky' else .45)
         result = dict(opened)
         for name in result:
             if name.startswith(('lh_index_', 'lh_middle_', 'lh_ring_')):
