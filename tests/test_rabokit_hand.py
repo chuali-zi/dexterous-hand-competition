@@ -30,6 +30,8 @@ class HandTargetsTests(unittest.TestCase):
             self.assertEqual(ready[name], opposed[name])
             self.assertLess(opposed[name], closed[name])
         self.assertAlmostEqual(closed['lh_middle_dip'], .9662820796229564)
+        self.assertAlmostEqual(closed['lh_ring_dip'], 1.008736392115745)
+        self.assertAlmostEqual(ready['lh_ring_dip'], .7796403921157451)
         self.assertEqual(high['lh_thumb_cmc_yaw'], .60)
         self.assertEqual(opposed['lh_thumb_cmc_yaw'], closed['lh_thumb_cmc_yaw'])
         self.assertEqual(targets('open', pad_grasp=True), opened)
