@@ -79,8 +79,11 @@ def targets(pose, thumb_yaw=None):
         thumb_fraction = (0. if pose == 'pinch_preshape_without_pinky' else
                           .65 if pose == 'pinch_without_pinky' else .45)
         result = dict(opened)
+        # Retain the original three-finger shape for the existing hold diagnostic.
+        fingers = (('lh_index_', 'lh_middle_', 'lh_ring_') if pose == 'pinch_thumb_ready_without_pinky'
+                   else ('lh_index_', 'lh_middle_'))
         for name in result:
-            if name.startswith(('lh_index_', 'lh_middle_', 'lh_ring_')):
+            if name.startswith(fingers):
                 finger_fraction = distal_fraction if name.endswith('_dip') else proximal_fraction
                 result[name] += finger_fraction * (closed[name] - opened[name])
             elif name in ('lh_thumb_cmc_pitch', 'lh_thumb_ip'):

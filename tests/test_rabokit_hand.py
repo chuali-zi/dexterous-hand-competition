@@ -225,7 +225,7 @@ class HandTargetsTests(unittest.TestCase):
         for name in opened:
             if name == 'lh_thumb_cmc_yaw':
                 self.assertEqual([shape[name] for shape in (high, ready, pinch)], [.62, .62, .70])
-            elif name.startswith('lh_pinky_'):
+            elif name.startswith(('lh_ring_', 'lh_pinky_')):
                 self.assertEqual([shape[name] for shape in (high, ready, pinch)], [opened[name]] * 3)
             else:
                 fractions = ((0., .45, .65) if name.startswith('lh_thumb_') else
@@ -237,8 +237,13 @@ class HandTargetsTests(unittest.TestCase):
         self.assertAlmostEqual(pinch['lh_index_dip'], .29547)
         self.assertAlmostEqual(ready['lh_index_mcp_pitch'], 1.09412)
         self.assertAlmostEqual(ready['lh_index_dip'], .43803)
-        self.assertEqual(targets('pinch_thumb_ready_without_pinky'), targets('pinch_high_thumb_ready_without_pinky'))
-        for finger in ('index', 'middle', 'ring'):
+        legacy = targets('pinch_thumb_ready_without_pinky')
+        self.assertAlmostEqual(legacy['lh_ring_mcp_pitch'], .809)
+        self.assertAlmostEqual(legacy['lh_ring_dip'], .72315)
+        prepared = targets('pinch_high_thumb_ready_without_pinky')
+        for name, value in legacy.items():
+            self.assertEqual(prepared[name], opened[name] if name.startswith('lh_ring_') else value)
+        for finger in ('index', 'middle'):
             # The two pitch joints share an axis after the fixed finger roll.
             change = sum(pinch[f'lh_{finger}_{joint}'] - high[f'lh_{finger}_{joint}']
                          for joint in ('mcp_pitch', 'dip'))
