@@ -24,7 +24,7 @@ class GraspPlanTests(unittest.TestCase):
         self.assertNotIn('thumb_yaw_rad', finger_ready)
         self.assertEqual(baseline['hand'], 'pinch_without_pinky')
         closed = next(e for e in new if e['name'] == 'closed')
-        self.assertEqual(baseline['thumb_yaw_rad'], .70)
+        self.assertEqual(baseline['thumb_yaw_rad'], .85)
         self.assertEqual(baseline['thumb_yaw_rad'], closed['thumb_yaw_rad'])
         self.assertNotIn('thumb_yaw_rad', restored)
         self.assertEqual(baseline['preshape_feedback_key'], 'empty_closed_feedback')

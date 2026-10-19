@@ -224,26 +224,32 @@ class HandTargetsTests(unittest.TestCase):
         pinch = targets('pinch_without_pinky')
         for name in opened:
             if name == 'lh_thumb_cmc_yaw':
-                self.assertEqual([shape[name] for shape in (high, ready, pinch)], [.62, .62, .70])
-            elif name.startswith(('lh_ring_', 'lh_pinky_')):
+                self.assertEqual([shape[name] for shape in (high, ready, pinch)], [.62, .62, .85])
+            elif name.startswith(('lh_index_', 'lh_pinky_')):
                 self.assertEqual([shape[name] for shape in (high, ready, pinch)], [opened[name]] * 3)
             else:
-                fractions = ((0., .45, .65) if name.startswith('lh_thumb_') else
-                             (.5, .5-.16*1.782/1.6137 if name.endswith('_dip') else .66,
-                              .37917/1.6137 if name.endswith('_dip') else .74))
+                fractions = ((0., .45, .70) if name.startswith('lh_thumb_') else
+                             (.57, .73, .81) if name.startswith('lh_middle_') else (.5, .66, .74))
+                if name.endswith('_dip'):
+                    fractions = tuple(.5-(f-.5)*1.782/1.6137 for f in fractions)
                 for shape, fraction in zip((high, ready, pinch), fractions):
                     self.assertAlmostEqual(shape[name], opened[name] + fraction * (closed[name] - opened[name]))
-        self.assertAlmostEqual(pinch['lh_index_mcp_pitch'], 1.23668)
-        self.assertAlmostEqual(pinch['lh_index_dip'], .29547)
-        self.assertAlmostEqual(ready['lh_index_mcp_pitch'], 1.09412)
-        self.assertAlmostEqual(ready['lh_index_dip'], .43803)
+        self.assertAlmostEqual(pinch['lh_ring_mcp_pitch'], 1.23668)
+        self.assertAlmostEqual(pinch['lh_ring_dip'], .29547)
+        self.assertAlmostEqual(pinch['lh_middle_mcp_pitch'], 1.36142)
+        self.assertAlmostEqual(pinch['lh_middle_dip'], .17073)
+        self.assertAlmostEqual(ready['lh_ring_mcp_pitch'], 1.09412)
+        self.assertAlmostEqual(ready['lh_ring_dip'], .43803)
         legacy = targets('pinch_thumb_ready_without_pinky')
         self.assertAlmostEqual(legacy['lh_ring_mcp_pitch'], .809)
         self.assertAlmostEqual(legacy['lh_ring_dip'], .72315)
         prepared = targets('pinch_high_thumb_ready_without_pinky')
-        for name, value in legacy.items():
-            self.assertEqual(prepared[name], opened[name] if name.startswith('lh_ring_') else value)
-        for finger in ('index', 'middle'):
+        for finger in ('index', 'middle', 'ring'):
+            self.assertAlmostEqual(legacy[f'lh_{finger}_mcp_pitch'], .809)
+            self.assertAlmostEqual(legacy[f'lh_{finger}_dip'], .72315)
+        self.assertEqual(prepared['lh_index_mcp_pitch'], opened['lh_index_mcp_pitch'])
+        self.assertAlmostEqual(prepared['lh_middle_mcp_pitch'], .93374)
+        for finger in ('middle', 'ring'):
             # The two pitch joints share an axis after the fixed finger roll.
             change = sum(pinch[f'lh_{finger}_{joint}'] - high[f'lh_{finger}_{joint}']
                          for joint in ('mcp_pitch', 'dip'))

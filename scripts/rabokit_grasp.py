@@ -60,7 +60,7 @@ def preshape_fingers_plan(events, limited_pinch=False, prepare_thumb_high=False,
             event = {**event, 'hand': 'pinch_high_thumb_ready_without_pinky' if limited_pinch else preshape,
                      'preshape_feedback_key': 'release_preshape_feedback'}
         elif limited_pinch and event['name'] == 'closed':
-            event = {**event, 'hand': 'pinch_without_pinky', 'thumb_yaw_rad': .70}
+            event = {**event, 'hand': 'pinch_without_pinky', 'thumb_yaw_rad': .85}
         elif event.get('requires_tabletop_target') and event.get('hand') == 'open':
             event = {**event, 'name': 'empty_pickup_preshape', 'hand': preshape,
                      'capture': True, 'wait_open': False,
@@ -76,7 +76,7 @@ def preshape_fingers_plan(events, limited_pinch=False, prepare_thumb_high=False,
                      'hand_only': True, 'wait_arrival': True,
                      'preshape_feedback_key': 'empty_finger_ready_feedback'},
                     {'name': 'empty_closed', 'hand': 'pinch_without_pinky', 'capture': True,
-                     'hand_only': True, 'thumb_yaw_rad': .70,
+                     'hand_only': True, 'thumb_yaw_rad': .85,
                      'preshape_feedback_key': 'empty_closed_feedback'},
                     {'name': 'empty_reprepared', 'hand': high_preshape, 'capture': True,
                      'hand_only': True, 'wait_arrival': True,
@@ -199,7 +199,7 @@ def main():
     parser.add_argument('--preshape-fingers', action='store_true',
                         help='Seeded pickup: half-close fingers high, descend, then prepare low before closing')
     parser.add_argument('--limited-pinch', action='store_true',
-                        help='Index/middle pinch, ring/pinky open: 66%% MCP then 74%% MCP and 65%% thumb at yaw 0.70; keep fingertip pitch')
+                        help='Middle/ring pinch, index/pinky open: ring MCP 66%% then 74%%, middle +7%%; thumb 70%% at yaw 0.85; keep fingertip pitch')
     parser.add_argument('--pass-through-high', action='store_true',
                         help='Limited pinch only: advance high intermediate joints without a stop at every point')
     parser.add_argument('--prepare-thumb-high', action='store_true',
