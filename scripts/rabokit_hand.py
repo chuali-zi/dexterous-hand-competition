@@ -68,7 +68,7 @@ def targets(pose, thumb_yaw=None):
                 'pinch_thumb_ready_without_pinky', 'pinch_without_pinky'):
         opened = targets('open')
         closed = targets('close_without_pinky', .62 if thumb_yaw is None else thumb_yaw)
-        finger_fraction = .75 if pose == 'pinch_without_pinky' else .5
+        finger_fraction = .58 if pose == 'pinch_without_pinky' else .5
         thumb_fraction = 0. if pose == 'pinch_preshape_without_pinky' else .45
         result = dict(opened)
         for name in result:
