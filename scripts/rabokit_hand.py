@@ -62,8 +62,30 @@ def hand_feedback(frames, values):
             'stamp_max_sec': max(stamps)}
 
 
-def targets(pose, thumb_yaw=None):
+def targets(pose, thumb_yaw=None, pad_grasp=False):
     # Native radians observed on all 11 SDK /cmd topics in this scene, SDK 3.0.0.
+    if pad_grasp:
+        if pose == 'open':
+            return targets('open', thumb_yaw)
+        high = pose in ('pinch_preshape_without_pinky', 'pinch_high_thumb_ready_without_pinky')
+        ready = pose in ('pinch_finger_ready_without_pinky', 'pinch_contact_ready_without_pinky')
+        opposed = pose in ('pinch_high_thumb_opposed_without_pinky', 'pinch_thumb_opposed_without_pinky')
+        if not (high or ready or opposed or pose == 'pinch_without_pinky'):
+            raise ValueError('Pad grasp requires an open or limited-pinch pose')
+        result = targets('open')
+        # Public-mesh pad fit: MCPs stay open; DIP motion closes the long fingers.
+        withdrawal = .20 if high else .08 if ready or opposed else 0.
+        result.update(lh_middle_dip=.9662820796229564-withdrawal*1.6137,
+                      lh_ring_dip=.9087363921157451-withdrawal*1.6137,
+                      lh_thumb_cmc_pitch=.3088039736573618,
+                      lh_thumb_ip=.8472, lh_thumb_cmc_yaw=.9652294980590825)
+        if high or ready:
+            result['lh_thumb_cmc_pitch'] -= .20*.5694
+            result['lh_thumb_cmc_yaw'] = .60
+        if thumb_yaw is not None:
+            targets('close', thumb_yaw)  # Apply the existing native yaw validation.
+            result['lh_thumb_cmc_yaw'] = thumb_yaw
+        return result
     if pose in ('pinch_preshape_without_pinky', 'pinch_high_thumb_ready_without_pinky',
                 'pinch_finger_ready_without_pinky', 'pinch_contact_ready_without_pinky',
                 'pinch_high_thumb_opposed_without_pinky', 'pinch_thumb_opposed_without_pinky',
@@ -124,8 +146,8 @@ def targets(pose, thumb_yaw=None):
     return result
 
 
-def preparation_feedback(frames, pose, thumb_yaw=None):
-    feedback = hand_feedback(frames, targets(pose, thumb_yaw))
+def preparation_feedback(frames, pose, thumb_yaw=None, pad_grasp=False):
+    feedback = hand_feedback(frames, targets(pose, thumb_yaw, pad_grasp))
     # This low closure step can meet the brick. Joint goals are not a contact
     # sensor; retain all errors without requiring an empty-hand arrival pose.
     feedback['goal_arrival_required'] = pose not in ('thumb_ready_without_pinky', 'pinch_thumb_ready_without_pinky',
@@ -143,6 +165,7 @@ def main():
                                          'pinch_high_thumb_opposed_without_pinky', 'pinch_thumb_opposed_without_pinky',
                                          'pinch_thumb_ready_without_pinky', 'pinch_without_pinky'), required=True)
     parser.add_argument('--thumb-yaw', type=float, help='Thumb CMC yaw closure endpoint in native radians')
+    parser.add_argument('--pad-grasp', action='store_true', help='Use the fitted opposing-pad hand targets')
     parser.add_argument('--ramp-seconds', type=float, default=0.,
                         help='Ramp over [0,3] robot TF simulation seconds, then publish the endpoint for at least 0.5 seconds')
     parser.add_argument('--trace-output', type=Path,
@@ -165,7 +188,7 @@ def main():
         parser.error('--wait-arrival requires an empty-hand preshape')
     wait_arrival = args.wait_open or args.wait_arrival
     try:
-        values = targets(args.pose, args.thumb_yaw)
+        values = targets(args.pose, args.thumb_yaw, args.pad_grasp)
     except ValueError as error:
         parser.error(str(error))
     namespace = os.getenv('ROS2_NAMESPACE', '').strip('/')
@@ -178,6 +201,7 @@ def main():
     node = rclpy.create_node('competition_left_hand_targets')
     trace_started = time.monotonic()
     trace = {'pose': args.pose, 'native_targets_rad': values, 'ramp_seconds': args.ramp_seconds,
+             'pad_grasp': args.pad_grasp,
              'ramp_start_rad': None, 'command_start_stamp_sec': None,
              'command_complete': False, 'joint_samples': []}
     try:

@@ -13,6 +13,29 @@ from rabokit_calibration_probe import hand_command, initialize_empty_hand, sampl
 
 
 class HandTargetsTests(unittest.TestCase):
+    def test_pad_grasp_uses_open_mcps_independent_thumb_bends_and_staged_dips(self):
+        opened = targets('open')
+        high = targets('pinch_high_thumb_ready_without_pinky', pad_grasp=True)
+        ready = targets('pinch_contact_ready_without_pinky', pad_grasp=True)
+        opposed = targets('pinch_thumb_opposed_without_pinky', pad_grasp=True)
+        closed = targets('pinch_without_pinky', pad_grasp=True)
+        for shape in (high, ready, opposed, closed):
+            for name in opened:
+                if name.startswith(('lh_index_', 'lh_pinky_')) or name.endswith('_mcp_pitch'):
+                    self.assertEqual(shape[name], opened[name])
+            self.assertEqual(shape['lh_thumb_ip'], .8472)
+        for finger in ('middle', 'ring'):
+            name = f'lh_{finger}_dip'
+            self.assertLess(high[name], ready[name])
+            self.assertEqual(ready[name], opposed[name])
+            self.assertLess(opposed[name], closed[name])
+        self.assertAlmostEqual(closed['lh_middle_dip'], .9662820796229564)
+        self.assertEqual(high['lh_thumb_cmc_yaw'], .60)
+        self.assertEqual(opposed['lh_thumb_cmc_yaw'], closed['lh_thumb_cmc_yaw'])
+        self.assertEqual(targets('open', pad_grasp=True), opened)
+        with self.assertRaises(ValueError):
+            targets('close', pad_grasp=True)
+
     def test_hand_only_sample_skips_cameras_and_still_rejects_arm_drift(self):
         before = {'joints': [0.] * 7, 'pose': [[0.] * 3, [0.] * 3]}
         for drift in (0., .01):
@@ -104,6 +127,8 @@ class HandTargetsTests(unittest.TestCase):
             hand_command('pinch_thumb_ready_without_pinky', ramp_seconds=.5)
             self.assertEqual(run.call_args.args[0][-2:], ['--ramp-seconds', '0.5'])
             self.assertEqual(run.call_args.kwargs['timeout'], 25)
+            hand_command('pinch_high_thumb_ready_without_pinky', pad_grasp=True, ramp_seconds=2.)
+            self.assertIn('--pad-grasp', run.call_args.args[0])
 
     def high_wait(self, overshoot=False, ramped_open=False, pose='pinch_preshape_without_pinky', record_ramp=False):
         clock, callbacks, published = [0.], [], []

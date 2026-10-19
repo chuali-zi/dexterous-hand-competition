@@ -171,15 +171,22 @@ def translation_path(start, goal, inverse, forward, spacing=.01, joint_step_limi
 
 
 def seeded_approach_plan(start, point, uncertainty, clearance, reference, stage, inverse, forward,
-                         tool_offset_y=0., tool_offset_x=0.):
+                         tool_offset_y=0., tool_offset_x=0., tool_rotation=None):
     """Keep accepted routes; retry a rejected route once with 5 mm translations."""
+    import numpy as np
     target_point = [point[0] + tool_offset_x, point[1] + tool_offset_y, point[2]]
     arguments = (start, target_point, uncertainty, clearance, reference, stage, inverse, forward)
+    if tool_rotation is not None:
+        tool_rotation = np.asarray(tool_rotation, dtype=float)
+        if (tool_rotation.shape != (3, 3) or not np.isfinite(tool_rotation).all() or
+                not np.allclose(tool_rotation.T @ tool_rotation, np.eye(3), atol=1e-8) or
+                abs(float(np.linalg.det(tool_rotation))-1.) > 1e-8):
+            raise ValueError('Tool rotation must be a finite proper rotation matrix')
     try:
-        return _seeded_approach_plan(*arguments, spacing=.01)
+        return _seeded_approach_plan(*arguments, spacing=.01, tool_rotation=tool_rotation)
     except ValueError as coarse_error:
         try:
-            events, checks = _seeded_approach_plan(*arguments, spacing=.005)
+            events, checks = _seeded_approach_plan(*arguments, spacing=.005, tool_rotation=tool_rotation)
         except ValueError as fine_error:
             raise ValueError(f'10 mm route rejected: {coarse_error}; '
                              f'5 mm route rejected: {fine_error}') from fine_error
@@ -188,7 +195,8 @@ def seeded_approach_plan(start, point, uncertainty, clearance, reference, stage,
         return events, checks
 
 
-def _seeded_approach_plan(start, point, uncertainty, clearance, reference, stage, inverse, forward, spacing):
+def _seeded_approach_plan(start, point, uncertainty, clearance, reference, stage, inverse, forward, spacing,
+                          tool_rotation=None):
     """Reverse-plan from an achieved low branch, then connect behind the table."""
     import numpy as np
 
@@ -198,9 +206,19 @@ def _seeded_approach_plan(start, point, uncertainty, clearance, reference, stage
                             if event['name'] == 'contact')
     target = np.asarray(forward(reference_joints)).copy()
     target[:3, 3] = [point[0] - .08, point[1], point[2] + clearance]
-    low = inverse(target, reference_joints)
-    if low is None or max(abs(a - b) for a, b in zip(low, reference_joints)) > .15:
-        raise ValueError('Fresh RGB low target does not preserve the recorded joint branch')
+    seed_check = None
+    if tool_rotation is None:
+        low = inverse(target, reference_joints)
+        if low is None or max(abs(a - b) for a, b in zip(low, reference_joints)) > .15:
+            raise ValueError('Fresh RGB low target does not preserve the recorded joint branch')
+    else:
+        target[:3, :3] = tool_rotation
+        reference_xyz = np.asarray(forward(reference_joints))[:3, 3].tolist()
+        seed_check = pose_path({'joints': reference_joints, 'pose': [reference_xyz, [0.] * 3]},
+                               target, inverse, forward, spacing=spacing)
+        if not seed_check['continuous']:
+            raise ValueError(f'Numeric low seed continuation rejected: {seed_check.get("reason")}')
+        low = seed_check['points'][-1]['joints']
     if float(np.linalg.norm(np.asarray(forward(low))[:3, 3] - target[:3, 3])) > .003:
         raise ValueError('Seeded low joint target does not reach the RGB tool target')
 
@@ -215,6 +233,10 @@ def _seeded_approach_plan(start, point, uncertainty, clearance, reference, stage
 
     backward = [node('contact', low, True)]
     checks = []
+    if seed_check is not None:
+        checks.append({'stage': 'numeric_low_seed_continuation', 'scope': 'Numerical seed only, not an executed route',
+                       **{k: v for k, v in seed_check.items() if k != 'points'},
+                       'point_count': len(seed_check['points'])})
     height = point[2] + .30 + uncertainty
     destinations = [('approached', [point[0] - .08, point[1], point[2] + .12], False),
                     ('aligned', [point[0] - .08, point[1], height], False),

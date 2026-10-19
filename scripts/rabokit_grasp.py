@@ -17,6 +17,16 @@ TOP_GRASP_RPY = (math.pi / 2, 0., -math.pi / 2)
 ZERO_RPY = (0., 0., 0.)
 
 
+def pad_tool_geometry():
+    """Fixed local pad fit in the calibrated SDK frame; RGB supplies the source."""
+    import numpy as np
+    roll, pitch, yaw = (1.216667358598815, .020336974108748684, -1.6267295078357673)
+    cx, sx, cy, sy, cz, sz = math.cos(roll), math.sin(roll), math.cos(pitch), math.sin(pitch), math.cos(yaw), math.sin(yaw)
+    rotation = np.array([[cz*cy, cz*sy*sx-sz*cx, cz*sy*cx+sz*sx],
+                         [sz*cy, sz*sy*sx+cz*cx, sz*sy*cx-cz*sx], [-sy, cy*sx, cy*cx]])
+    return .05509469520792759, .01212098991087493, -.031221485529010523, rotation
+
+
 def pickup_offset(yaw, tool_offset_y=0., tool_offset_x=0.):
     """Expected tool-to-surface XY vector, including a deliberate tool shift."""
     return [-.08 * math.sin(yaw) - tool_offset_x, .08 * math.cos(yaw) - tool_offset_y]
@@ -40,12 +50,15 @@ def high_pass_through_plan(events, start, surface_z):
     return result
 
 
-def preshape_fingers_plan(events, limited_pinch=False, prepare_thumb_high=False, compare_empty_closure=False):
+def preshape_fingers_plan(events, limited_pinch=False, prepare_thumb_high=False, compare_empty_closure=False,
+                          pad_grasp=False):
     """Prepare high; limited closure opposes the thumb and releases to preparation."""
     if prepare_thumb_high and not limited_pinch:
         raise ValueError('High thumb preparation requires limited pinch')
     if compare_empty_closure and not prepare_thumb_high:
         raise ValueError('Empty closure comparison requires high thumb preparation')
+    if pad_grasp and not (limited_pinch and prepare_thumb_high):
+        raise ValueError('Pad grasp requires limited pinch and high thumb preparation')
     names = [event['name'] for event in events]
     if any(names.count(name) != 1 for name in ('aligned', 'contact', 'closed', 'released')) or not (
             names.index('aligned') < names.index('contact') < names.index('closed') < names.index('released')):
@@ -91,6 +104,11 @@ def preshape_fingers_plan(events, limited_pinch=False, prepare_thumb_high=False,
                 staged.append({'name': 'thumb_opposed', 'hand': 'pinch_thumb_opposed_without_pinky',
                                'capture': True, 'thumb_yaw_rad': 1.15,
                                'preshape_feedback_key': 'thumb_opposed_feedback'})
+    if pad_grasp:
+        for event in staged:
+            if 'hand' in event:
+                event['pad_grasp'] = True
+                event.pop('thumb_yaw_rad', None)  # Each fitted stage defines its own yaw.
     return [{**event, 'hand_ramp_seconds': 2.} if limited_pinch and 'hand' in event else event for event in staged]
 
 
@@ -207,6 +225,8 @@ def main():
                         help='Seeded pickup: half-close fingers high, descend, then prepare low before closing')
     parser.add_argument('--limited-pinch', action='store_true',
                         help='Middle/ring pinch: prepare fingers at 66%% MCP, oppose thumb at 70%% and yaw 1.15, then close to 74%% MCP; middle +7%%, index/pinky open')
+    parser.add_argument('--pad-grasp', action='store_true',
+                        help='Use the fitted opposing-pad hand and tool pose; requires limited pinch and high preparation')
     parser.add_argument('--pass-through-high', action='store_true',
                         help='Limited pinch only: advance high intermediate joints without a stop at every point')
     parser.add_argument('--prepare-thumb-high', action='store_true',
@@ -238,6 +258,13 @@ def main():
         parser.error('--prepare-thumb-high requires --limited-pinch')
     if args.compare_empty_closure and not args.prepare_thumb_high:
         parser.error('--compare-empty-closure requires --prepare-thumb-high')
+    tool_rotation = None
+    if args.pad_grasp:
+        if not (args.limited_pinch and args.prepare_thumb_high):
+            parser.error('--pad-grasp requires --limited-pinch and --prepare-thumb-high')
+        if args.thumb_yaw is not None or (args.tool_clearance, args.tool_offset_y, args.tool_offset_x) != (.03, 0., 0.):
+            parser.error('--pad-grasp defines its hand yaw and tool geometry; omit those overrides')
+        args.tool_clearance, args.tool_offset_y, args.tool_offset_x, tool_rotation = pad_tool_geometry()
     if args.thumb_yaw is not None:
         if args.stage not in ('pickup', 'grasp'):
             parser.error('--thumb-yaw requires pickup or grasp')
@@ -250,7 +277,7 @@ def main():
         parser.error('--tool-clearance must be in (0, .10]')
     if not math.isfinite(args.tool_offset_y) or abs(args.tool_offset_y) > .02:
         parser.error('--tool-offset-y must be finite and within +/- .02 m')
-    if not math.isfinite(args.tool_offset_x) or abs(args.tool_offset_x) > .02:
+    if not math.isfinite(args.tool_offset_x) or (not args.pad_grasp and abs(args.tool_offset_x) > .02):
         parser.error('--tool-offset-x must be finite and within +/- .02 m')
     if (args.tool_offset_y or args.tool_offset_x) and not args.seed_record:
         parser.error('--tool-offset-x/--tool-offset-y require --seed-record')
@@ -291,7 +318,7 @@ def main():
             events, seeded_checks = seeded_approach_plan(start, point, surface['half_pixel_perturbation_radius_m'],
                 args.tool_clearance, json.loads(args.seed_record.read_text(encoding='utf-8')), args.stage,
                 inverse, forward,
-                tool_offset_y=args.tool_offset_y, tool_offset_x=args.tool_offset_x)
+                tool_offset_y=args.tool_offset_y, tool_offset_x=args.tool_offset_x, tool_rotation=tool_rotation)
             if args.inspect_pickup:
                 from rabokit_joint_path import pickup_inspection_plan
                 events, inspection_checks = pickup_inspection_plan(events, point, inverse, forward,
@@ -307,7 +334,7 @@ def main():
         if args.preshape_fingers:
             events = preshape_fingers_plan(events, limited_pinch=args.limited_pinch,
                                           prepare_thumb_high=args.prepare_thumb_high,
-                                          compare_empty_closure=args.compare_empty_closure)
+                                          compare_empty_closure=args.compare_empty_closure, pad_grasp=args.pad_grasp)
         if args.pass_through_high:
             events = high_pass_through_plan(events, start, point[2])
         if args.keep_pinky_open:
@@ -332,6 +359,7 @@ def main():
                   'thumb_yaw_override_rad': args.thumb_yaw,
                   'preshape_fingers_requested': args.preshape_fingers,
                   'limited_pinch_requested': args.limited_pinch,
+                  'pad_grasp_requested': args.pad_grasp,
                   'prepare_thumb_high_requested': args.prepare_thumb_high,
                   'compare_empty_closure_requested': args.compare_empty_closure,
                   'hand_ramp_seconds': 2. if args.limited_pinch else 0.,
@@ -389,6 +417,7 @@ def main():
                                             wait_open=event.get('wait_open', False),
                                             wait_arrival=event.get('wait_arrival', False),
                                             ramp_seconds=event.get('hand_ramp_seconds', report['hand_ramp_seconds']),
+                                            pad_grasp=event.get('pad_grasp', False),
                                             trace_output=(args.output / (event['name'] + '-command.json')
                                                 if args.limited_pinch and event['name'] in (
                                                     'empty_finger_ready', 'thumb_ready', 'empty_thumb_opposed',
@@ -423,7 +452,8 @@ def main():
                 if event.get('preshape_feedback_key'):
                     from rabokit_hand import preparation_feedback
                     frames = json.loads((args.output / event['name'] / 'robot-frames.json').read_text(encoding='utf-8'))['frames']
-                    feedback = preparation_feedback(frames, event['hand'], event.get('thumb_yaw_rad'))
+                    feedback = preparation_feedback(frames, event['hand'], event.get('thumb_yaw_rad'),
+                                                    event.get('pad_grasp', False))
                     report[event['preshape_feedback_key']] = feedback
                     save()
                     if not feedback['complete'] or (feedback['goal_arrival_required'] and

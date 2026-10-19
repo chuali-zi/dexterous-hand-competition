@@ -2,6 +2,7 @@
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from rabokit_grasp import high_pass_through_plan, make_plan, pickup_offset, preshape_fingers_plan, relocation
@@ -9,6 +10,35 @@ from rabokit_pickup_vision import neighboring_layout, pickup_evidence
 
 
 class GraspPlanTests(unittest.TestCase):
+    def test_pad_mode_rejects_geometry_overrides_before_observation(self):
+        import contextlib
+        import io
+        from rabokit_grasp import main
+        argv = ['rabokit_grasp.py', '--output', 'unused-pad-output', '--stage', 'pickup',
+                '--seed-record', 'unused-seed.json', '--keep-pinky-open', '--preshape-fingers',
+                '--limited-pinch', '--inspect-pickup', '--prepare-thumb-high', '--pad-grasp',
+                '--tool-offset-x', '-.03']
+        with patch.dict('os.environ', {'ROS2_NAMESPACE': '/test'}), patch('sys.argv', argv), \
+                patch('rabokit_grasp.observe') as observe, contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                main()
+        observe.assert_not_called()
+
+    def test_pad_plan_keeps_arm_route_and_uses_profile_goals_for_both_comparisons(self):
+        from rabokit_hand import targets
+        events, _ = make_plan(self.start, self.source, .009, 'pickup')
+        staged = preshape_fingers_plan(events, limited_pinch=True, prepare_thumb_high=True,
+                                      compare_empty_closure=True, pad_grasp=True)
+        self.assertEqual([e for e in staged if 'hand' not in e], [e for e in events if 'hand' not in e])
+        hands = {e['name']: e for e in staged if 'hand' in e}
+        self.assertTrue(all(e['pad_grasp'] and 'thumb_yaw_rad' not in e for e in hands.values()))
+        for high, low in (('empty_finger_ready', 'thumb_ready'), ('empty_thumb_opposed', 'thumb_opposed'),
+                          ('empty_closed', 'closed')):
+            self.assertEqual(targets(hands[high]['hand'], pad_grasp=True),
+                             targets(hands[low]['hand'], pad_grasp=True))
+        with self.assertRaises(ValueError):
+            preshape_fingers_plan(events, limited_pinch=True, pad_grasp=True)
+
     def test_empty_closure_comparison_restores_high_shape_before_any_descent(self):
         events, _ = make_plan(self.start, self.source, .009, 'pickup')
         old = preshape_fingers_plan(events, limited_pinch=True, prepare_thumb_high=True)

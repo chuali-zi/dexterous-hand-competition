@@ -10,6 +10,38 @@ from rabokit_joint_path import continuous_inverse, interpolate_rotation, pickup_
 
 
 class JointPathTests(unittest.TestCase):
+    def test_fitted_rotation_continues_seed_without_relaxing_joint_steps(self):
+        def forward(joints):
+            pose = np.eye(4);angle = joints[3]
+            pose[:3, 3] = joints[:3]
+            pose[:3, :3] = [[np.cos(angle), -np.sin(angle), 0.],
+                            [np.sin(angle), np.cos(angle), 0.], [0., 0., 1.]]
+            return pose
+        def inverse(target, seed):
+            return [*target[:3, 3], np.arctan2(target[1, 0], target[0, 0]), 0., 0., 0.]
+        start = {'joints': [0., .222, -.6082, 0., 0., 0., 0.], 'pose': [[0., .222, -.6082], [0.] * 3]}
+        point = [.22875, .08125, -.497625]
+        reference = {'completed': [{'name': 'contact', 'measured': {
+            'joints': [.14875, .08125, point[2]+.035, 0., 0., 0., 0.]}}]}
+        rotation = forward([0., 0., 0., .30, 0., 0., 0.])[:3, :3]
+        events, checks = seeded_approach_plan(start, point, .009, .035, reference, 'pickup',
+                                              inverse, forward, tool_rotation=rotation)
+        self.assertEqual(checks[0]['stage'], 'numeric_low_seed_continuation')
+        self.assertGreaterEqual(checks[0]['point_count'], 6)
+        contact = next(e for e in events if e['name'] == 'contact')
+        self.assertAlmostEqual(contact['joints'][3], .30)
+        previous = start['joints']
+        for event in events:
+            if 'joints' in event:
+                self.assertLessEqual(max(abs(a-b) for a,b in zip(previous,event['joints'])), .15)
+                previous = event['joints']
+        with self.assertRaisesRegex(ValueError, 'Numeric low seed continuation rejected'):
+            seeded_approach_plan(start, point, .009, .035, reference, 'pickup',
+                lambda t,s: None if t[1,0]>.05 else inverse(t,s), forward, tool_rotation=rotation)
+        with self.assertRaisesRegex(ValueError, 'proper rotation matrix'):
+            seeded_approach_plan(start, point, .009, .035, reference, 'pickup',
+                                  inverse, forward, tool_rotation=np.zeros((3,3)))
+
     def test_fine_samples_merge_only_when_the_original_interpolation_checks_pass(self):
         def forward(joints):
             pose = np.eye(4)
