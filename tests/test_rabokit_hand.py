@@ -214,7 +214,7 @@ class HandTargetsTests(unittest.TestCase):
                 main()
             self.assertEqual(error.exception.code, 2)
 
-    def test_limited_pinch_prepositions_yaw_and_preserves_coupled_bending(self):
+    def test_limited_pinch_prepositions_yaw_and_preserves_distal_orientation(self):
         opened, closed = targets('open'), targets('close_without_pinky', .62)
         high = targets('pinch_preshape_without_pinky')
         ready = targets('pinch_thumb_ready_without_pinky')
@@ -225,11 +225,16 @@ class HandTargetsTests(unittest.TestCase):
             elif name.startswith('lh_pinky_'):
                 self.assertEqual([shape[name] for shape in (high, ready, pinch)], [opened[name]] * 3)
             else:
-                fractions = (0., .45, .45) if name.startswith('lh_thumb_') else (.5, .5, .58)
+                fractions = (0., .45, .45) if name.startswith('lh_thumb_') else (.5, .5, .42 if name.endswith('_dip') else .58)
                 for shape, fraction in zip((high, ready, pinch), fractions):
                     self.assertAlmostEqual(shape[name], opened[name] + fraction * (closed[name] - opened[name]))
         self.assertAlmostEqual(pinch['lh_index_mcp_pitch'], .95156)
-        self.assertAlmostEqual(pinch['lh_index_dip'], .852246)
+        self.assertAlmostEqual(pinch['lh_index_dip'], .594054)
+        for finger in ('index', 'middle', 'ring'):
+            # The two pitch joints share an axis after the fixed finger roll.
+            change = sum(pinch[f'lh_{finger}_{joint}'] - high[f'lh_{finger}_{joint}']
+                         for joint in ('mcp_pitch', 'dip'))
+            self.assertLess(abs(change), .02)
         for pose in ('pinch_preshape_without_pinky', 'pinch_thumb_ready_without_pinky', 'pinch_without_pinky'):
             self.assertEqual(targets(pose, .6)['lh_thumb_cmc_yaw'], .6)
             with self.assertRaises(ValueError):

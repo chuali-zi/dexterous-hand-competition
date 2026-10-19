@@ -68,11 +68,13 @@ def targets(pose, thumb_yaw=None):
                 'pinch_thumb_ready_without_pinky', 'pinch_without_pinky'):
         opened = targets('open')
         closed = targets('close_without_pinky', .62 if thumb_yaw is None else thumb_yaw)
-        finger_fraction = .58 if pose == 'pinch_without_pinky' else .5
         thumb_fraction = 0. if pose == 'pinch_preshape_without_pinky' else .45
         result = dict(opened)
         for name in result:
             if name.startswith(('lh_index_', 'lh_middle_', 'lh_ring_')):
+                # Bend the proximal joint while extending the distal joint to
+                # keep the fingertip orientation close to the high preshape.
+                finger_fraction = (.42 if name.endswith('_dip') else .58) if pose == 'pinch_without_pinky' else .5
                 result[name] += finger_fraction * (closed[name] - opened[name])
             elif name in ('lh_thumb_cmc_pitch', 'lh_thumb_ip'):
                 result[name] += thumb_fraction * (closed[name] - opened[name])
