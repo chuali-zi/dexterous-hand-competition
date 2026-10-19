@@ -194,7 +194,7 @@ def main():
     parser.add_argument('--preshape-fingers', action='store_true',
                         help='Seeded pickup: half-close fingers high, descend, then prepare thumb before closing')
     parser.add_argument('--limited-pinch', action='store_true',
-                        help='Preshaped inspection only: preposition thumb yaw high, use 45%% thumb / 58%% MCP / 42%% DIP closure')
+                        help='Preshaped inspection only: preposition thumb yaw high, use 45%% thumb / 74%% MCP with constant fingertip pitch')
     parser.add_argument('--pass-through-high', action='store_true',
                         help='Limited pinch only: advance high intermediate joints without a stop at every point')
     parser.add_argument('--prepare-thumb-high', action='store_true',
