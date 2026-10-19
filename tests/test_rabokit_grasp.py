@@ -10,6 +10,19 @@ from rabokit_pickup_vision import neighboring_layout, pickup_evidence
 
 
 class GraspPlanTests(unittest.TestCase):
+    def test_full_closure_rgb_trace_rejects_an_unstaged_plan_before_observation(self):
+        import contextlib
+        import io
+        from rabokit_grasp import main
+        argv = ['rabokit_grasp.py','--output','unused-rgb-trace-output','--stage','pickup','--trace-closure-rgb']
+        errors = io.StringIO()
+        with patch.dict('os.environ', {'ROS2_NAMESPACE':'test'}), patch('sys.argv',argv), \
+                patch('rabokit_grasp.observe') as observe, contextlib.redirect_stderr(errors):
+            with self.assertRaises(SystemExit):
+                main()
+        observe.assert_not_called()
+        self.assertIn('Closure RGB recording requires --limited-pinch', errors.getvalue())
+
     def test_closure_rgb_diagnostic_is_the_same_route_prefix_ending_before_lift(self):
         events, _ = make_plan(self.start, self.source, .009, 'pickup')
         options = dict(limited_pinch=True, prepare_thumb_high=True, compare_empty_closure=True, pad_grasp=True)

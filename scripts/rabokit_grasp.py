@@ -239,6 +239,8 @@ def main():
                         help='With high thumb preparation, record one high empty closure and restore before descending')
     parser.add_argument('--diagnose-closure-rgb', action='store_true',
                         help='Record stereo during the three low hand ramps, then stop before lift; no grasp verdict or return')
+    parser.add_argument('--trace-closure-rgb', action='store_true',
+                        help='Record the same low hand ramp RGB while keeping the full pickup/return plan')
     parser.add_argument('--side-camera', action='store_true',
                         help='Record synchronized side RGB at static stages for grasp visibility diagnosis')
     parser.add_argument('--inspect-pickup', action='store_true',
@@ -264,8 +266,9 @@ def main():
         parser.error('--prepare-thumb-high requires --limited-pinch')
     if args.compare_empty_closure and not args.prepare_thumb_high:
         parser.error('--compare-empty-closure requires --prepare-thumb-high')
-    if args.diagnose_closure_rgb and not args.limited_pinch:
-        parser.error('--diagnose-closure-rgb requires --limited-pinch')
+    closure_rgb_trace = args.diagnose_closure_rgb or args.trace_closure_rgb
+    if closure_rgb_trace and not args.limited_pinch:
+        parser.error('Closure RGB recording requires --limited-pinch')
     tool_rotation = None
     if args.pad_grasp:
         if not (args.limited_pinch and args.prepare_thumb_high):
@@ -372,6 +375,7 @@ def main():
                   'prepare_thumb_high_requested': args.prepare_thumb_high,
                   'compare_empty_closure_requested': args.compare_empty_closure,
                   'closure_rgb_diagnostic_requested': args.diagnose_closure_rgb,
+                  'closure_rgb_trace_requested': closure_rgb_trace,
                   'hand_ramp_seconds': 2. if args.limited_pinch else 0.,
                   'pass_through_high_requested': args.pass_through_high,
                   'pass_through_joint_count': sum(bool(e.get('pass_through')) for e in events),
@@ -429,7 +433,7 @@ def main():
                                             ramp_seconds=event.get('hand_ramp_seconds', report['hand_ramp_seconds']),
                                             pad_grasp=event.get('pad_grasp', False),
                                             rgb_trace_output=(args.output / (event['name'] + '-rgb')
-                                                if args.diagnose_closure_rgb and event['name'] in (
+                                                if closure_rgb_trace and event['name'] in (
                                                     'thumb_ready', 'thumb_opposed', 'closed') else None),
                                             trace_output=(args.output / (event['name'] + '-command.json')
                                                 if args.limited_pinch and event['name'] in (
