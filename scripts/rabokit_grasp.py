@@ -60,7 +60,7 @@ def preshape_fingers_plan(events, limited_pinch=False, prepare_thumb_high=False,
             event = {**event, 'hand': 'pinch_high_thumb_ready_without_pinky' if limited_pinch else preshape,
                      'preshape_feedback_key': 'release_preshape_feedback'}
         elif limited_pinch and event['name'] == 'closed':
-            event = {**event, 'hand': 'pinch_without_pinky', 'thumb_yaw_rad': .85}
+            event = {**event, 'hand': 'pinch_without_pinky', 'thumb_yaw_rad': 1.15}
         elif event.get('requires_tabletop_target') and event.get('hand') == 'open':
             event = {**event, 'name': 'empty_pickup_preshape', 'hand': preshape,
                      'capture': True, 'wait_open': False,
@@ -75,8 +75,11 @@ def preshape_fingers_plan(events, limited_pinch=False, prepare_thumb_high=False,
                     {'name': 'empty_finger_ready', 'hand': 'pinch_finger_ready_without_pinky', 'capture': True,
                      'hand_only': True, 'wait_arrival': True,
                      'preshape_feedback_key': 'empty_finger_ready_feedback'},
+                    {'name': 'empty_thumb_opposed', 'hand': 'pinch_high_thumb_opposed_without_pinky',
+                     'capture': True, 'hand_only': True, 'wait_arrival': True,
+                     'thumb_yaw_rad': 1.15, 'preshape_feedback_key': 'empty_thumb_opposed_feedback'},
                     {'name': 'empty_closed', 'hand': 'pinch_without_pinky', 'capture': True,
-                     'hand_only': True, 'thumb_yaw_rad': .85,
+                     'hand_only': True, 'thumb_yaw_rad': 1.15,
                      'preshape_feedback_key': 'empty_closed_feedback'},
                     {'name': 'empty_reprepared', 'hand': high_preshape, 'capture': True,
                      'hand_only': True, 'wait_arrival': True,
@@ -84,6 +87,10 @@ def preshape_fingers_plan(events, limited_pinch=False, prepare_thumb_high=False,
         elif event['name'] == 'contact':
             staged.append({'name': 'thumb_ready', 'hand': thumb_ready, 'capture': True,
                            'preshape_feedback_key': 'thumb_ready_feedback'})
+            if limited_pinch:
+                staged.append({'name': 'thumb_opposed', 'hand': 'pinch_thumb_opposed_without_pinky',
+                               'capture': True, 'thumb_yaw_rad': 1.15,
+                               'preshape_feedback_key': 'thumb_opposed_feedback'})
     return [{**event, 'hand_ramp_seconds': 2.} if limited_pinch and 'hand' in event else event for event in staged]
 
 
@@ -199,7 +206,7 @@ def main():
     parser.add_argument('--preshape-fingers', action='store_true',
                         help='Seeded pickup: half-close fingers high, descend, then prepare low before closing')
     parser.add_argument('--limited-pinch', action='store_true',
-                        help='Middle/ring pinch, index/pinky open: ring MCP 66%% then 74%%, middle +7%%; thumb 70%% at yaw 0.85; keep fingertip pitch')
+                        help='Middle/ring pinch: prepare fingers at 66%% MCP, oppose thumb at 70%% and yaw 1.15, then close to 74%% MCP; middle +7%%, index/pinky open')
     parser.add_argument('--pass-through-high', action='store_true',
                         help='Limited pinch only: advance high intermediate joints without a stop at every point')
     parser.add_argument('--prepare-thumb-high', action='store_true',
@@ -384,7 +391,8 @@ def main():
                                             ramp_seconds=event.get('hand_ramp_seconds', report['hand_ramp_seconds']),
                                             trace_output=(args.output / (event['name'] + '-command.json')
                                                 if args.limited_pinch and event['name'] in (
-                                                    'empty_finger_ready', 'thumb_ready', 'empty_closed', 'closed') else None))
+                                                    'empty_finger_ready', 'thumb_ready', 'empty_thumb_opposed',
+                                                    'thumb_opposed', 'empty_closed', 'closed') else None))
                     if not (event.get('wait_open') or event.get('wait_arrival')):
                         time.sleep(1)
                     state = measured(arm)

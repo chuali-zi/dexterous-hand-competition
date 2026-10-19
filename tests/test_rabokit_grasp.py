@@ -16,21 +16,28 @@ class GraspPlanTests(unittest.TestCase):
                                    compare_empty_closure=True)
         names = [e['name'] for e in new]
         i = names.index('preshaped')
-        self.assertEqual(names[i:i+5], ['preshaped', 'empty_finger_ready', 'empty_closed', 'empty_reprepared', 'approached'])
-        self.assertEqual([e for e in new if e['name'] not in ('empty_finger_ready', 'empty_closed', 'empty_reprepared')], old)
-        finger_ready, baseline, restored = new[i+1:i+4]
+        self.assertEqual(names[i:i+6], ['preshaped', 'empty_finger_ready', 'empty_thumb_opposed',
+                                      'empty_closed', 'empty_reprepared', 'approached'])
+        self.assertEqual([e for e in new if e['name'] not in (
+            'empty_finger_ready', 'empty_thumb_opposed', 'empty_closed', 'empty_reprepared')], old)
+        finger_ready, opposed, baseline, restored = new[i+1:i+5]
         self.assertEqual(finger_ready['hand'], 'pinch_finger_ready_without_pinky')
         self.assertTrue(finger_ready['wait_arrival'])
         self.assertNotIn('thumb_yaw_rad', finger_ready)
         self.assertEqual(baseline['hand'], 'pinch_without_pinky')
         closed = next(e for e in new if e['name'] == 'closed')
-        self.assertEqual(baseline['thumb_yaw_rad'], .85)
+        self.assertEqual(baseline['thumb_yaw_rad'], 1.15)
         self.assertEqual(baseline['thumb_yaw_rad'], closed['thumb_yaw_rad'])
+        self.assertEqual(opposed['hand'], 'pinch_high_thumb_opposed_without_pinky')
+        low_opposed = next(e for e in new if e['name'] == 'thumb_opposed')
+        self.assertEqual(opposed['thumb_yaw_rad'], low_opposed['thumb_yaw_rad'])
+        self.assertTrue(opposed['wait_arrival'])
+        self.assertFalse(low_opposed.get('wait_arrival', False))
         self.assertNotIn('thumb_yaw_rad', restored)
         self.assertEqual(baseline['preshape_feedback_key'], 'empty_closed_feedback')
         self.assertEqual(restored['hand'], new[i]['hand'])
         self.assertTrue(restored['wait_arrival'])
-        self.assertTrue(all(e['hand_only'] and e['hand_ramp_seconds'] == 2. for e in (finger_ready, baseline, restored)))
+        self.assertTrue(all(e['hand_only'] and e['hand_ramp_seconds'] == 2. for e in (finger_ready, opposed, baseline, restored)))
         with self.assertRaises(ValueError):
             preshape_fingers_plan(events, limited_pinch=True, compare_empty_closure=True)
 
@@ -86,7 +93,8 @@ class GraspPlanTests(unittest.TestCase):
         names = [e['name'] for e in staged]
         self.assertLess(names.index('aligned'), names.index('preshaped'))
         self.assertLess(names.index('preshaped'), names.index('approached'))
-        self.assertEqual(names[names.index('contact') + 1:names.index('closed') + 1], ['thumb_ready', 'closed'])
+        self.assertEqual(names[names.index('contact') + 1:names.index('closed') + 1],
+                         ['thumb_ready', 'thumb_opposed', 'closed'])
         self.assertEqual(events, original)
 
     def test_preshape_prepares_fingers_high_and_thumb_at_contact_before_closing(self):

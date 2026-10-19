@@ -224,7 +224,7 @@ class HandTargetsTests(unittest.TestCase):
         pinch = targets('pinch_without_pinky')
         for name in opened:
             if name == 'lh_thumb_cmc_yaw':
-                self.assertEqual([shape[name] for shape in (high, ready, pinch)], [.62, .62, .85])
+                self.assertEqual([shape[name] for shape in (high, ready, pinch)], [.62, .62, 1.15])
             elif name.startswith(('lh_index_', 'lh_pinky_')):
                 self.assertEqual([shape[name] for shape in (high, ready, pinch)], [opened[name]] * 3)
             else:
@@ -259,6 +259,21 @@ class HandTargetsTests(unittest.TestCase):
             self.assertEqual(targets(pose, .6)['lh_thumb_cmc_yaw'], .6)
             with self.assertRaises(ValueError):
                 targets(pose, float('nan'))
+
+    def test_thumb_opposition_precedes_finger_closure_and_keeps_thumb_fixed(self):
+        ready = targets('pinch_contact_ready_without_pinky', .511764705882353)
+        opposed = targets('pinch_thumb_opposed_without_pinky')
+        self.assertEqual(opposed, targets('pinch_high_thumb_opposed_without_pinky'))
+        closed = targets('pinch_without_pinky')
+        for name in ready:
+            self.assertEqual(opposed[name], closed[name] if name.startswith('lh_thumb_') else ready[name])
+        self.assertEqual(opposed['lh_thumb_cmc_yaw'], 1.15)
+        self.assertAlmostEqual(opposed['lh_thumb_ip'], .56688)
+        frames = { 'r136d7b_link_' + child: {'parent': 'r136d7b_link_' + parent,
+            'xyzw': target_quaternion(origin, axis, opposed[name]), 'stamp': [10, 0]}
+            for name, (child, parent, origin, axis) in HAND_JOINTS.items() }
+        self.assertFalse(preparation_feedback(frames, 'pinch_thumb_opposed_without_pinky')['goal_arrival_required'])
+        self.assertTrue(preparation_feedback(frames, 'pinch_high_thumb_opposed_without_pinky')['goal_arrival_required'])
 
     def test_limited_thumb_contact_records_error_but_high_preshape_requires_arrival(self):
         frames = {}
