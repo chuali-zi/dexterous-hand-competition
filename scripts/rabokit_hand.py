@@ -74,12 +74,12 @@ def targets(pose, thumb_yaw=None, pad_grasp=False):
             raise ValueError('Pad grasp requires an open or limited-pinch pose')
         result = targets('open')
         # Public-mesh pad fit: MCPs stay open; DIP motion closes the long fingers.
-        withdrawal = .20 if high else .08 if ready or opposed else 0.
-        # Trial 17 loaded the thumb/middle pair but left the ring at its empty
-        # baseline. Add only final ring preload; keep the prepared opening.
-        ring_preload = .10 if pose == 'pinch_without_pinky' else 0.
-        result.update(lh_middle_dip=.9662820796229564-withdrawal*1.6137,
-                      lh_ring_dip=.9087363921157451-withdrawal*1.6137+ring_preload,
+        # Trial 18 RGB edges rotated before final closure while the ring stayed
+        # unloaded. Bring both long fingers to the side before opposing the thumb,
+        # then add a small final squeeze. The high opening stays unchanged.
+        dip_offset = -.20*1.6137 if high else .06 if ready or opposed else .11
+        result.update(lh_middle_dip=.9662820796229564+dip_offset,
+                      lh_ring_dip=.9087363921157451+dip_offset,
                       lh_thumb_cmc_pitch=.3088039736573618,
                       lh_thumb_ip=.8472, lh_thumb_cmc_yaw=.9652294980590825)
         if high or ready:
