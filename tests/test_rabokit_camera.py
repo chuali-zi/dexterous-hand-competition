@@ -1,8 +1,10 @@
 """RGB transport checks without a ROS installation."""
 import importlib.util
+import json
 from pathlib import Path
 import struct
 import sys
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -15,6 +17,53 @@ spec.loader.exec_module(camera)
 
 
 class CameraTests(unittest.TestCase):
+    def ramp_trace(self):
+        callbacks = {}
+        node = SimpleNamespace(create_subscription=lambda kind, topic, callback, qos:
+                               callbacks.setdefault(topic, callback))
+        modules = {'rclpy.qos': SimpleNamespace(QoSProfile=lambda **kw: kw,
+                                               ReliabilityPolicy=SimpleNamespace(RELIABLE=1)),
+                   'sensor_msgs.msg': SimpleNamespace(CameraInfo=object, Image=object)}
+        with patch.dict(sys.modules, modules):
+            trace = camera.RampedRgbTrace(node, 'test')
+        self.assertEqual(len(callbacks), 4)
+        return trace
+
+    def test_ramp_rgb_saves_only_matched_stereo_in_the_command_window(self):
+        trace = self.ramp_trace()
+        for stamp in ((0,600000000), (0,800000000), (1,0), (1,200000000),
+                      (1,400000000), (1,600000000)):
+            for name in trace.names:
+                def header(frame):
+                    return SimpleNamespace(stamp=SimpleNamespace(sec=stamp[0], nanosec=stamp[1]), frame_id=frame)
+                image = SimpleNamespace(header=header(name), width=1, height=1, encoding='rgb8',
+                                        step=3, data=bytes((0,255,0)))
+                info = SimpleNamespace(header=header('wrong' if stamp==(1,200000000) and name=='base_cam2' else name),
+                    width=1, height=1, k=[100.,0.,.5,0.,100.,.5,0.,0.,1.], d=[], r=[], p=[], distortion_model='')
+                trace.receive(name, 'image', image)
+                if not (stamp==(1,400000000) and name=='base_cam2'):
+                    trace.receive(name, 'info', info)
+        with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parents[1]/'runs') as folder:
+            root = Path(folder)/'rgb'
+            report = trace.save(root, 1., 1.5)
+            self.assertEqual([f['stamp'] for f in report['frames']], [[0,800000000],[1,0]])
+            self.assertEqual(report['rejected_unmatched_stamps'], 2)
+            for frame in report['frames']:
+                for name in trace.names:
+                    saved = root/frame['directory']/name
+                    self.assertEqual((saved/'frame.png').read_bytes(), camera.png_bytes(1,1,bytes((0,255,0))))
+                    self.assertEqual(json.loads((saved/'camera.json').read_text())['frame_id'], name)
+
+    def test_ramp_rgb_bounds_memory_and_reports_no_frames_without_waiting(self):
+        trace = self.ramp_trace()
+        for i in (*range(32),0):
+            trace.receive('base_cam','image',self.message(i,'base_cam'))
+        self.assertEqual(sorted(trace.pending), [(i,0) for i in range(8,32)])
+        with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parents[1]/'runs') as folder:
+            report = trace.save(Path(folder)/'rgb',100.,101.)
+        self.assertEqual(report['frames'], [])
+        self.assertEqual(report['message_counts']['base_cam'], {'image':33,'info':0})
+
     def capture_events(self, events, names=('a', 'b')):
         callbacks, cleanup = {}, []
         clock = [0.0]

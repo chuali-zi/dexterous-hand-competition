@@ -134,8 +134,12 @@ class HandTargetsTests(unittest.TestCase):
             self.assertEqual(run.call_args.kwargs['timeout'], 25)
             hand_command('pinch_high_thumb_ready_without_pinky', pad_grasp=True, ramp_seconds=2.)
             self.assertIn('--pad-grasp', run.call_args.args[0])
+            hand_command('pinch_without_pinky', ramp_seconds=2., trace_output=Path('command.json'),
+                         rgb_trace_output=Path('closed-rgb'))
+            self.assertEqual(run.call_args.args[0][-2:], ['--rgb-trace-output', 'closed-rgb'])
 
-    def high_wait(self, overshoot=False, ramped_open=False, pose='pinch_preshape_without_pinky', record_ramp=False):
+    def high_wait(self, overshoot=False, ramped_open=False, pose='pinch_preshape_without_pinky', record_ramp=False,
+                  record_rgb=False):
         clock, callbacks, published = [0.], [], []
         values = targets('open' if ramped_open else pose)
         def spin(node, timeout_sec):
@@ -173,19 +177,35 @@ class HandTargetsTests(unittest.TestCase):
             trace_path = Path(folder) / 'command.json'
             if record_ramp:
                 arguments.extend(('--ramp-seconds', '.5', '--trace-output', str(trace_path)))
+            if record_rgb:
+                arguments.extend(('--rgb-trace-output', str(Path(folder)/'rgb')))
             with patch.dict(sys.modules, modules), patch.dict('os.environ', {'ROS2_NAMESPACE': 'test'}), \
                     patch.object(sys, 'argv', arguments), \
-                    patch('rabokit_hand.time.monotonic', side_effect=lambda: clock[0]), patch('builtins.print') as output:
+                    patch('rabokit_hand.time.monotonic', side_effect=lambda: clock[0]), \
+                    patch('rabokit_camera.RampedRgbTrace') as rgb, patch('builtins.print') as output:
+                rgb.return_value.save.return_value = {'frames': []}
                 if overshoot:
                     with self.assertRaises(TimeoutError):
                         main()
                 else:
                     main()
+                if record_rgb:
+                    rgb.assert_called_once_with(node, 'test')
+                    self.assertEqual(rgb.return_value.save.call_count, 1)
             trace = json.loads(trace_path.read_text()) if record_ramp else None
         record = json.loads(output.call_args.args[0])
         if record_ramp:
             record['saved_trace'] = trace
         return record, clock[0], published
+
+    def test_optional_rgb_trace_preserves_publication_timing_and_timeout(self):
+        for overshoot in (False, True):
+            base, base_elapsed, base_published = self.high_wait(overshoot=overshoot, record_ramp=True)
+            rgb, elapsed, published = self.high_wait(overshoot=overshoot, record_ramp=True, record_rgb=True)
+            self.assertEqual(elapsed, base_elapsed)
+            self.assertEqual(published, base_published)
+            self.assertEqual(rgb['saved_trace']['command_complete'], base['saved_trace']['command_complete'])
+            self.assertEqual(rgb['saved_trace']['rgb_trace'], {'frames': []})
 
     def test_command_trace_retains_transient_load_and_partial_feedback_on_timeout(self):
         for overshoot in (False, True):

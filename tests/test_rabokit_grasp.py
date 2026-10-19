@@ -10,6 +10,18 @@ from rabokit_pickup_vision import neighboring_layout, pickup_evidence
 
 
 class GraspPlanTests(unittest.TestCase):
+    def test_closure_rgb_diagnostic_is_the_same_route_prefix_ending_before_lift(self):
+        events, _ = make_plan(self.start, self.source, .009, 'pickup')
+        options = dict(limited_pinch=True, prepare_thumb_high=True, compare_empty_closure=True, pad_grasp=True)
+        normal = preshape_fingers_plan(events, **options)
+        diagnostic = preshape_fingers_plan(events, **options, closure_rgb_diagnostic=True)
+        end = next(i for i, event in enumerate(normal) if event['name']=='closed')
+        self.assertEqual(diagnostic, normal[:end+1])
+        self.assertEqual([e['name'] for e in diagnostic if 'hand' in e][-3:],
+                         ['thumb_ready','thumb_opposed','closed'])
+        with self.assertRaises(ValueError):
+            preshape_fingers_plan(events, closure_rgb_diagnostic=True)
+
     def test_pad_mode_rejects_geometry_overrides_before_observation(self):
         import contextlib
         import io

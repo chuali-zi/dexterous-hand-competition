@@ -173,6 +173,8 @@ def main():
                         help='Ramp over [0,3] robot TF simulation seconds, then publish the endpoint for at least 0.5 seconds')
     parser.add_argument('--trace-output', type=Path,
                         help='Record known hand joint feedback during the ramp without extending it')
+    parser.add_argument('--rgb-trace-output', type=Path,
+                        help='Save timestamp-matched overhead RGB received during the traced ramp; no extra wait')
     waiting = parser.add_mutually_exclusive_group()
     waiting.add_argument('--wait-open', action='store_true',
                         help='Require fresh robot TF to verify all open joints before returning')
@@ -183,6 +185,8 @@ def main():
         parser.error('--ramp-seconds must be in [0,3]')
     if args.trace_output and (not args.ramp_seconds or args.trace_output.exists()):
         parser.error('--trace-output requires a ramp and a new output file')
+    if args.rgb_trace_output and (not args.trace_output or args.rgb_trace_output.exists()):
+        parser.error('--rgb-trace-output requires --trace-output and a new directory')
     if args.wait_open and args.pose != 'open':
         parser.error('--wait-open requires --pose open; a blocked grasp need not reach its closure targets')
     if args.wait_arrival and args.pose not in ('preshape_without_pinky', 'pinch_preshape_without_pinky',
@@ -207,7 +211,11 @@ def main():
              'pad_grasp': args.pad_grasp,
              'ramp_start_rad': None, 'command_start_stamp_sec': None,
              'command_complete': False, 'joint_samples': []}
+    rgb_trace = None
     try:
+        if args.rgb_trace_output:
+            from rabokit_camera import RampedRgbTrace
+            rgb_trace = RampedRgbTrace(node, namespace)
         frames = {}
         if wait_arrival or args.ramp_seconds:
             from rclpy.qos import qos_profile_sensor_data
@@ -335,6 +343,16 @@ def main():
     finally:
         try:
             if args.trace_output:
+                if rgb_trace is not None:
+                    try:
+                        stamp = trace['command_start_stamp_sec']
+                        if stamp is None:
+                            raise RuntimeError('Hand ramp did not start')
+                        trace['rgb_trace'] = rgb_trace.save(args.rgb_trace_output, stamp,
+                            stamp + max(1., args.ramp_seconds + .5))
+                    except Exception as error:
+                        trace['rgb_trace'] = {'error': f'{type(error).__name__}: {error}',
+                                              'message_counts': rgb_trace.counts}
                 args.trace_output.parent.mkdir(parents=True, exist_ok=True)
                 args.trace_output.write_text(json.dumps(trace, indent=2)+'\n', encoding='utf-8')
         finally:

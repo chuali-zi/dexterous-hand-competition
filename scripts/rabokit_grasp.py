@@ -51,7 +51,7 @@ def high_pass_through_plan(events, start, surface_z):
 
 
 def preshape_fingers_plan(events, limited_pinch=False, prepare_thumb_high=False, compare_empty_closure=False,
-                          pad_grasp=False):
+                          pad_grasp=False, closure_rgb_diagnostic=False):
     """Prepare high; limited closure opposes the thumb and releases to preparation."""
     if prepare_thumb_high and not limited_pinch:
         raise ValueError('High thumb preparation requires limited pinch')
@@ -59,6 +59,8 @@ def preshape_fingers_plan(events, limited_pinch=False, prepare_thumb_high=False,
         raise ValueError('Empty closure comparison requires high thumb preparation')
     if pad_grasp and not (limited_pinch and prepare_thumb_high):
         raise ValueError('Pad grasp requires limited pinch and high thumb preparation')
+    if closure_rgb_diagnostic and not limited_pinch:
+        raise ValueError('Closure RGB diagnostic requires limited pinch')
     names = [event['name'] for event in events]
     if any(names.count(name) != 1 for name in ('aligned', 'contact', 'closed', 'released')) or not (
             names.index('aligned') < names.index('contact') < names.index('closed') < names.index('released')):
@@ -109,6 +111,8 @@ def preshape_fingers_plan(events, limited_pinch=False, prepare_thumb_high=False,
             if 'hand' in event:
                 event['pad_grasp'] = True
                 event.pop('thumb_yaw_rad', None)  # Each fitted stage defines its own yaw.
+    if closure_rgb_diagnostic:
+        staged = staged[:next(i for i, event in enumerate(staged) if event['name'] == 'closed') + 1]
     return [{**event, 'hand_ramp_seconds': 2.} if limited_pinch and 'hand' in event else event for event in staged]
 
 
@@ -233,6 +237,8 @@ def main():
                         help='Limited pinch only: bend the thumb to its 45%% ready target before descending')
     parser.add_argument('--compare-empty-closure', action='store_true',
                         help='With high thumb preparation, record one high empty closure and restore before descending')
+    parser.add_argument('--diagnose-closure-rgb', action='store_true',
+                        help='Record stereo during the three low hand ramps, then stop before lift; no grasp verdict or return')
     parser.add_argument('--side-camera', action='store_true',
                         help='Record synchronized side RGB at static stages for grasp visibility diagnosis')
     parser.add_argument('--inspect-pickup', action='store_true',
@@ -258,6 +264,8 @@ def main():
         parser.error('--prepare-thumb-high requires --limited-pinch')
     if args.compare_empty_closure and not args.prepare_thumb_high:
         parser.error('--compare-empty-closure requires --prepare-thumb-high')
+    if args.diagnose_closure_rgb and not args.limited_pinch:
+        parser.error('--diagnose-closure-rgb requires --limited-pinch')
     tool_rotation = None
     if args.pad_grasp:
         if not (args.limited_pinch and args.prepare_thumb_high):
@@ -334,7 +342,8 @@ def main():
         if args.preshape_fingers:
             events = preshape_fingers_plan(events, limited_pinch=args.limited_pinch,
                                           prepare_thumb_high=args.prepare_thumb_high,
-                                          compare_empty_closure=args.compare_empty_closure, pad_grasp=args.pad_grasp)
+                                          compare_empty_closure=args.compare_empty_closure, pad_grasp=args.pad_grasp,
+                                          closure_rgb_diagnostic=args.diagnose_closure_rgb)
         if args.pass_through_high:
             events = high_pass_through_plan(events, start, point[2])
         if args.keep_pinky_open:
@@ -362,6 +371,7 @@ def main():
                   'pad_grasp_requested': args.pad_grasp,
                   'prepare_thumb_high_requested': args.prepare_thumb_high,
                   'compare_empty_closure_requested': args.compare_empty_closure,
+                  'closure_rgb_diagnostic_requested': args.diagnose_closure_rgb,
                   'hand_ramp_seconds': 2. if args.limited_pinch else 0.,
                   'pass_through_high_requested': args.pass_through_high,
                   'pass_through_joint_count': sum(bool(e.get('pass_through')) for e in events),
@@ -418,6 +428,9 @@ def main():
                                             wait_arrival=event.get('wait_arrival', False),
                                             ramp_seconds=event.get('hand_ramp_seconds', report['hand_ramp_seconds']),
                                             pad_grasp=event.get('pad_grasp', False),
+                                            rgb_trace_output=(args.output / (event['name'] + '-rgb')
+                                                if args.diagnose_closure_rgb and event['name'] in (
+                                                    'thumb_ready', 'thumb_opposed', 'closed') else None),
                                             trace_output=(args.output / (event['name'] + '-command.json')
                                                 if args.limited_pinch and event['name'] in (
                                                     'empty_finger_ready', 'thumb_ready', 'empty_thumb_opposed',
@@ -497,6 +510,13 @@ def main():
                         report['inspection_stopped_early'] = True
                         save()
                         raise RuntimeError('RGB did not verify clean pickup; inspection trial stopped before low return')
+            if args.diagnose_closure_rgb:
+                report.update(closure_rgb_diagnostic_stopped=True, motion_sequence_completed=False,
+                              return_completed=False, closure_rgb_trace_files=[name + '-command.json'
+                                  for name in ('thumb_ready', 'thumb_opposed', 'closed')])
+                save()
+                print('STOP: closure RGB diagnostic ended before lift; inspect capture coverage in command traces', flush=True)
+                return
             return_joints(arm, start['joints'])
             report['completed'].append({'name': 'restored', 'measured': measured(arm)})
             report['return_completed'] = True

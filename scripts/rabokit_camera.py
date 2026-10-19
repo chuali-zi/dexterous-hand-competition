@@ -112,6 +112,59 @@ def save_pair(image, info, counts, seconds, image_topic, info_topic, output):
     return report
 
 
+class RampedRgbTrace:
+    """Retain existing stereo messages on a caller's node; never wait or control it."""
+
+    def __init__(self, node, namespace):
+        from rclpy.qos import QoSProfile, ReliabilityPolicy
+        from sensor_msgs.msg import CameraInfo, Image
+
+        self.names = ('base_cam', 'base_cam2')
+        self.pending = {}
+        self.counts = {name: {'image': 0, 'info': 0} for name in self.names}
+        self.started = time.monotonic()
+        self.topics = {name: (f'/{namespace}/base/{name}/image_raw',
+                              f'/{namespace}/base/{name}/camera_info') for name in self.names}
+        self.subscriptions = []
+        qos = QoSProfile(depth=5, reliability=ReliabilityPolicy.RELIABLE)
+        for name, (image_topic, info_topic) in self.topics.items():
+            for kind, topic, message in (('image', image_topic, Image), ('info', info_topic, CameraInfo)):
+                self.subscriptions.append(node.create_subscription(message, topic,
+                    lambda msg, name=name, kind=kind: self.receive(name, kind, msg), qos))
+
+    def receive(self, name, kind, msg):
+        self.counts[name][kind] += 1
+        stamp = (msg.header.stamp.sec, msg.header.stamp.nanosec)
+        self.pending.setdefault(stamp, {}).setdefault(name, {})[kind] = msg
+        # At the configured 5 Hz this covers the longest ramp and endpoint hold.
+        while len(self.pending) > 24:
+            del self.pending[min(self.pending)]
+
+    def save(self, output, command_start, command_end):
+        output.mkdir(parents=True)
+        observation_wall_seconds = time.monotonic() - self.started
+        frames = []
+        rejected = 0
+        for stamp, group in sorted(self.pending.items()):
+            relative = stamp[0] + stamp[1] * 1e-9 - command_start
+            if relative < -.25 - 1e-6 or relative > command_end - command_start + 1e-6:
+                continue
+            if not all(name in group and all(kind in group[name] for kind in ('image', 'info')) and
+                       group[name]['image'].header.frame_id == group[name]['info'].header.frame_id
+                       for name in self.names):
+                rejected += 1
+                continue
+            folder = f'{stamp[0]:06d}-{stamp[1]:09d}'
+            for name in self.names:
+                save_pair(group[name]['image'], group[name]['info'], self.counts[name],
+                          observation_wall_seconds, *self.topics[name], output / folder / name)
+            frames.append({'stamp': list(stamp), 'relative_command_seconds': relative,
+                           'directory': folder})
+        return {'directory': str(output), 'cameras': list(self.names), 'frames': frames,
+                'message_counts': self.counts, 'rejected_unmatched_stamps': rejected,
+                'scope': 'Existing RGB stream during hand publication; no extra capture wait, object pose or grasp verdict'}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--topic', required=True, help='Relative RGB topic from the scene interface list')
