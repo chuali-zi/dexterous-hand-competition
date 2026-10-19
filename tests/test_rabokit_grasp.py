@@ -16,9 +16,12 @@ class GraspPlanTests(unittest.TestCase):
                                    compare_empty_closure=True)
         names = [e['name'] for e in new]
         i = names.index('preshaped')
-        self.assertEqual(names[i:i+4], ['preshaped', 'empty_closed', 'empty_reprepared', 'approached'])
-        self.assertEqual([e for e in new if e['name'] not in ('empty_closed', 'empty_reprepared')], old)
-        baseline, restored = new[i+1:i+3]
+        self.assertEqual(names[i:i+5], ['preshaped', 'empty_finger_ready', 'empty_closed', 'empty_reprepared', 'approached'])
+        self.assertEqual([e for e in new if e['name'] not in ('empty_finger_ready', 'empty_closed', 'empty_reprepared')], old)
+        finger_ready, baseline, restored = new[i+1:i+4]
+        self.assertEqual(finger_ready['hand'], 'pinch_finger_ready_without_pinky')
+        self.assertTrue(finger_ready['wait_arrival'])
+        self.assertNotIn('thumb_yaw_rad', finger_ready)
         self.assertEqual(baseline['hand'], 'pinch_without_pinky')
         closed = next(e for e in new if e['name'] == 'closed')
         self.assertEqual(baseline['thumb_yaw_rad'], .70)
@@ -27,7 +30,7 @@ class GraspPlanTests(unittest.TestCase):
         self.assertEqual(baseline['preshape_feedback_key'], 'empty_closed_feedback')
         self.assertEqual(restored['hand'], new[i]['hand'])
         self.assertTrue(restored['wait_arrival'])
-        self.assertTrue(all(e['hand_only'] and e['hand_ramp_seconds'] == 2. for e in (baseline, restored)))
+        self.assertTrue(all(e['hand_only'] and e['hand_ramp_seconds'] == 2. for e in (finger_ready, baseline, restored)))
         with self.assertRaises(ValueError):
             preshape_fingers_plan(events, limited_pinch=True, compare_empty_closure=True)
 
@@ -72,7 +75,7 @@ class GraspPlanTests(unittest.TestCase):
         self.assertEqual(hands['opened']['hand'], 'open')
         self.assertEqual(hands['preshaped']['hand'], 'pinch_preshape_without_pinky')
         self.assertTrue(hands['preshaped']['wait_arrival'])
-        self.assertEqual(hands['thumb_ready']['hand'], 'pinch_thumb_ready_without_pinky')
+        self.assertEqual(hands['thumb_ready']['hand'], 'pinch_contact_ready_without_pinky')
         self.assertFalse(hands['thumb_ready'].get('wait_arrival', False))
         self.assertEqual(hands['closed']['hand'], 'pinch_without_pinky')
         self.assertEqual(hands['released']['hand'], 'pinch_high_thumb_ready_without_pinky')

@@ -52,7 +52,7 @@ def preshape_fingers_plan(events, limited_pinch=False, prepare_thumb_high=False,
         raise ValueError('Preshape requires high alignment before contact and pickup closure')
     preshape = 'pinch_preshape_without_pinky' if limited_pinch else 'preshape_without_pinky'
     high_preshape = 'pinch_high_thumb_ready_without_pinky' if prepare_thumb_high else preshape
-    thumb_ready = 'pinch_thumb_ready_without_pinky' if limited_pinch else 'thumb_ready_without_pinky'
+    thumb_ready = 'pinch_contact_ready_without_pinky' if limited_pinch else 'thumb_ready_without_pinky'
     staged = []
     for event in events:
         if event['name'] == 'released':
@@ -72,6 +72,9 @@ def preshape_fingers_plan(events, limited_pinch=False, prepare_thumb_high=False,
                            'preshape_feedback_key': 'preshape_feedback'})
             if compare_empty_closure:
                 staged.extend((
+                    {'name': 'empty_finger_ready', 'hand': 'pinch_finger_ready_without_pinky', 'capture': True,
+                     'hand_only': True, 'wait_arrival': True,
+                     'preshape_feedback_key': 'empty_finger_ready_feedback'},
                     {'name': 'empty_closed', 'hand': 'pinch_without_pinky', 'capture': True,
                      'hand_only': True, 'thumb_yaw_rad': .70,
                      'preshape_feedback_key': 'empty_closed_feedback'},
@@ -194,9 +197,9 @@ def main():
     parser.add_argument('--thumb-yaw', type=float,
                         help='Thumb yaw in native radians; limited pinch uses this for preparation and its own final yaw')
     parser.add_argument('--preshape-fingers', action='store_true',
-                        help='Seeded pickup: half-close fingers high, descend, then prepare thumb before closing')
+                        help='Seeded pickup: half-close fingers high, descend, then prepare low before closing')
     parser.add_argument('--limited-pinch', action='store_true',
-                        help='Preshaped inspection only: 65%% thumb at yaw 0.70 rad / 74%% MCP with constant fingertip pitch')
+                        help='Preshaped inspection: 66%% MCP first, then 74%% MCP and 65%% thumb at yaw 0.70; keep fingertip pitch')
     parser.add_argument('--pass-through-high', action='store_true',
                         help='Limited pinch only: advance high intermediate joints without a stop at every point')
     parser.add_argument('--prepare-thumb-high', action='store_true',
@@ -308,6 +311,8 @@ def main():
             for event in events:
                 if event.get('hand') in ('close', 'close_without_pinky', 'thumb_ready_without_pinky',
                                          'pinch_high_thumb_ready_without_pinky',
+                                         'pinch_finger_ready_without_pinky',
+                                         'pinch_contact_ready_without_pinky',
                                          'pinch_preshape_without_pinky', 'pinch_thumb_ready_without_pinky',
                                          'pinch_without_pinky'):
                     event.setdefault('thumb_yaw_rad', args.thumb_yaw)
@@ -378,7 +383,8 @@ def main():
                                             wait_arrival=event.get('wait_arrival', False),
                                             ramp_seconds=event.get('hand_ramp_seconds', report['hand_ramp_seconds']),
                                             trace_output=(args.output / (event['name'] + '-command.json')
-                                                if args.limited_pinch and event['name'] in ('empty_closed', 'closed') else None))
+                                                if args.limited_pinch and event['name'] in (
+                                                    'empty_finger_ready', 'thumb_ready', 'empty_closed', 'closed') else None))
                     if not (event.get('wait_open') or event.get('wait_arrival')):
                         time.sleep(1)
                     state = measured(arm)

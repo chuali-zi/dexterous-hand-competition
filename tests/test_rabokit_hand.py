@@ -183,16 +183,18 @@ class HandTargetsTests(unittest.TestCase):
         self.assertGreater(record['feedback_samples'][0]['maximum_error_rad'], .16)
         self.assertLess(record['feedback']['maximum_error_rad'], .03)
 
-    def test_prepared_high_thumb_uses_ready_geometry_but_requires_empty_hand_settling(self):
-        pose = 'pinch_high_thumb_ready_without_pinky'
+    def test_high_finger_ready_matches_low_geometry_but_requires_empty_hand_settling(self):
+        pose = 'pinch_finger_ready_without_pinky'
         self.assertEqual(targets(pose, .511764705882353),
-                         targets('pinch_thumb_ready_without_pinky', .511764705882353))
+                         targets('pinch_contact_ready_without_pinky', .511764705882353))
+        self.assertFalse(preparation_feedback({}, 'pinch_contact_ready_without_pinky')['goal_arrival_required'])
         self.assertTrue(preparation_feedback({}, pose)['goal_arrival_required'])
-        for overshoot in (False, True):
-            record, elapsed, published = self.high_wait(overshoot=overshoot, pose=pose)
-            self.assertEqual(record['hand_arrival_verified'], not overshoot)
-            self.assertGreaterEqual(elapsed, 12. if overshoot else 4.)
-            self.assertLess(max(published), 1.)
+        for high_pose in ('pinch_high_thumb_ready_without_pinky', pose):
+            for overshoot in (False, True):
+                record, elapsed, published = self.high_wait(overshoot=overshoot, pose=high_pose)
+                self.assertEqual(record['hand_arrival_verified'], not overshoot)
+                self.assertGreaterEqual(elapsed, 12. if overshoot else 4.)
+                self.assertLess(max(published), 1.)
 
     def test_short_goal_crossing_followed_by_measured_scale_overshoot_does_not_verify_settling(self):
         for ramped_open in (False, True):
@@ -208,16 +210,17 @@ class HandTargetsTests(unittest.TestCase):
             self.assertTrue(hand_command('pinch_preshape_without_pinky', wait_arrival=True)['hand_arrival_verified'])
             self.assertEqual(run.call_args.args[0][-1], '--wait-arrival')
             self.assertEqual(run.call_args.kwargs['timeout'], 22)
-        with patch.object(sys, 'argv', ['rabokit_hand.py', '--pose', 'pinch_thumb_ready_without_pinky', '--wait-arrival']), \
-                patch('sys.stderr'):
-            with self.assertRaises(SystemExit) as error:
-                main()
-            self.assertEqual(error.exception.code, 2)
+        for pose in ('pinch_thumb_ready_without_pinky', 'pinch_contact_ready_without_pinky'):
+            with patch.object(sys, 'argv', ['rabokit_hand.py', '--pose', pose, '--wait-arrival']), \
+                    patch('sys.stderr'):
+                with self.assertRaises(SystemExit) as error:
+                    main()
+                self.assertEqual(error.exception.code, 2)
 
     def test_limited_pinch_prepositions_yaw_and_preserves_distal_orientation(self):
         opened, closed = targets('open'), targets('close_without_pinky', .62)
         high = targets('pinch_preshape_without_pinky')
-        ready = targets('pinch_thumb_ready_without_pinky')
+        ready = targets('pinch_contact_ready_without_pinky')
         pinch = targets('pinch_without_pinky')
         for name in opened:
             if name == 'lh_thumb_cmc_yaw':
@@ -226,17 +229,22 @@ class HandTargetsTests(unittest.TestCase):
                 self.assertEqual([shape[name] for shape in (high, ready, pinch)], [opened[name]] * 3)
             else:
                 fractions = ((0., .45, .65) if name.startswith('lh_thumb_') else
-                             (.5, .5, .37917/1.6137 if name.endswith('_dip') else .74))
+                             (.5, .5-.16*1.782/1.6137 if name.endswith('_dip') else .66,
+                              .37917/1.6137 if name.endswith('_dip') else .74))
                 for shape, fraction in zip((high, ready, pinch), fractions):
                     self.assertAlmostEqual(shape[name], opened[name] + fraction * (closed[name] - opened[name]))
         self.assertAlmostEqual(pinch['lh_index_mcp_pitch'], 1.23668)
         self.assertAlmostEqual(pinch['lh_index_dip'], .29547)
+        self.assertAlmostEqual(ready['lh_index_mcp_pitch'], 1.09412)
+        self.assertAlmostEqual(ready['lh_index_dip'], .43803)
+        self.assertEqual(targets('pinch_thumb_ready_without_pinky'), targets('pinch_high_thumb_ready_without_pinky'))
         for finger in ('index', 'middle', 'ring'):
             # The two pitch joints share an axis after the fixed finger roll.
             change = sum(pinch[f'lh_{finger}_{joint}'] - high[f'lh_{finger}_{joint}']
                          for joint in ('mcp_pitch', 'dip'))
             self.assertAlmostEqual(change, 0., places=12)
-        for pose in ('pinch_preshape_without_pinky', 'pinch_thumb_ready_without_pinky', 'pinch_without_pinky'):
+        for pose in ('pinch_preshape_without_pinky', 'pinch_thumb_ready_without_pinky',
+                     'pinch_contact_ready_without_pinky', 'pinch_finger_ready_without_pinky', 'pinch_without_pinky'):
             self.assertEqual(targets(pose, .6)['lh_thumb_cmc_yaw'], .6)
             with self.assertRaises(ValueError):
                 targets(pose, float('nan'))

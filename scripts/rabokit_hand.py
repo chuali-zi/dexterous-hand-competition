@@ -65,11 +65,13 @@ def hand_feedback(frames, values):
 def targets(pose, thumb_yaw=None):
     # Native radians observed on all 11 SDK /cmd topics in this scene, SDK 3.0.0.
     if pose in ('pinch_preshape_without_pinky', 'pinch_high_thumb_ready_without_pinky',
+                'pinch_finger_ready_without_pinky', 'pinch_contact_ready_without_pinky',
                 'pinch_thumb_ready_without_pinky', 'pinch_without_pinky'):
         opened = targets('open')
         default_yaw = .70 if pose == 'pinch_without_pinky' else .62
         closed = targets('close_without_pinky', default_yaw if thumb_yaw is None else thumb_yaw)
-        proximal_fraction = .74 if pose == 'pinch_without_pinky' else .5
+        proximal_fraction = (.74 if pose == 'pinch_without_pinky' else
+                             .66 if pose in ('pinch_finger_ready_without_pinky', 'pinch_contact_ready_without_pinky') else .5)
         # Opposite pitch changes preserve the distal orientation from preshape.
         distal_fraction = .5 - (proximal_fraction-.5) * (
             closed['lh_index_mcp_pitch']-opened['lh_index_mcp_pitch']) / (
@@ -119,7 +121,8 @@ def preparation_feedback(frames, pose, thumb_yaw=None):
     feedback = hand_feedback(frames, targets(pose, thumb_yaw))
     # This low closure step can meet the brick. Joint goals are not a contact
     # sensor; retain all errors without requiring an empty-hand arrival pose.
-    feedback['goal_arrival_required'] = pose not in ('thumb_ready_without_pinky', 'pinch_thumb_ready_without_pinky')
+    feedback['goal_arrival_required'] = pose not in ('thumb_ready_without_pinky', 'pinch_thumb_ready_without_pinky',
+                                                   'pinch_contact_ready_without_pinky')
     return feedback
 
 
@@ -128,6 +131,8 @@ def main():
     parser.add_argument('--pose', choices=('open', 'close', 'close_without_pinky', 'preshape_without_pinky',
                                          'thumb_ready_without_pinky', 'pinch_preshape_without_pinky',
                                          'pinch_high_thumb_ready_without_pinky',
+                                         'pinch_finger_ready_without_pinky',
+                                         'pinch_contact_ready_without_pinky',
                                          'pinch_thumb_ready_without_pinky', 'pinch_without_pinky'), required=True)
     parser.add_argument('--thumb-yaw', type=float, help='Thumb CMC yaw closure endpoint in native radians')
     parser.add_argument('--ramp-seconds', type=float, default=0.,
@@ -147,7 +152,7 @@ def main():
     if args.wait_open and args.pose != 'open':
         parser.error('--wait-open requires --pose open; a blocked grasp need not reach its closure targets')
     if args.wait_arrival and args.pose not in ('preshape_without_pinky', 'pinch_preshape_without_pinky',
-                                              'pinch_high_thumb_ready_without_pinky'):
+                                              'pinch_high_thumb_ready_without_pinky', 'pinch_finger_ready_without_pinky'):
         parser.error('--wait-arrival requires an empty-hand preshape')
     wait_arrival = args.wait_open or args.wait_arrival
     try:
