@@ -62,6 +62,10 @@ def hand_feedback(frames, values):
             'stamp_max_sec': max(stamps)}
 
 
+def pad_grasp_profile():
+    return json.loads((Path(__file__).resolve().parents[1] / 'configs/pad-grasp-study.json').read_text(encoding='utf-8'))
+
+
 def targets(pose, thumb_yaw=None, pad_grasp=False):
     # Native radians observed on all 11 SDK /cmd topics in this scene, SDK 3.0.0.
     if pad_grasp:
@@ -72,20 +76,12 @@ def targets(pose, thumb_yaw=None, pad_grasp=False):
         opposed = pose in ('pinch_high_thumb_opposed_without_pinky', 'pinch_thumb_opposed_without_pinky')
         if not (high or ready or opposed or pose == 'pinch_without_pinky'):
             raise ValueError('Pad grasp requires an open or limited-pinch pose')
-        result = targets('open')
-        # Public-mesh pad fit: MCPs stay open; DIP motion closes the long fingers.
-        # Trials 19/22 moved the target during one-sided finger preparation.
-        # Approach with the thumb as well, with the ring initially farther open,
-        # then finish the long-finger closure in two small increments.
-        dip_offset = -.20*1.6137 if high else .02 if ready else .06 if opposed else .11
-        result.update(lh_middle_dip=.9662820796229564+dip_offset,
-                      lh_ring_dip=.9087363921157451+dip_offset,
-                      lh_thumb_cmc_pitch=.3088039736573618,
-                      lh_thumb_ip=.8472, lh_thumb_cmc_yaw=.9652294980590825)
-        if high:
-            result['lh_ring_dip'] = .45
-            result['lh_thumb_cmc_pitch'] -= .20*.5694
-            result['lh_thumb_cmc_yaw'] = .60
+        profile = pad_grasp_profile()
+        fraction = (0. if high else profile['preparation_fraction'] if ready
+                    else profile['opposition_fraction'] if opposed else 1.)
+        # Index/middle oppose the thumb; ring and pinky retain the open shape.
+        result = {name: value + fraction * (profile['goals'][name] - value)
+                  for name, value in profile['high_goals'].items()}
         if thumb_yaw is not None:
             targets('close', thumb_yaw)  # Apply the existing native yaw validation.
             result['lh_thumb_cmc_yaw'] = thumb_yaw

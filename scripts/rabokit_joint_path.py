@@ -74,6 +74,45 @@ def continuous_inverse(target, seed, inverse, forward, limits, fallbacks=None):
     return None
 
 
+def centered_inverse(target, seed, forward, limits, stats=None):
+    """Follow a nearby FK pose with bounded joints and a weak joint-centering objective."""
+    import numpy as np
+    from scipy.optimize import least_squares
+    from scipy.spatial.transform import Rotation
+
+    seed = np.asarray(seed, dtype=float)
+    target = np.asarray(target, dtype=float)
+    native = np.asarray(limits, dtype=float)
+    lower = np.maximum(seed - .1499, native[:, 0])
+    upper = np.minimum(seed + .1499, native[:, 1])
+    if np.any(lower >= upper):
+        return None
+    center = native.mean(axis=1)
+    half = (native[:, 1] - native[:, 0]) / 2
+
+    def residual(joints):
+        actual = np.asarray(forward(joints.tolist()), dtype=float)
+        spin = Rotation.from_matrix(target[:3, :3].T @ actual[:3, :3]).as_rotvec()
+        return np.r_[(actual[:3, 3] - target[:3, 3]) / 1e-5, spin / 1e-4,
+                     (joints - center) / half]
+
+    solved = least_squares(residual, np.clip(seed, lower, upper), bounds=(lower, upper),
+                           max_nfev=15, ftol=1e-10, xtol=1e-10, gtol=1e-10)
+    error = residual(solved.x)
+    position_error = float(np.linalg.norm(error[:3]) * 1e-5)
+    angle_error = float(np.linalg.norm(error[3:6]) * 1e-4)
+    accepted = position_error < 1e-5 and angle_error < 1e-4
+    if stats is not None:
+        key = 'accepted_calls' if accepted else 'rejected_calls'
+        stats[key] = stats.get(key, 0) + 1
+        if accepted:
+            stats['maximum_position_error_m'] = max(stats.get('maximum_position_error_m', 0.), position_error)
+            stats['maximum_orientation_error_rad'] = max(stats.get('maximum_orientation_error_rad', 0.), angle_error)
+            margin = float(np.minimum(solved.x - native[:, 0], native[:, 1] - solved.x).min())
+            stats['minimum_solver_joint_margin_rad'] = min(stats.get('minimum_solver_joint_margin_rad', margin), margin)
+    return solved.x.tolist() if accepted else None
+
+
 def pose_path(start, goal, inverse, forward, spacing=.01, joint_step_limit=.15):
     """Plan translation and rotation with seeded IK; never send controller commands."""
     import numpy as np

@@ -8,7 +8,7 @@ import time
 
 from rabokit_grasp import high_pass_through_plan, pad_tool_geometry, preshape_fingers_plan
 from rabokit_hand import targets
-from rabokit_joint_path import continuous_inverse, pickup_inspection_plan, seeded_approach_plan
+from rabokit_joint_path import centered_inverse, pickup_inspection_plan, seeded_approach_plan
 
 
 def main():
@@ -26,11 +26,9 @@ def main():
     from _robolib_core.arms import _lbot_kinematics as k
 
     started = time.monotonic()
-    fallbacks = []
+    numeric_checks = {}
     forward = lambda joints: k.forward_kinematics('left', joints)
-    sdk_inverse = lambda target, seed: k.inverse_kinematics('left', target, seed_real=seed)
-    inverse = lambda target, seed: continuous_inverse(target, seed, sdk_inverse, forward,
-                                                      k.REAL_JOINT_LIMITS_LEFT, fallbacks)
+    inverse = lambda target, seed: centered_inverse(target, seed, forward, k.REAL_JOINT_LIMITS_LEFT, numeric_checks)
     clearance, offset_y, offset_x, rotation = pad_tool_geometry()
     candidate = None
     if args.candidate:
@@ -88,7 +86,7 @@ def main():
                       pass_through_joint_count=sum(bool(e.get('pass_through')) for e in events))
     except ValueError as error:
         result['error'] = str(error)
-    result.update(fk_continuation_fallbacks=fallbacks, wall_seconds=time.monotonic() - started)
+    result.update(numeric_inverse_checks=numeric_checks, wall_seconds=time.monotonic() - started)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
     print(json.dumps({key: value for key, value in result.items() if key not in (

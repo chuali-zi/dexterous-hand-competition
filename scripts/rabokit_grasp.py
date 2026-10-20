@@ -20,11 +20,13 @@ ZERO_RPY = (0., 0., 0.)
 def pad_tool_geometry():
     """Fixed local pad fit in the calibrated SDK frame; RGB supplies the source."""
     import numpy as np
-    roll, pitch, yaw = (1.216667358598815, .020336974108748684, -1.6267295078357673)
+    from rabokit_hand import pad_grasp_profile
+    profile = pad_grasp_profile()
+    roll, pitch, yaw = profile['tool_pose'][1]
     cx, sx, cy, sy, cz, sz = math.cos(roll), math.sin(roll), math.cos(pitch), math.sin(pitch), math.cos(yaw), math.sin(yaw)
     rotation = np.array([[cz*cy, cz*sy*sx-sz*cx, cz*sy*cx+sz*sx],
                          [sz*cy, sz*sy*sx+cz*cx, sz*sy*cx-cz*sx], [-sy, cy*sx, cy*cx]])
-    return .05509469520792759, .01212098991087493, -.031221485529010523, rotation
+    return profile['tool_clearance_m'], profile['tool_offset_y_m'], profile['tool_offset_x_m'], rotation
 
 
 def pickup_offset(yaw, tool_offset_y=0., tool_offset_x=0.):
@@ -307,6 +309,7 @@ def main():
         raise RuntimeError('Expected a unique current RGB green surface before motion')
     surface = green[0]
     point = surface['colored_surface_point_sdk_m']
+    import rabo_robolib
     from rabo_robolib import LbotDualArm
 
     robot = LbotDualArm(mode='sim')
@@ -319,13 +322,17 @@ def main():
                                         args.stage, args.tool_clearance, math.radians(args.yaw_deg))
         seeded_checks = None
         fk_continuations = []
+        numeric_inverse_checks = {}
         if args.seed_record:
-            from rabokit_joint_path import continuous_inverse, seeded_approach_plan
+            from rabokit_joint_path import centered_inverse, continuous_inverse, seeded_approach_plan
             from _robolib_core.arms import _lbot_kinematics as k
             forward = lambda joints: k.forward_kinematics('left', joints)
             sdk_inverse = lambda target, seed: k.inverse_kinematics('left', target, seed_real=seed)
             inverse = lambda target, seed: continuous_inverse(target, seed, sdk_inverse, forward,
                                                               k.REAL_JOINT_LIMITS_LEFT, fk_continuations)
+            if args.pad_grasp:
+                inverse = lambda target, seed: centered_inverse(target, seed, forward,
+                    k.REAL_JOINT_LIMITS_LEFT, numeric_inverse_checks)
             events, seeded_checks = seeded_approach_plan(start, point, surface['half_pixel_perturbation_radius_m'],
                 args.tool_clearance, json.loads(args.seed_record.read_text(encoding='utf-8')), args.stage,
                 inverse, forward,
@@ -364,6 +371,7 @@ def main():
                     event.setdefault('thumb_yaw_rad', args.thumb_yaw)
         evidence_labels = ('inspection_low', 'inspection_followed') if args.inspect_pickup else ('lifted', 'followed')
         report = {'stage': args.stage, 'start': start, 'source_surface': surface,
+                  'sdk_public_version': getattr(rabo_robolib, '__version__', None),
                   'destination_surface': destination, 'events': events, 'reachability_checks': checks,
                   'tool_clearance_m': args.tool_clearance, 'completed': [], 'physical_grasp_verified': False,
                   'tool_offset_y_m': args.tool_offset_y,
@@ -382,6 +390,7 @@ def main():
                   'entry_yaw_deg': args.yaw_deg,
                   'seeded_path_checks': seeded_checks,
                   'fk_continuation_fallbacks': fk_continuations,
+                  'numeric_inverse_checks': numeric_inverse_checks,
                   'side_camera_capture': args.side_camera,
                   'inspection_requested': args.inspect_pickup, 'pickup_observation_stages': list(evidence_labels),
                   'official_score': None, 'path_note': 'SDK joint interpolation; sampled IK is not collision checking'}

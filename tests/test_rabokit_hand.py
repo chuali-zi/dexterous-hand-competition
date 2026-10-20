@@ -13,7 +13,7 @@ from rabokit_calibration_probe import hand_command, initialize_empty_hand, sampl
 
 
 class HandTargetsTests(unittest.TestCase):
-    def test_pad_grasp_uses_open_mcps_independent_thumb_bends_and_staged_dips(self):
+    def test_pad_grasp_opposes_index_middle_with_synchronized_closure(self):
         opened = targets('open')
         high = targets('pinch_high_thumb_ready_without_pinky', pad_grasp=True)
         ready = targets('pinch_contact_ready_without_pinky', pad_grasp=True)
@@ -21,26 +21,26 @@ class HandTargetsTests(unittest.TestCase):
         closed = targets('pinch_without_pinky', pad_grasp=True)
         for shape in (high, ready, opposed, closed):
             for name in opened:
-                if name.startswith(('lh_index_', 'lh_pinky_')) or name.endswith('_mcp_pitch'):
+                if name.startswith(('lh_ring_', 'lh_pinky_')) or name == 'lh_index_mcp_pitch':
                     self.assertEqual(shape[name], opened[name])
-            self.assertEqual(shape['lh_thumb_ip'], .8472)
-        for finger in ('middle', 'ring'):
+            self.assertEqual(shape['lh_thumb_ip'], 1.15)
+            self.assertLessEqual(shape['lh_thumb_ip'], 1.18)
+            self.assertLessEqual(shape['lh_thumb_cmc_pitch'], .68)
+            self.assertLessEqual(shape['lh_thumb_cmc_yaw'], 1.4)
+        for finger in ('index', 'middle'):
             name = f'lh_{finger}_dip'
             self.assertLess(high[name], ready[name])
             self.assertLess(ready[name], opposed[name])
             self.assertLess(opposed[name], closed[name])
-        self.assertAlmostEqual(ready['lh_middle_dip'], .9862820796229564)
-        self.assertAlmostEqual(ready['lh_ring_dip'], .9287363921157451)
-        self.assertAlmostEqual(opposed['lh_middle_dip'], 1.0262820796229564)
-        self.assertAlmostEqual(opposed['lh_ring_dip'], .9687363921157451)
-        self.assertAlmostEqual(closed['lh_middle_dip'], 1.0762820796229564)
-        self.assertAlmostEqual(closed['lh_ring_dip'], 1.018736392115745)
-        self.assertAlmostEqual(high['lh_middle_dip'], .6435420796229564)
-        self.assertEqual(high['lh_ring_dip'], .45)
-        self.assertEqual(high['lh_thumb_cmc_yaw'], .60)
-        self.assertEqual(ready['lh_thumb_cmc_yaw'], opposed['lh_thumb_cmc_yaw'])
-        self.assertEqual(ready['lh_thumb_cmc_pitch'], opposed['lh_thumb_cmc_pitch'])
-        self.assertEqual(opposed['lh_thumb_cmc_yaw'], closed['lh_thumb_cmc_yaw'])
+        for shape, fraction in ((ready, .75), (opposed, .95)):
+            for name in opened:
+                self.assertAlmostEqual(shape[name], high[name] + fraction * (closed[name] - high[name]))
+        self.assertAlmostEqual(closed['lh_index_dip'], .7440850938827003)
+        self.assertAlmostEqual(closed['lh_middle_dip'], .48991366541189096)
+        self.assertGreater(closed['lh_middle_mcp_pitch'], high['lh_middle_mcp_pitch'])
+        self.assertEqual(high['lh_index_dip'], 0.)
+        self.assertEqual(high['lh_middle_dip'], .25)
+        self.assertEqual(high['lh_thumb_cmc_pitch'], 0.)
         self.assertEqual(targets('open', pad_grasp=True), opened)
         with self.assertRaises(ValueError):
             targets('close', pad_grasp=True)

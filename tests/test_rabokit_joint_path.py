@@ -6,10 +6,44 @@ import unittest
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from rabokit_joint_path import continuous_inverse, interpolate_rotation, pickup_inspection_plan, pose_path, seeded_approach_plan, translation_path
+from rabokit_joint_path import centered_inverse, continuous_inverse, interpolate_rotation, pickup_inspection_plan, pose_path, seeded_approach_plan, translation_path
 
 
 class JointPathTests(unittest.TestCase):
+    def test_centered_inverse_reaches_pose_within_original_step_and_native_limits(self):
+        def forward(joints):
+            pose = np.eye(4)
+            angle = joints[3]
+            pose[:3, 3] = joints[:3]
+            pose[:3, :3] = [[np.cos(angle), -np.sin(angle), 0.],
+                            [np.sin(angle), np.cos(angle), 0.], [0., 0., 1.]]
+            return pose
+        target = forward([.04, .02, .01, .07, 0., 0., 0.])
+        stats = {}
+        result = centered_inverse(target, [0.] * 7, forward, [(-1., 1.)] * 7, stats)
+        np.testing.assert_allclose(forward(result), target, atol=1e-5)
+        self.assertLess(max(abs(v) for v in result), .15)
+        self.assertEqual(stats['accepted_calls'], 1)
+        self.assertLess(stats['maximum_orientation_error_rad'], 1e-4)
+        target[0, 3] = .2
+        self.assertIsNone(centered_inverse(target, [0.] * 7, forward, [(-1., 1.)] * 7, stats))
+        self.assertEqual(stats['rejected_calls'], 1)
+
+    def test_centered_inverse_uses_redundancy_to_move_away_from_a_limit(self):
+        def forward(joints):
+            pose = np.eye(4)
+            pose[:3, 3] = [joints[0] + joints[4], joints[1], joints[2]]
+            return pose
+        seed = [.99, 0., 0., 0., 0., 0., 0.]
+        target = np.eye(4)
+        target[0, 3] = 1.03
+        result = centered_inverse(target, seed, forward, [(-1., 1.)] * 7)
+        self.assertIsNotNone(result)
+        self.assertLess(result[0], seed[0])
+        self.assertGreater(result[4], .04)
+        self.assertLess(max(abs(a-b) for a,b in zip(result, seed)), .15)
+        np.testing.assert_allclose(forward(result), target, atol=1e-5)
+
     def test_fitted_rotation_continues_seed_without_relaxing_joint_steps(self):
         def forward(joints):
             pose = np.eye(4);angle = joints[3]

@@ -1,2 +1,3 @@
 rabo_robolib==3.0.0
 requests>=2.32,<3
+scipy>=1.11,<2

@@ -1,11 +1,11 @@
 {
-  "status": "Offline study only; nominal route passes with original seed, input perturbations can be rejected",
+  "status": "Development simulation candidate; local geometry checked; native grasp unverified",
   "fingers": [
     "index",
     "middle"
   ],
   "goals": {
-    "lh_index_mcp_pitch": -0.08199999996128671,
+    "lh_index_mcp_pitch": -0.082,
     "lh_index_dip": 0.7440850938827003,
     "lh_middle_mcp_pitch": 0.1747249840350984,
     "lh_middle_dip": 0.48991366541189096,
@@ -15,10 +15,10 @@
     "lh_pinky_dip": -0.0837,
     "lh_thumb_cmc_yaw": 1.2319672358288944,
     "lh_thumb_cmc_pitch": 0.28523104157683216,
-    "lh_thumb_ip": 1.1499999999999997
+    "lh_thumb_ip": 1.15
   },
   "high_goals": {
-    "lh_index_mcp_pitch": -0.08199999908877775,
+    "lh_index_mcp_pitch": -0.082,
     "lh_index_dip": 0.0,
     "lh_middle_mcp_pitch": -0.0031625083245362595,
     "lh_middle_dip": 0.25,
@@ -28,7 +28,7 @@
     "lh_pinky_dip": -0.0837,
     "lh_thumb_cmc_yaw": 1.2070370074905696,
     "lh_thumb_cmc_pitch": 0.0,
-    "lh_thumb_ip": 1.1499999999999846
+    "lh_thumb_ip": 1.15
   },
   "tool_offset_x_m": -0.018504353698161793,
   "tool_offset_y_m": -0.0025887144069914603,
