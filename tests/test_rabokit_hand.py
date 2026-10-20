@@ -27,15 +27,19 @@ class HandTargetsTests(unittest.TestCase):
         for finger in ('middle', 'ring'):
             name = f'lh_{finger}_dip'
             self.assertLess(high[name], ready[name])
-            self.assertEqual(ready[name], opposed[name])
+            self.assertLess(ready[name], opposed[name])
             self.assertLess(opposed[name], closed[name])
-        self.assertAlmostEqual(ready['lh_middle_dip'], 1.0262820796229564)
-        self.assertAlmostEqual(ready['lh_ring_dip'], .9687363921157451)
+        self.assertAlmostEqual(ready['lh_middle_dip'], .9862820796229564)
+        self.assertAlmostEqual(ready['lh_ring_dip'], .9287363921157451)
+        self.assertAlmostEqual(opposed['lh_middle_dip'], 1.0262820796229564)
+        self.assertAlmostEqual(opposed['lh_ring_dip'], .9687363921157451)
         self.assertAlmostEqual(closed['lh_middle_dip'], 1.0762820796229564)
         self.assertAlmostEqual(closed['lh_ring_dip'], 1.018736392115745)
         self.assertAlmostEqual(high['lh_middle_dip'], .6435420796229564)
-        self.assertAlmostEqual(high['lh_ring_dip'], .5859963921157451)
+        self.assertEqual(high['lh_ring_dip'], .45)
         self.assertEqual(high['lh_thumb_cmc_yaw'], .60)
+        self.assertEqual(ready['lh_thumb_cmc_yaw'], opposed['lh_thumb_cmc_yaw'])
+        self.assertEqual(ready['lh_thumb_cmc_pitch'], opposed['lh_thumb_cmc_pitch'])
         self.assertEqual(opposed['lh_thumb_cmc_yaw'], closed['lh_thumb_cmc_yaw'])
         self.assertEqual(targets('open', pad_grasp=True), opened)
         with self.assertRaises(ValueError):
