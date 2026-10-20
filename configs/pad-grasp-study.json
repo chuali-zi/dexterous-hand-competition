@@ -1,0 +1,113 @@
+{
+  "status": "Offline study only; nominal route passes with original seed, input perturbations can be rejected",
+  "fingers": [
+    "index",
+    "middle"
+  ],
+  "goals": {
+    "lh_index_mcp_pitch": -0.08199999996128671,
+    "lh_index_dip": 0.7440850938827003,
+    "lh_middle_mcp_pitch": 0.1747249840350984,
+    "lh_middle_dip": 0.48991366541189096,
+    "lh_ring_mcp_pitch": -0.082,
+    "lh_ring_dip": -0.0837,
+    "lh_pinky_mcp_pitch": -0.082,
+    "lh_pinky_dip": -0.0837,
+    "lh_thumb_cmc_yaw": 1.2319672358288944,
+    "lh_thumb_cmc_pitch": 0.28523104157683216,
+    "lh_thumb_ip": 1.1499999999999997
+  },
+  "high_goals": {
+    "lh_index_mcp_pitch": -0.08199999908877775,
+    "lh_index_dip": 0.0,
+    "lh_middle_mcp_pitch": -0.0031625083245362595,
+    "lh_middle_dip": 0.25,
+    "lh_ring_mcp_pitch": -0.082,
+    "lh_ring_dip": -0.0837,
+    "lh_pinky_mcp_pitch": -0.082,
+    "lh_pinky_dip": -0.0837,
+    "lh_thumb_cmc_yaw": 1.2070370074905696,
+    "lh_thumb_cmc_pitch": 0.0,
+    "lh_thumb_ip": 1.1499999999999846
+  },
+  "tool_offset_x_m": -0.018504353698161793,
+  "tool_offset_y_m": -0.0025887144069914603,
+  "tool_clearance_m": 0.089109131171559,
+  "tool_pose": [
+    [
+      0.13080017327995508,
+      0.07796421170248015,
+      -0.4170593468851958
+    ],
+    [
+      1.0188994095728985,
+      0.18945058666470205,
+      -1.5416347731896565
+    ]
+  ],
+  "hand_pose_relative_source": [
+    [
+      -0.09268934766347864,
+      -0.0026557531544029534,
+      0.08400817444671956
+    ],
+    [
+      2.7684889867799085,
+      1.0278743451933487,
+      2.8473694134664567
+    ]
+  ],
+  "model_source_surface_sdk_m": [
+    0.2292685060007141,
+    0.08055198602529942,
+    -0.5047419937158398
+  ],
+  "runtime_source_surface_sdk_m": [
+    0.22930452697811687,
+    0.08055292610947161,
+    -0.5061684780567548
+  ],
+  "pad_points_relative_source_m": [
+    [
+      -0.02350073316422055,
+      0.0006858948090611029,
+      -0.009934473327704765
+    ],
+    [
+      0.02387023898335555,
+      -0.009141514413665883,
+      -0.0053632542594754876
+    ],
+    [
+      0.023779575877424658,
+      0.012374190685907649,
+      -0.010306833926292103
+    ]
+  ],
+  "pad_normals_sdk": [
+    [
+      0.99021348425597,
+      -0.01665084824764872,
+      -0.1385640821074707
+    ],
+    [
+      -0.9989121037810251,
+      0.023648386955968954,
+      -0.04019157516380126
+    ],
+    [
+      -0.9987554653029262,
+      -0.02048000022228776,
+      -0.04547625884382227
+    ]
+  ],
+  "preparation_fraction": 0.75,
+  "opposition_fraction": 0.95,
+  "grasp_axis_tilt_rad": -0.24,
+  "grasp_axis_pivot_relative_source_m": [
+    0.0,
+    0.0,
+    -0.015
+  ],
+  "physical_grasp_verified": false
+}

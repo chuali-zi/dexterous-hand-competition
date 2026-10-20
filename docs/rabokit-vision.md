@@ -1240,3 +1240,35 @@ python scripts/analyze_occluded_brick.py --trial runs/brick-limited-pinch-23 --t
 用 23 实际闭合 TF 回放公共网格，初始绿色盒代理与拇指、中指、无名指末节均有三角相交；换成上述移动后的 RGB 拟合盒，三者均不再相交，与静态空手负载一致。这支持继续研究目标移动后的定位与夹持几何，不能反过来证明网格就是原生碰撞体。结果为本地 `moved-target-mesh-check.json`，图和拟合记录为 `occluded-box-fit.png`、`fixed-top-fit-check.json`、`occluded-fit-crosscheck.json`。
 
 另行对公共网格代表指腹点做假设点接触的内部力矩平衡检查。实际闭合手形下，拇指代表点相对初始表面约 **`(−23.326,−17.869,−38.367) mm`**，中指约 **`(+21.324,−0.458,−8.170) mm`**、无名指约 **`(+19.865,+19.104,−7.338) mm`**；拇指约低 **30 mm**，且位于另两点的同一侧。16 条射线近似各摩擦锥的线性规划，在该代表点/法向模型中约需 **μ=1.185** 才出现严格正的内部平衡。该计算已用理想对向接触可行、同向接触不可行的例子检查；但实际材料摩擦与接触位置未测量，目标也已移动，不能将此数值当作真实摩擦系数、抓持能力或本轮失败的唯一原因。下一阶段应把接触位置与力矩平衡纳入本地手形拟合，而非只要求初始盒三角相交；受遮挡定位暂不接入自动运动。实际抓持、放稳、垒砖与正式成绩仍未完成。
+
+## 本机 SDK 与平衡手形研究（2026-10-20，未启动新仿真）
+
+已在 Windows 本机通过官方 PyPI 将现有固定版本 `rabo_robolib==3.0.0` 安装到被忽略的 `runs/sdk-runtime-3/`，使用正常导入与既有 FK/IK 调用，不初始化 `LbotDualArm`、不接 ROS、不读取或导出 SDK 私有实现。包装包正常导入会维护厂商缓存并可能更新运行核心；本轮公开版本为 **`3.0.0.111`**，后续数值结果应保留实际版本，不能仅凭包装包固定版本假定核心永远相同。首次普通安装遇到临时目录权限问题，随后按允许权限安装成功；没有更改系统 Python、机器人限位或缓存机制。
+
+本机 FK 与 20/22/23 中保留的 **22 组实际 SDK 关节/工具反馈**对照，位置最大差 **1.11×10⁻¹⁶ m**、旋转最大差约 **3.65×10⁻⁸ rad**。这是相同数值接口的一致性，不能代替物理精度或跨平台 IK 分支一致性。检查结果为本地 `runs/brick-balanced-pinch-01/local-sdk-fk-comparison.json`。普通数值路线研究以后先在本机执行。
+
+新增只读入口 [check_pad_pickup.py](../scripts/check_pad_pickup.py)，复用现有生产规划函数、SDK 限位、0.15 rad 步长及插值检查，输出完整数值计划或实际拒绝原因。`record` 提供保留的初始机器人状态和 RGB 表面点，`--seed-record` 提供原始已到达的低位关节分支；这两份输入应明确区分。23 原运行所用种子是 `brick-thumb062-y007-01/grasp.json`。误用 23 新测的 contact 作为原种子时，旧控制器路线也可能被拒绝；不据此宣称原实际路线未执行。使用原种子，本机旧控制器复算通过 **558 个事件**、最大相邻关节步长约 **0.148447 rad**，不声称逐点重现云端原来的 570 个事件。
+
+本机复现命令如下；SDK 已安装时只需设置对应 Python 搜索路径，不重复安装。它的正常导入需要写入厂商用户缓存。
+
+```powershell
+# 仅首次安装：官方 PyPI 的现有固定版本，不装入系统环境
+python -m pip install --target runs/sdk-runtime-3 --no-deps --index-url https://pypi.org/simple rabo_robolib==3.0.0
+$env:PYTHONPATH = (Resolve-Path runs/sdk-runtime-3).Path
+python scripts/check_pad_pickup.py runs/brick-limited-pinch-23/grasp.json --seed-record runs/brick-thumb062-y007-01/grasp.json --output runs/current-pad-route.json
+```
+
+平衡模型工具 [analyze_grasp_balance.py](../scripts/analyze_grasp_balance.py) 使用 16 射线摩擦锥及归一化正系数线性规划，分别报告内部平衡和完整六维力矩空间条件。输入是代表接触点、朝向物体的力法向及假定摩擦系数；不包含实际材料摩擦、有限接触斑、驱动力上限、顺应性或原生碰撞。新增 **6 项解析例子测试**覆盖对向/同向、力平衡但力矩维数不足、平移及法向缩放、竖直法向和无效输入，全部通过；每项输出均保留 `physical_grasp_verified=false`。
+
+为扩大拇指拟合范围，本轮仅在保存的场景编辑器只读核实原生角度限位：thumb IP 约 **−0.1–1.18 rad**、pitch 约 **−0.1–0.68 rad**、yaw 约 **−0.1–1.4 rad**。SDK 默认闭合 IP **0.8472 rad** 是预设目标，不是原生上限。没有修改关节、驱动力、场景照明或相机。公共网格拟合用保守 IP 上限 **1.15 rad**，将长指组合改为**食指和中指**，无名指及小指张开，拇指与两长指从两侧共同靠拢；记录的准备/第二段/最终比例为 **0.75/0.95/1**。
+
+保留的研究候选为 [pad-grasp-study.json](../configs/pad-grasp-study.json)，控制器没有加载该文件。它是在拟合手形上抬高工具 **9 mm**、再绕 SDK X 轴 **−0.24 rad** 刚体倾转的候选。完整公共三角面检查覆盖 **51 个闭指样本**、高处准备手形 **26 个下降样本**，检查所建模的扩展邻砖代理及 34 对非相邻手指凸包，未发现相应交叠，最低模型桌面间隙约 **22.708 mm**。三个末节首次名义接触比例为 **拇指 0.82、食指 0.88、中指 0.78**；逆向释放复用同一组名义形状，不代表真实放回动态已验证。检查为本地 `x-tilt--0.24-ramp-geometry-check.json`。在假定 **μ=0.2/0.4** 时，六维平衡代理均可行，归一化最小射线权重约 **0.001303/0.015155**；不将它们解释为实际摩擦、承载能力或抓持成功。
+
+```powershell
+python scripts/analyze_grasp_balance.py --input configs/pad-grasp-study.json --mu 0.2 --mu 0.4 --output runs/study-pad-balance.json
+python scripts/check_pad_pickup.py runs/brick-limited-pinch-23/grasp.json --seed-record runs/brick-thumb062-y007-01/grasp.json --candidate configs/pad-grasp-study.json --output runs/study-pad-route.json
+```
+
+候选在原种子与 23 原 RGB 输入下，本机完整路线通过 **536 个事件**，最大相邻步长约 **0.149394 rad**。但对原点的三个坐标分别作 **±0.2 / ±1 mm** 扰动，**12 组仅 9 组通过**；`Z +0.2 mm`、`X +1 mm`、`Z +1 mm` 被拒绝，涉及 aligned/outside/lifted 阶段的 IK。早先一次 542 事件通过使用了不同种子和旋转构造的末位数值；旋转矩阵约 10⁻¹⁶ 的差异也曾改变分支结果，不能以一次通过宣布稳定。另做的严格 FK 有界最小二乘探索也未得到可用的完整路线，没有接入生产或放宽阈值。上述成功与失败均留在 `runs/brick-balanced-pinch-01/`，控制器手形、工具姿态和成功判据保留实测版本。
+
+因此本轮没有为新候选启动云端物理试验。下一步先在本机研究更有余量的腕部/肩部姿态或高处连接路线，保留原限位、步长及实际反馈要求。数值种子、公共网格、点接触代理均不替代实际接触、抬高随动、邻砖布局和放稳结果；实际抓持与正式得分仍未完成。
