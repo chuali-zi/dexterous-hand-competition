@@ -1,5 +1,5 @@
 {
-  "status": "Deeper pad candidate with long fingers open during descent; native grasp unverified",
+  "status": "Fixed-finger thumb closure candidate; green translation is a hypothesis, native grasp unverified",
   "fingers": [
     "index",
     "middle"
@@ -19,9 +19,9 @@
   },
   "high_goals": {
     "lh_index_mcp_pitch": -0.082,
-    "lh_index_dip": -0.0837,
-    "lh_middle_mcp_pitch": -0.082,
-    "lh_middle_dip": -0.0837,
+    "lh_index_dip": 0.7440850938827003,
+    "lh_middle_mcp_pitch": 0.1747249840350984,
+    "lh_middle_dip": 0.48991366541189096,
     "lh_ring_mcp_pitch": -0.082,
     "lh_ring_dip": -0.0837,
     "lh_pinky_mcp_pitch": -0.082,
@@ -30,14 +30,14 @@
     "lh_thumb_cmc_pitch": 0.0,
     "lh_thumb_ip": 1.15
   },
-  "tool_offset_x_m": -0.018504353698161793,
+  "tool_offset_x_m": -0.010504353698161793,
   "tool_offset_y_m": -0.0025887144069914603,
-  "tool_clearance_m": 0.08410913117155899,
+  "tool_clearance_m": 0.085109131171559,
   "tool_pose": [
     [
-      0.13080017327995508,
+      0.13880017327995509,
       0.07796421170248015,
-      -0.4220593468851958
+      -0.4210593468851958
     ],
     [
       1.0188994095728985,
@@ -47,9 +47,9 @@
   ],
   "hand_pose_relative_source": [
     [
-      -0.09268934766347864,
+      -0.08468934766347863,
       -0.0026557531544029534,
-      0.07900817444671955
+      0.08000817444671955
     ],
     [
       2.7684889867799085,
@@ -69,19 +69,19 @@
   ],
   "pad_points_relative_source_m": [
     [
-      -0.02350073316422055,
+      -0.01550073316422055,
       0.0006858948090611029,
-      -0.014934473327704766
+      -0.013934473327704765
     ],
     [
-      0.02387023898335555,
+      0.03187023898335555,
       -0.009141514413665883,
-      -0.010363254259475489
+      -0.009363254259475488
     ],
     [
-      0.023779575877424658,
+      0.03177957587742466,
       0.012374190685907649,
-      -0.015306833926292104
+      -0.014306833926292103
     ]
   ],
   "pad_normals_sdk": [
@@ -110,5 +110,12 @@
     -0.015
   ],
   "physical_grasp_verified": false,
-  "depth_change_from_trial24_m": -0.005
+  "depth_change_from_trial24_m": -0.004,
+  "closure_mode": "thumb_against_fixed_index_middle",
+  "hypothesized_target_shift_sdk_m": [
+    0.008,
+    0.0,
+    0.0
+  ],
+  "extra_raise_from_trial25_m": 0.001
 }

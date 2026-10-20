@@ -13,7 +13,7 @@ from rabokit_calibration_probe import hand_command, initialize_empty_hand, sampl
 
 
 class HandTargetsTests(unittest.TestCase):
-    def test_pad_grasp_opposes_index_middle_with_synchronized_closure(self):
+    def test_pad_grasp_holds_prepared_long_fingers_while_thumb_closes(self):
         opened = targets('open')
         high = targets('pinch_high_thumb_ready_without_pinky', pad_grasp=True)
         ready = targets('pinch_contact_ready_without_pinky', pad_grasp=True)
@@ -28,7 +28,11 @@ class HandTargetsTests(unittest.TestCase):
             self.assertLessEqual(shape['lh_thumb_cmc_pitch'], .68)
             self.assertLessEqual(shape['lh_thumb_cmc_yaw'], 1.4)
         for finger in ('index', 'middle'):
-            name = f'lh_{finger}_dip'
+            for joint in ('mcp_pitch', 'dip'):
+                name = f'lh_{finger}_{joint}'
+                for shape in (high, ready, opposed):
+                    self.assertEqual(shape[name], closed[name])
+        for name in ('lh_thumb_cmc_pitch', 'lh_thumb_cmc_yaw'):
             self.assertLess(high[name], ready[name])
             self.assertLess(ready[name], opposed[name])
             self.assertLess(opposed[name], closed[name])
@@ -37,11 +41,6 @@ class HandTargetsTests(unittest.TestCase):
                 self.assertAlmostEqual(shape[name], high[name] + fraction * (closed[name] - high[name]))
         self.assertAlmostEqual(closed['lh_index_dip'], .7440850938827003)
         self.assertAlmostEqual(closed['lh_middle_dip'], .48991366541189096)
-        self.assertGreater(closed['lh_middle_mcp_pitch'], high['lh_middle_mcp_pitch'])
-        for finger in ('index', 'middle'):
-            for joint in ('mcp_pitch', 'dip'):
-                name = f'lh_{finger}_{joint}'
-                self.assertEqual(high[name], opened[name])
         self.assertEqual(high['lh_thumb_cmc_pitch'], 0.)
         self.assertEqual(targets('open', pad_grasp=True), opened)
         with self.assertRaises(ValueError):
