@@ -38,8 +38,10 @@ class HandTargetsTests(unittest.TestCase):
         self.assertAlmostEqual(closed['lh_index_dip'], .7440850938827003)
         self.assertAlmostEqual(closed['lh_middle_dip'], .48991366541189096)
         self.assertGreater(closed['lh_middle_mcp_pitch'], high['lh_middle_mcp_pitch'])
-        self.assertEqual(high['lh_index_dip'], 0.)
-        self.assertEqual(high['lh_middle_dip'], .25)
+        for finger in ('index', 'middle'):
+            for joint in ('mcp_pitch', 'dip'):
+                name = f'lh_{finger}_{joint}'
+                self.assertEqual(high[name], opened[name])
         self.assertEqual(high['lh_thumb_cmc_pitch'], 0.)
         self.assertEqual(targets('open', pad_grasp=True), opened)
         with self.assertRaises(ValueError):

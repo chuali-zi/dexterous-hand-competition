@@ -1,5 +1,5 @@
 {
-  "status": "Development simulation candidate; local geometry checked; native grasp unverified",
+  "status": "Deeper pad candidate with long fingers open during descent; native grasp unverified",
   "fingers": [
     "index",
     "middle"
@@ -19,9 +19,9 @@
   },
   "high_goals": {
     "lh_index_mcp_pitch": -0.082,
-    "lh_index_dip": 0.0,
-    "lh_middle_mcp_pitch": -0.0031625083245362595,
-    "lh_middle_dip": 0.25,
+    "lh_index_dip": -0.0837,
+    "lh_middle_mcp_pitch": -0.082,
+    "lh_middle_dip": -0.0837,
     "lh_ring_mcp_pitch": -0.082,
     "lh_ring_dip": -0.0837,
     "lh_pinky_mcp_pitch": -0.082,
@@ -32,12 +32,12 @@
   },
   "tool_offset_x_m": -0.018504353698161793,
   "tool_offset_y_m": -0.0025887144069914603,
-  "tool_clearance_m": 0.089109131171559,
+  "tool_clearance_m": 0.08410913117155899,
   "tool_pose": [
     [
       0.13080017327995508,
       0.07796421170248015,
-      -0.4170593468851958
+      -0.4220593468851958
     ],
     [
       1.0188994095728985,
@@ -49,7 +49,7 @@
     [
       -0.09268934766347864,
       -0.0026557531544029534,
-      0.08400817444671956
+      0.07900817444671955
     ],
     [
       2.7684889867799085,
@@ -71,17 +71,17 @@
     [
       -0.02350073316422055,
       0.0006858948090611029,
-      -0.009934473327704765
+      -0.014934473327704766
     ],
     [
       0.02387023898335555,
       -0.009141514413665883,
-      -0.0053632542594754876
+      -0.010363254259475489
     ],
     [
       0.023779575877424658,
       0.012374190685907649,
-      -0.010306833926292103
+      -0.015306833926292104
     ]
   ],
   "pad_normals_sdk": [
@@ -109,5 +109,6 @@
     0.0,
     -0.015
   ],
-  "physical_grasp_verified": false
+  "physical_grasp_verified": false,
+  "depth_change_from_trial24_m": -0.005
 }

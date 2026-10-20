@@ -113,6 +113,10 @@ def preshape_fingers_plan(events, limited_pinch=False, prepare_thumb_high=False,
             if 'hand' in event:
                 event['pad_grasp'] = True
                 event.pop('thumb_yaw_rad', None)  # Each fitted stage defines its own yaw.
+        # Retain one early lift observation before the usual high inspection.
+        closed_index = next(i for i, event in enumerate(staged) if event['name'] == 'closed')
+        first_lift = next(i for i in range(closed_index + 1, len(staged)) if 'position' in staged[i])
+        staged[first_lift] = {**staged[first_lift], 'capture': True}
     if closure_rgb_diagnostic:
         staged = staged[:next(i for i, event in enumerate(staged) if event['name'] == 'closed') + 1]
     return [{**event, 'hand_ramp_seconds': 2.} if limited_pinch and 'hand' in event else event for event in staged]

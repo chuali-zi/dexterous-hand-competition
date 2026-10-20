@@ -10,6 +10,20 @@ from rabokit_pickup_vision import neighboring_layout, pickup_evidence
 
 
 class GraspPlanTests(unittest.TestCase):
+    def test_pad_capture_includes_only_first_intermediate_lift(self):
+        events, _ = make_plan(self.start, self.source, .009, 'pickup')
+        index = next(i for i,e in enumerate(events) if e['name'] == 'lifted')
+        intermediates = [{**events[index], 'name': f'lifted_{i:03}', 'capture': False}
+                         for i in range(2)]
+        events[index:index] = intermediates
+        staged = preshape_fingers_plan(events, limited_pinch=True, prepare_thumb_high=True, pad_grasp=True)
+        by_name = {e['name']:e for e in staged}
+        self.assertTrue(by_name['lifted_000']['capture'])
+        self.assertFalse(by_name['lifted_001']['capture'])
+        self.assertTrue(by_name['lifted']['capture'])
+        original = preshape_fingers_plan(events, limited_pinch=True, prepare_thumb_high=True)
+        self.assertFalse(next(e for e in original if e['name'] == 'lifted_000')['capture'])
+
     def test_full_closure_rgb_trace_rejects_an_unstaged_plan_before_observation(self):
         import contextlib
         import io
