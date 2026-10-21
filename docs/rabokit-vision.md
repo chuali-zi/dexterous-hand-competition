@@ -1856,3 +1856,38 @@ python scripts/analyze_brick_height.py --trial runs/brick-clamp-continuity-37 --
 控制终态后先收起覆盖代码面板再停止仿真，确认框界面 **00:07:49.76**，异步停止中另见 **00:07:58.23**，随后明确恢复“启动仿真”；这些时刻不等于控制墙钟或账单时长。本轮诊断结束于第二段，**没有返回、释放、侧移或放置**。文件取回后两个已知 PID 均不存在，两仓库干净，项目仍为 `c995881`、平台 `705513d`；运行环境已确认休眠。
 
 实测后将本地[手形配置](../configs/pad-grasp-study.json)及对应手部测试恢复为 **`3fcd269` 原基线**，恢复后的 **26 项手部测试通过**；保留三机探针改动与全部历史记录。原候选可从 `39643c6` 及 `runs/brick-contact-history-43/index-candidate.json` 恢复，不以失败候选作为后续默认。没有为单独同步恢复而重新唤醒环境；下一次必要云端工作前须更新该恢复。`runs/brick-index-depth-45/` 保存原始数据、`result-summary.json`、各组多模态回放、`height-hypotheses.json`、`two-lift-observations.png` 和 `runtime-sleep.png`。本次确认了三机就绪入口的实际可用性，也否定了该食指候选的保持改善；稳定抓持、完整抓放、垒砖及正式成绩仍未完成。
+## 本地简化手部动力学回放（2026-10-21，第 46 轮）
+
+多模态策略需要可靠的状态和接触数据。前几轮几何候选未形成稳定抓持，因此先增加[本地动力学回放](../scripts/replay_hand_dynamics.py)，复用 37、45 轮保留的机器人 TF、逐次手指目标和初始 RGB 重建；本轮没有唤醒 Rabokit 环境、启动仿真或发送运动命令，也未修改默认手形及平台控制器。
+
+本地以独立忽略目录安装 MuJoCo **3.3.7**，NumPy **2.4.3**、SciPy **1.17.1**；可选版本记录在[独立依赖](../rabokit/requirements-dynamics.txt)，不加入平台依赖。当前 Python 的 PyTorch 为 **2.13.0+cpu**，CUDA 不可用，可用 CPU 线程数为 **22**；物理显卡查询被系统拒绝，不能据此声称机器没有 GPU。首次默认权限的 PyPI 版本查询没有输出，已中止；随后正常权限下安装成功，未升级云端或全局依赖。
+
+模型使用此前已取回的 [LinkerHand 公共 O6 左手 URDF/STL](https://github.com/linker-bot/linkerhand-urdf/tree/075cc7d42cc1e756bdcbece0fc069a0779fc5237/O6/left)，原资源不纳入本次提交。12 个部件的父子偏移、轴和零位来自保留机器人 TF/现有手部映射，11 个关节独立驱动；公共 URDF 的 mimic 与限位不覆盖平台原生指令，回放不启用这些限位。手根以 mocap 固定，使用公共质量/惯量、凸包网格接触、位置伺服及 1 ms 步长。绿砖初始位置和静态邻砖取自 RGB，尺寸为原 50 mm 盒假设；绿砖质量、摩擦、伺服增益及接触时间常数均未由平台标定。没有整臂动力学。
+
+初版空手出现手根与相邻近节的虚假接触。在固定 **3.3.7** 中，mocap 根的焊接关系使默认父子过滤不能覆盖这些对，已显式排除 **11 对相邻部件**；修正后两个空手回放均无接触。此行为限于所用版本，较新版本已有 mocap 焊接组变化，见 [MuJoCo 碰撞计算说明](https://mujoco.readthedocs.io/en/3.3.5/computation/)和[更新记录](https://mujoco.readthedocs.io/en/3.13.0/changelog.html)。忽略目录中修正前的结果仍保留，但不用于下述比较。
+
+将记录角度写回模型时，12 个部件与机器人 TF 的最大位置/姿态误差约 **3.3e−8 m / 1.22e−6 rad**，这只验证坐标映射。回放空手闭合后取末尾 0.5 秒，与各轮原生空手末尾 0.5 秒相比，37、45 轮的 11 关节最大角差分别约 **8.91e−6 / 1.33e−5 rad**；不将静态终态一致解释为整段轨迹或真实接触动力学已校准。
+
+接触回放使用逐次发布记录的 `robot_tf_reference_stamp_sec` 排序；它不是实际伺服应用时刻。闭指后额外静止 6 秒，再用 2 秒合成抬高 20 mm、保持 2 秒，不能替代原生机械臂抬起轨迹。约 40 秒的本地接触轨迹只需 **5.4–6.2 秒墙钟**。结果如下：
+
+| 本地条件 | closed 的 11 关节位置 RMSE | 合成抬起结果 |
+|---|---:|---|
+| 37 轮，μ=1，接触时间常数 0.02 s，质量 0.05–0.8 kg | 0.00321–0.00408 rad | 所有绿砖均留在桌面附近 |
+| 37 轮，质量 0.1 kg、μ=1，时间常数 0.002 / 0.005 / 0.010 s | 0.005451 / 0.007882 / 0.000790 rad | 均未随手抬起 |
+| 45 轮，直接沿用上一行的 0.010 s 参数，不重新拟合 | 0.001635 rad，最大单关节差 0.004813 rad | 未随手抬起 |
+
+质量扫描不能识别真实质量；时间常数变化产生非单调结果，也不能凭某一静态 RMSE 较小就宣布接触刚度正确。两轮原生试验结果此前均已知，45 轮只是另一手形的同参数对照，不称为盲测。模型保存的接触力和物体状态是本地计算值，不是平台真值或已验证训练标签。所有输出保留 `platform_physics_calibrated=false`、`physical_grasp_verified=false` 和 `platform_motion_commanded=false`。
+
+为检查初始 RGB 位置，给[高度假设工具](../scripts/analyze_brick_height.py)补充现有 `initial/<camera>` 目录读取支持。37 轮在固定原始顶面高度下的双目盒拟合，相对原彩色表面质心 X/Y 约 **−0.200 / −0.0184 mm**；这不表示物理定位达到该精度，也不支持为了匹配接触模型任意平移初始绿砖数毫米。正常 closed 路径已与修改前实现比较，拟合字典完全一致。
+
+新增[坐标映射测试](../tests/test_hand_dynamics_mapping.py) **3 项通过**，覆盖四元数符号/缩放、无效及非铰链旋转拒绝、xyzw/wxyz 旋转约定；另外实际完成 MuJoCo 编译、12 部件坐标检查、两轮空手回放和上述接触扫描。CLI、Python 语法、文档本地文件链接与差异检查通过。本轮没有训练策略、下载策略权重或得到可信的稳定持砖正例，接触模型仍不足以作为策略训练环境。
+
+本地输出位于忽略目录 `runs/brick-local-dynamics-46/`，汇总为 `comparison-summary.json`，图为 `model-comparison.png`。安装包位于 `runs/mujoco-runtime/`，公共资产仍为 `runs/hand-geometry-01/`；均未提交。已有依赖和资产下的复现示例（输出须为新文件）：
+
+```powershell
+$env:PYTHONPATH = (Resolve-Path runs/mujoco-runtime).Path
+python scripts/replay_hand_dynamics.py --trial runs/brick-clamp-continuity-37 --assets runs/hand-geometry-01 --empty --output runs/new-empty-proxy.json
+python scripts/replay_hand_dynamics.py --trial runs/brick-clamp-continuity-37 --assets runs/hand-geometry-01 --mass .1 --friction 1 --contact-time .01 --output runs/new-contact-proxy.json
+```
+
+云端保持上轮停止、休眠状态，项目仍为 **`c995881`**、平台 **`705513d`**；没有为了同步本地工具或记录唤醒环境。后续先核对接触几何与反馈时间关系，再决定是否具备轻量反馈策略训练条件。稳定抓持、完整抓放、垒砖及正式成绩仍未完成。

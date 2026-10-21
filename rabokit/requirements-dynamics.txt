@@ -1,0 +1,4 @@
+# Optional local reduced-model replay; separate from the Rabokit runtime.
+mujoco==3.3.7
+numpy==2.4.3
+scipy==1.17.1

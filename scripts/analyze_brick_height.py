@@ -57,7 +57,7 @@ def analyze(trial, stages, rises, cameras, side=.05, threshold=160):
     for stage in stages:
         images, stamps = [], []
         for name, ref in zip(cameras, reference):
-            folder = trial / stage / 'camera' / name
+            folder = trial / stage / name if stage == 'initial' else trial / stage / 'camera' / name
             info = read(folder / 'camera.json')
             if info['frame_id'] != ref['frame_id'] or info['k'] != ref['k']:
                 raise ValueError('Camera identity or intrinsics changed')
