@@ -118,6 +118,8 @@ def preshape_fingers_plan(events, limited_pinch=False, prepare_thumb_high=False,
             if 'hand' in event:
                 event['pad_grasp'] = True
                 event.pop('thumb_yaw_rad', None)  # Each fitted stage defines its own yaw.
+                if event['name'] in ('thumb_ready', 'thumb_opposed', 'closed'):
+                    event['preserve_prepared_targets'] = True
         # Retain one early lift observation before the usual high inspection.
         closed_index = next(i for i, event in enumerate(staged) if event['name'] == 'closed')
         first_lift = next(i for i in range(closed_index + 1, len(staged)) if 'position' in staged[i])
@@ -468,6 +470,7 @@ def main():
                                             wait_arrival=event.get('wait_arrival', False),
                                             ramp_seconds=event.get('hand_ramp_seconds', report['hand_ramp_seconds']),
                                             pad_grasp=event.get('pad_grasp', False),
+                                            preserve_prepared_targets=event.get('preserve_prepared_targets', False),
                                             rgb_trace_output=(args.output / (event['name'] + '-rgb')
                                                 if closure_rgb_trace and event['name'] in (
                                                     'thumb_ready', 'thumb_opposed', 'closed') else None),

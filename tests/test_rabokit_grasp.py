@@ -18,6 +18,8 @@ class GraspPlanTests(unittest.TestCase):
         events[index:index] = intermediates
         staged = preshape_fingers_plan(events, limited_pinch=True, prepare_thumb_high=True, pad_grasp=True)
         by_name = {e['name']:e for e in staged}
+        self.assertEqual({e['name'] for e in staged if e.get('preserve_prepared_targets')},
+                         {'thumb_ready', 'thumb_opposed', 'closed'})
         self.assertTrue(by_name['lifted_000']['capture'])
         self.assertFalse(by_name['lifted_001']['capture'])
         self.assertTrue(by_name['lifted']['capture'])

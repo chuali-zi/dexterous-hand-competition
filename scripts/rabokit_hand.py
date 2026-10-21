@@ -155,6 +155,12 @@ def preparation_feedback(frames, pose, thumb_yaw=None, pad_grasp=False):
     return feedback
 
 
+def ramp_targets(start, goal, fraction, held=()):
+    """Keep existing prepared targets while ramping joints that actually change."""
+    return {name: value if name in held else start[name] + fraction * (value - start[name])
+            for name, value in goal.items()}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--pose', choices=('open', 'close', 'close_without_pinky', 'preshape_without_pinky',
@@ -166,6 +172,8 @@ def main():
                                          'pinch_thumb_ready_without_pinky', 'pinch_without_pinky'), required=True)
     parser.add_argument('--thumb-yaw', type=float, help='Thumb CMC yaw closure endpoint in native radians')
     parser.add_argument('--pad-grasp', action='store_true', help='Use the fitted opposing-pad hand targets')
+    parser.add_argument('--preserve-prepared-targets', action='store_true',
+                        help='Low pad closure only: retain unchanged prepared goals instead of rebasing them to blocked angles')
     parser.add_argument('--ramp-seconds', type=float, default=0.,
                         help='Ramp over [0,3] robot TF simulation seconds, then publish the endpoint for at least 0.5 seconds')
     parser.add_argument('--trace-output', type=Path,
@@ -180,6 +188,9 @@ def main():
     args = parser.parse_args()
     if not math.isfinite(args.ramp_seconds) or not 0 <= args.ramp_seconds <= 3:
         parser.error('--ramp-seconds must be in [0,3]')
+    if args.preserve_prepared_targets and (not args.pad_grasp or not args.ramp_seconds or args.pose not in (
+            'pinch_contact_ready_without_pinky', 'pinch_thumb_opposed_without_pinky', 'pinch_without_pinky')):
+        parser.error('--preserve-prepared-targets requires a low pad-grasp closure ramp')
     if args.trace_output and (not args.ramp_seconds or args.trace_output.exists()):
         parser.error('--trace-output requires a ramp and a new output file')
     if args.rgb_trace_output and (not args.trace_output or args.rgb_trace_output.exists()):
@@ -195,6 +206,8 @@ def main():
         values = targets(args.pose, args.thumb_yaw, args.pad_grasp)
     except ValueError as error:
         parser.error(str(error))
+    prepared = targets('pinch_high_thumb_ready_without_pinky', pad_grasp=True) if args.preserve_prepared_targets else {}
+    held = tuple(name for name, value in values.items() if prepared.get(name) == value)
     namespace = os.getenv('ROS2_NAMESPACE', '').strip('/')
     if not namespace:
         parser.error('Run only in the Rabokit simulation terminal')
@@ -206,6 +219,7 @@ def main():
     trace_started = time.monotonic()
     trace = {'pose': args.pose, 'native_targets_rad': values, 'ramp_seconds': args.ramp_seconds,
              'pad_grasp': args.pad_grasp,
+             'held_target_joints': list(held),
              'ramp_start_rad': None, 'command_start_stamp_sec': None,
              'command_complete': False, 'joint_samples': [], 'issued_commands': [],
              'issued_command_scope': 'Published native targets with last observed robot TF time; '
@@ -291,11 +305,9 @@ def main():
                         if ramp_start else time.monotonic() - started)
             if progress < command_seconds and (not ramp_start or progress >= next_publish):
                 fraction = min(1., max(0., progress) / args.ramp_seconds) if ramp_start else 1.
-                issued = {}
+                issued = ramp_targets(ramp_start, values, fraction, held) if ramp_start else dict(values)
                 for name, pub in publishers.items():
-                    value = ramp_start[name] + fraction * (values[name] - ramp_start[name]) if ramp_start else values[name]
-                    pub.publish(Float64(data=value))
-                    issued[name] = value
+                    pub.publish(Float64(data=issued[name]))
                 if args.trace_output:
                     trace['issued_commands'].append({'wall_seconds': time.monotonic() - trace_started,
                         'robot_tf_reference_stamp_sec': command_stamp + progress if ramp_start else None,
@@ -329,6 +341,7 @@ def main():
                     stable_stamp = None
                     stable_errors = None
         print(json.dumps({'pose': args.pose, 'native_targets_rad': values,
+                          'held_target_joints': list(held),
                           'ramp_seconds': args.ramp_seconds, 'ramp_start_rad': ramp_start,
                           'ramp_time_basis': 'robot_tf_simulation' if ramp_start else None,
                           'command_progress_seconds': progress,

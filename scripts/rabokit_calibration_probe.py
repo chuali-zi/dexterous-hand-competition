@@ -137,12 +137,14 @@ def main():
 
 
 def hand_command(pose, thumb_yaw=None, wait_open=False, wait_arrival=False, ramp_seconds=0., trace_output=None,
-                 pad_grasp=False, rgb_trace_output=None):
+                 pad_grasp=False, rgb_trace_output=None, preserve_prepared_targets=False):
     command = [sys.executable, str(Path(__file__).with_name('rabokit_hand.py')), '--pose', pose]
     if thumb_yaw is not None:
         command.extend(('--thumb-yaw', str(thumb_yaw)))
     if pad_grasp:
         command.append('--pad-grasp')
+    if preserve_prepared_targets:
+        command.append('--preserve-prepared-targets')
     if ramp_seconds:
         command.extend(('--ramp-seconds', str(ramp_seconds)))
     if trace_output is not None:

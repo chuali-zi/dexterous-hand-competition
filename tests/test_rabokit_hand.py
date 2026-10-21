@@ -1,5 +1,6 @@
 """A narrower closure leaves the neighboring-row finger open."""
 from pathlib import Path
+import io
 import json
 import sys
 import tempfile
@@ -8,11 +9,39 @@ from unittest.mock import patch
 from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from rabokit_hand import HAND_JOINTS, hand_feedback, main, preparation_feedback, target_quaternion, targets
+from rabokit_hand import HAND_JOINTS, hand_feedback, main, preparation_feedback, ramp_targets, target_quaternion, targets
 from rabokit_calibration_probe import hand_command, initialize_empty_hand, sample
 
 
 class HandTargetsTests(unittest.TestCase):
+    def test_prepared_joints_keep_their_goal_when_loaded_at_a_phase_boundary(self):
+        high = targets('pinch_high_thumb_ready_without_pinky', pad_grasp=True)
+        goal = targets('pinch_without_pinky', pad_grasp=True)
+        held = tuple(name for name in goal if high[name] == goal[name])
+        self.assertEqual(set(held), set(goal) - {'lh_thumb_cmc_pitch', 'lh_thumb_cmc_yaw'})
+        start = {name: value - .0045 for name, value in goal.items()}
+        for fraction in (0., .25, .75, 1.):
+            issued = ramp_targets(start, goal, fraction, held)
+            for name in held:
+                self.assertEqual(issued[name], goal[name])
+            for name in set(goal) - set(held):
+                self.assertAlmostEqual(issued[name], start[name] + fraction * .0045)
+        self.assertEqual(ramp_targets(start, goal, 0.), start)
+        with patch('rabokit_calibration_probe.subprocess.run', return_value=SimpleNamespace(
+                stdout='', stderr='', check_returncode=lambda: None)) as run:
+            hand_command('pinch_without_pinky', pad_grasp=True, ramp_seconds=2., preserve_prepared_targets=True)
+            self.assertIn('--preserve-prepared-targets', run.call_args.args[0])
+
+    def test_preserving_prepared_targets_requires_an_existing_low_pad_closure(self):
+        for options in ([], ['--pad-grasp'], ['--ramp-seconds', '2'],
+                        ['--pad-grasp', '--ramp-seconds', '2', '--pose', 'open']):
+            with patch.object(sys, 'argv', ['rabokit_hand.py', '--pose', 'pinch_without_pinky',
+                    '--preserve-prepared-targets', *options]), \
+                    patch('sys.stderr', new_callable=io.StringIO) as stderr, self.assertRaises(SystemExit) as raised:
+                main()
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn('--preserve-prepared-targets requires', stderr.getvalue())
+
     def test_pad_grasp_holds_prepared_long_fingers_while_thumb_closes(self):
         opened = targets('open')
         high = targets('pinch_high_thumb_ready_without_pinky', pad_grasp=True)
@@ -66,10 +95,14 @@ class HandTargetsTests(unittest.TestCase):
                 self.assertIn('--hand-trace', command)
 
     def test_ramp_starts_at_measured_angles_reaches_goal_and_requires_complete_feedback(self):
-        start, goal = targets('open'), targets('pinch_thumb_ready_without_pinky', .511764705882353)
-        start['lh_thumb_cmc_yaw'] += .012
-        for missing, ramp_duration, sim_rate in ((False, .5, 1.), (False, 2., 1.),
-                (False, .5, .4), (False, .5, 0.), (True, .5, 1.)):
+        for missing, ramp_duration, sim_rate, preserve in ((False, .5, 1., False), (False, 2., 1., False),
+                (False, .5, .4, False), (False, .5, 0., False), (True, .5, 1., False), (False, 2., 1., True)):
+            goal = (targets('pinch_without_pinky', pad_grasp=True) if preserve else
+                    targets('pinch_thumb_ready_without_pinky', .511764705882353))
+            start = {name: value - .0045 for name, value in goal.items()} if preserve else targets('open')
+            start['lh_thumb_cmc_yaw'] += .012
+            arguments = (['--pose', 'pinch_without_pinky', '--pad-grasp', '--preserve-prepared-targets'] if preserve
+                         else ['--pose', 'pinch_thumb_ready_without_pinky', '--thumb-yaw', '.511764705882353'])
             clock, callbacks, published = [0.], [], {name: [] for name in goal}
             def spin(node, timeout_sec):
                 clock[0] += timeout_sec
@@ -103,8 +136,7 @@ class HandTargetsTests(unittest.TestCase):
                        'std_msgs.msg': SimpleNamespace(Float64=SimpleNamespace),
                        'tf2_msgs.msg': SimpleNamespace(TFMessage=object)}
             with patch.dict(sys.modules, modules), patch.dict('os.environ', {'ROS2_NAMESPACE': 'test'}), \
-                    patch.object(sys, 'argv', ['rabokit_hand.py', '--pose', 'pinch_thumb_ready_without_pinky',
-                        '--thumb-yaw', '.511764705882353', '--ramp-seconds', str(ramp_duration)]), \
+                    patch.object(sys, 'argv', ['rabokit_hand.py', *arguments, '--ramp-seconds', str(ramp_duration)]), \
                     patch('rabokit_hand.time.monotonic', side_effect=lambda: clock[0]), patch('builtins.print') as output:
                 if missing:
                     with self.assertRaises(TimeoutError):
@@ -120,13 +152,17 @@ class HandTargetsTests(unittest.TestCase):
                     continue
                 main()
             record = json.loads(output.call_args.args[0])
+            held = set(record['held_target_joints'])
+            self.assertEqual(held, set(goal) - {'lh_thumb_cmc_pitch', 'lh_thumb_cmc_yaw'} if preserve else set())
             for name, rows in published.items():
-                self.assertAlmostEqual(rows[0][1], start[name], places=6)
+                self.assertAlmostEqual(rows[0][1], goal[name] if name in held else start[name], places=6)
                 self.assertAlmostEqual(rows[-1][1], goal[name])
-                self.assertTrue(any(min(start[name], goal[name]) < v < max(start[name], goal[name])
+                self.assertTrue(name in held or any(min(start[name], goal[name]) < v < max(start[name], goal[name])
                     for _, v in rows) or abs(start[name]-goal[name]) < 1e-6)
+                if name in held:
+                    self.assertTrue(all(value == goal[name] for _, value in rows))
                 self.assertLess((rows[-1][0] - rows[0][0]) * sim_rate, max(1., ramp_duration + .5) + 1e-8)
-                if abs(start[name]-goal[name]) > 1e-6:
+                if name not in held and abs(start[name]-goal[name]) > 1e-6:
                     first_endpoint = next(t for t, v in rows if abs(v-goal[name]) < 1e-8)
                     self.assertGreaterEqual((first_endpoint - rows[0][0]) * sim_rate, ramp_duration - .06)
             self.assertEqual(record['native_targets_rad'], goal)
