@@ -1,12 +1,12 @@
 {
-  "status": "Index MCP/DIP redistribution candidate; native retention unverified",
+  "status": "Fixed-finger thumb closure candidate; green translation is a hypothesis, native grasp unverified",
   "fingers": [
     "index",
     "middle"
   ],
   "goals": {
-    "lh_index_mcp_pitch": 0.018000000000000002,
-    "lh_index_dip": 0.6440850938827003,
+    "lh_index_mcp_pitch": -0.082,
+    "lh_index_dip": 0.7440850938827003,
     "lh_middle_mcp_pitch": 0.1747249840350984,
     "lh_middle_dip": 0.48991366541189096,
     "lh_ring_mcp_pitch": -0.082,
@@ -18,8 +18,8 @@
     "lh_thumb_ip": 1.15
   },
   "high_goals": {
-    "lh_index_mcp_pitch": 0.018000000000000002,
-    "lh_index_dip": 0.6440850938827003,
+    "lh_index_mcp_pitch": -0.082,
+    "lh_index_dip": 0.7440850938827003,
     "lh_middle_mcp_pitch": 0.1747249840350984,
     "lh_middle_dip": 0.48991366541189096,
     "lh_ring_mcp_pitch": -0.082,
@@ -69,36 +69,36 @@
   ],
   "pad_points_relative_source_m": [
     [
-      -0.01582878063261678,
-      0.0017296932384911062,
-      -0.013398408190711364
+      -0.01550073316422055,
+      0.0006858948090611029,
+      -0.013934473327704765
     ],
     [
-      0.03030094952993423,
-      -0.007511740551773824,
-      -0.012358962839546739
+      0.03187023898335555,
+      -0.009141514413665883,
+      -0.009363254259475488
     ],
     [
-      0.03145054147011772,
-      0.013421136099927136,
-      -0.013796404820382357
+      0.03177957587742466,
+      0.012374190685907649,
+      -0.014306833926292103
     ]
   ],
   "pad_normals_sdk": [
     [
-      0.9900158905564832,
-      -0.016117501004078705,
-      -0.14003129152813432
+      0.99021348425597,
+      -0.01665084824764872,
+      -0.1385640821074707
     ],
     [
-      -0.9989691113944605,
-      0.023751364535579085,
-      -0.03868574882899563
+      -0.9989121037810251,
+      0.023648386955968954,
+      -0.04019157516380126
     ],
     [
-      -0.9988184482220593,
-      -0.020357912644257976,
-      -0.04412780171327736
+      -0.9987554653029262,
+      -0.02048000022228776,
+      -0.04547625884382227
     ]
   ],
   "preparation_fraction": 0.75,
@@ -117,14 +117,5 @@
     0.0,
     0.0
   ],
-  "extra_raise_from_trial25_m": 0.001,
-  "pad_geometry_reference": {
-    "robot_mount": "trial-42 measured closed robot frames",
-    "source_surface_sdk_m": [
-      0.22930452697811687,
-      0.08055292610947161,
-      -0.5061684780567548
-    ],
-    "scope": "Representative public visual pad surfaces at candidate goals; not native contact patches or forces"
-  }
+  "extra_raise_from_trial25_m": 0.001
 }

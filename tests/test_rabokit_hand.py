@@ -50,7 +50,7 @@ class HandTargetsTests(unittest.TestCase):
         closed = targets('pinch_without_pinky', pad_grasp=True)
         for shape in (high, ready, opposed, closed):
             for name in opened:
-                if name.startswith(('lh_ring_', 'lh_pinky_')):
+                if name.startswith(('lh_ring_', 'lh_pinky_')) or name == 'lh_index_mcp_pitch':
                     self.assertEqual(shape[name], opened[name])
             self.assertEqual(shape['lh_thumb_ip'], 1.15)
             self.assertLessEqual(shape['lh_thumb_ip'], 1.18)
@@ -68,10 +68,7 @@ class HandTargetsTests(unittest.TestCase):
         for shape, fraction in ((ready, .75), (opposed, .95)):
             for name in opened:
                 self.assertAlmostEqual(shape[name], high[name] + fraction * (closed[name] - high[name]))
-        # Redistribute index flexion toward the MCP while retaining pad orientation.
-        self.assertAlmostEqual(closed['lh_index_mcp_pitch'], opened['lh_index_mcp_pitch'] + .1)
-        self.assertAlmostEqual(closed['lh_index_mcp_pitch'] + closed['lh_index_dip'],
-                               -.082 + .7440850938827003)
+        self.assertAlmostEqual(closed['lh_index_dip'], .7440850938827003)
         self.assertAlmostEqual(closed['lh_middle_dip'], .48991366541189096)
         self.assertEqual(high['lh_thumb_cmc_pitch'], 0.)
         self.assertEqual(targets('open', pad_grasp=True), opened)
