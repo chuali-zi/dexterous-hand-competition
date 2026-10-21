@@ -106,7 +106,8 @@ def main():
                 for name in topics}
     if args.hand_feedback:
         info = metadata['base_cam']
-        feedback = {'scope': 'Hand feedback received during this RGB capture; no commands or success labels',
+        feedback = {'scope': 'This capture only subscribes to hand feedback; concurrent control is recorded '
+                            'separately. No command history or success labels in this file.',
             'hand_topic': f'/{namespace}/arm_left/joint_states',
             'observation_wall_seconds': args.seconds,
             'joint_samples': hand_samples,

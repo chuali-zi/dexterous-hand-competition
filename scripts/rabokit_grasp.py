@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Plan or test one RGB-guided green-brick pickup and placement in simulation."""
 import argparse
+from contextlib import ExitStack
 import json
 import math
 import os
@@ -264,6 +265,8 @@ def main():
                         help='Pad grasp only: capture the first lift segment, then stop without return or success verdict')
     parser.add_argument('--diagnose-second-lift', action='store_true',
                         help='Pad grasp only: capture the first two lift segments, then stop without return or success verdict')
+    parser.add_argument('--feedback-hold', action='store_true',
+                        help='Experimental bounded index/middle DIP feedback hold during the two-lift diagnostic')
     parser.add_argument('--side-camera', action='store_true',
                         help='Record synchronized side RGB at static stages for grasp visibility diagnosis')
     parser.add_argument('--inspect-pickup', action='store_true',
@@ -296,6 +299,8 @@ def main():
         parser.error('--diagnose-first-lift requires --pad-grasp and cannot stop before lift')
     if args.diagnose_second_lift and (not args.pad_grasp or args.diagnose_closure_rgb or args.diagnose_first_lift):
         parser.error('--diagnose-second-lift requires --pad-grasp and no other diagnostic stop')
+    if args.feedback_hold and not (args.pad_grasp and args.diagnose_second_lift):
+        parser.error('--feedback-hold requires --pad-grasp and --diagnose-second-lift')
     tool_rotation = None
     if args.pad_grasp:
         if not (args.limited_pinch and args.prepare_thumb_high):
@@ -338,6 +343,7 @@ def main():
     from rabo_robolib import LbotDualArm
 
     robot = LbotDualArm(mode='sim')
+    hold_stack, feedback_hold = ExitStack(), None
     motion = args.stage != 'plan' and not args.plan_only
     try:
         time.sleep(1)
@@ -413,6 +419,7 @@ def main():
                   'closure_rgb_trace_requested': closure_rgb_trace,
                   'first_lift_diagnostic_requested': args.diagnose_first_lift,
                   'second_lift_diagnostic_requested': args.diagnose_second_lift,
+                  'feedback_hold_requested': args.feedback_hold,
                   'hand_ramp_seconds': 2. if args.limited_pinch else 0.,
                   'pass_through_high_requested': args.pass_through_high,
                   'pass_through_joint_count': sum(bool(e.get('pass_through')) for e in events),
@@ -451,6 +458,9 @@ def main():
                         event['reverse_of'] in joint_targets]
 
             while pending:
+                if feedback_hold is not None:
+                    from rabokit_grip_hold import check_process
+                    check_process(feedback_hold)
                 event = pending.pop(0)
                 report['active_stage'] = event['name']
                 save()
@@ -495,6 +505,11 @@ def main():
                 report['completed'].append({'name': event['name'], 'measured': state})
                 save()
                 print(json.dumps({'completed': event['name'], 'measured': state}), flush=True)
+                if args.feedback_hold and event['name'] == 'closed':
+                    from rabokit_grip_hold import hold_process
+                    feedback_hold = hold_stack.enter_context(hold_process(args.output))
+                    report['feedback_hold_pid'] = feedback_hold.pid
+                    save()
                 if event['capture']:
                     try:
                         sample(arm, args.output, event['name'], stereo=True, side_camera=args.side_camera,
@@ -505,6 +520,9 @@ def main():
                         pending = recover(f'{event["name"]}: camera sampling failed: {error}')
                         save()
                         continue
+                if feedback_hold is not None:
+                    from rabokit_grip_hold import check_process
+                    check_process(feedback_hold)
                 if event.get('preshape_feedback_key'):
                     from rabokit_hand import preparation_feedback
                     frames = json.loads((args.output / event['name'] / 'robot-frames.json').read_text(encoding='utf-8'))['frames']
@@ -619,10 +637,18 @@ def main():
         raise
     finally:
         try:
-            if motion:
-                robot.stop()
+            try:
+                hold_stack.close()
+            finally:
+                if feedback_hold is not None:
+                    report['feedback_hold_exit_code'] = feedback_hold.returncode
+                    save()
         finally:
-            robot.shutdown()
+            try:
+                if motion:
+                    robot.stop()
+            finally:
+                robot.shutdown()
 
 
 if __name__ == '__main__':
