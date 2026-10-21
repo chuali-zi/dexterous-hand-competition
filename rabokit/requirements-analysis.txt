@@ -1,0 +1,2 @@
+# Optional PNG decoding for local multimodal replay and its tests.
+Pillow==12.3.0

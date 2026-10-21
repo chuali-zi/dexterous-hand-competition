@@ -1475,3 +1475,23 @@ python scripts/rabokit_multimodal.py runs/brick-balanced-pinch-24/closed-command
 进一步核对发现：三组后续静态 RGB 时标分别比对应 `robot-frames.json` 中最后一条手部 JointState 晚 **6.44/6.38/6.40 秒**。当前 `sample()` 先完成本体采样，再运行相机采集，二者不能被视为同步模态；此前静态负载表仍是各自采样窗口的真实统计，但不能据此认定相机曝光瞬间有相同负载。过程回放按每帧机器人时标选取之前的 JointState，完整观察的年龄检查通过。下一次采样应覆盖闭指后到抬起前的空档，并共用 RGB/本体采样时间窗口，再判断是否需要负载闭环；本轮不因这些离线结果追加动作。
 
 本地结果在被忽略的 `runs/multimodal-replay-25-local/`：三份多模态回放、`sequence-box-fit.json`、`summary.json` 和 `rgb-load-sequence.png`。默认目录与显式同目录的实际拟合结果逐项一致，保留静态拟合变化小于 **1e−9 m**；新参数 CLI 和语法检查通过。既有 **4 项**多模态测试在正常权限下通过；首次沙箱运行其中一项因 Windows 临时目录权限失败，不写成首次通过。没有学习策略、稳定持砖正例或新增比赛成绩。
+
+## 静态 RGB 同窗手部反馈（2026-10-21，未启动仿真）
+
+为修正上述静态采样的约 6.4 秒错位，[相机采集](../scripts/rabokit_camera.py)现在可在同一 ROS 节点、同一既有相机采集窗口内订阅左臂 JointState，仅保存 11 个原生手指关节的角度、速度和 reported effort；没有增加采集等待、控制发布或新传感器。缺失通道保留缺失。原本体 TF 采样仍用于既有几何记录，不将其较早的手部窗口当作曝光时刻的反馈。
+
+[双目入口](../scripts/rabokit_stereo.py)新增 `--hand-feedback`，在相机目录旁保存 `hand-feedback.json`，包含实际收到的 JointState 历史与本次同步双目 RGB 时标。三机模式仍要求三机图像及内参在同一时标匹配；回放目前使用原双目两机，侧视图继续单独保留。[抓取采样调用](../scripts/rabokit_calibration_probe.py)在既有 `stereo=True, hand_trace=True` 且非 `hand_only` 的阶段自动启用该选项，手形、运动、到位阈值和采样时长不变。
+
+[本地多模态回放](../scripts/rabokit_multimodal.py)可直接读取该文件，并自动定位相机目录；仍只选择每个请求机器人时标之前的关节状态，历史不足或反馈过旧时标为不可用，不通过插值、补零或未来反馈填满。静态记录的 `relative_command_seconds` 为 null，不伪造命令起点。取得下一次实际数据后，用法为：
+
+```powershell
+python scripts/rabokit_multimodal.py runs/example/closed/camera/hand-feedback.json --output runs/example/closed-multimodal.json
+```
+
+PNG 解码及相关回放测试需要可选依赖 [requirements-analysis.txt](../rabokit/requirements-analysis.txt)，固定为本机已验证的 **Pillow 12.3.0**；正常 ROS 相机采集不依赖 Pillow。安装命令为 `python -m pip install -r rabokit/requirements-analysis.txt`。没有将该分析依赖加入顶层平台启动要求。
+
+本地 **9 项相机 + 5 项双目 + 4 项多模态，共 18 项**测试通过，包含模拟交错消息下的同窗收集、缺失通道保留，以及“保存静态 RGB/手部反馈 → CLI 自动定位 → 因果历史回放”的完整文件通路。旧 25 轮闭指命令记录的 CLI 回放仍为 **12 对、11 对可用**，结果与修改前逐项相同；四个脚本语法、CLI 入口通过。
+
+已推送源码 **`c6ea47a`** 通过既有增量 Git bundle 验证后快进至云端，工作区干净；没有改平台顶层仓库或远端。云端首次运行相关测试通过 **13 项**，另有一个集成用例及多模态模块导入因该 Python 环境未装 Pillow 而失败（当次报告 15 个测试项、2 个错误，包含模块导入失败占位项），不报告首轮全通过。随后使用既有包索引安装 **Pillow 12.3.0**（6.9 MB wheel），没有升级 SDK 或 NumPy；只补跑受影响的 **5 项**，全部通过，复跑总墙钟约 **0.102 秒**。至此覆盖 18 个不同相关用例，非一次整套通过。
+
+原始同步和测试输出保存在本地被忽略的 `runs/same-window-feedback-01/`，云端日志为 `/tmp/same-window-feedback-tests.log` 及 `/tmp/same-window-feedback-retests.log`。场景维持停止，未运行真实 ROS 采集或新增接触试验。这一修复尚未验证实际反馈覆盖率，也未补齐整个闭指后保持阶段的连续 RGB；平台持续反馈、接触闭环与稳定抓放仍待处理。
