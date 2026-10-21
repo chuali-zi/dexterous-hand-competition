@@ -47,6 +47,14 @@ python competition/scripts/check.py
 
 在平台点击「启动仿真」。仿真环境和控制程序是两个进程：只启动仿真，机器人不会自动完成任务。取消勾选「启动当前智能体工程」可手动分步调试。
 
+当前垒砖三机诊断在 SDK/运动前使用一次有上限的只读检查：
+
+```bash
+python competition/scripts/rabokit_probe.py --rgb-ready --output /tmp/brick-rgb-ready-01.json
+```
+
+该模式最多等待 20 秒，三台固定 RGB 的 Image/CameraInfo 必须同一时标，消息像素、frame、尺寸和内参有效，且双臂及左手位置反馈完整、新鲜；齐备即退出。只订阅，不初始化 SDK 或发布指令，不能与 `--motion` 合用。退出 1 或异常时不启动控制器，先确认停止本次仿真并保存诊断；不自动重试或重启实例。输出文件必须是新路径，避免覆盖旧结果；图上有 topic/publisher 不等于收到消息。它只确认当时就绪，不能保证后续数分钟持续性。此入口已通过本地测试，实际平台验证仍待完成。
+
 仿真就绪后：
 
 ```bash
