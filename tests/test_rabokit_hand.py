@@ -40,7 +40,9 @@ class HandTargetsTests(unittest.TestCase):
             for name in opened:
                 self.assertAlmostEqual(shape[name], high[name] + fraction * (closed[name] - high[name]))
         self.assertAlmostEqual(closed['lh_index_dip'], .7440850938827003)
-        self.assertAlmostEqual(closed['lh_middle_dip'], .48991366541189096)
+        self.assertAlmostEqual(closed['lh_middle_mcp_pitch'], .06)
+        self.assertAlmostEqual(closed['lh_middle_mcp_pitch'] + closed['lh_middle_dip'],
+                               .1747249840350984 + .48991366541189096)
         self.assertEqual(high['lh_thumb_cmc_pitch'], 0.)
         self.assertEqual(targets('open', pad_grasp=True), opened)
         with self.assertRaises(ValueError):
