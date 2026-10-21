@@ -1370,3 +1370,21 @@ SDK 正常导入期间，固定包装包 `rabo_robolib==3.0.0` 的公开运行�
 $env:PYTHONPATH = (Resolve-Path runs/sdk-runtime-3).Path
 python scripts/check_pad_pickup.py runs/brick-deeper-pinch-25/grasp.json --seed-record runs/brick-thumb062-y007-01/grasp.json --output runs/pad26-route-check.json
 ```
+
+## 多模态抓取研究初筛（2026-10-20，未启动新仿真）
+
+用户提出先查已有灵巧手多模态模型。本次查阅作者论文、项目页和官方仓库，优先核对输入、动作空间、代码/权重和训练条件。候选 26 源码已同步到开发副本的 `fcf81ba`，但尚未执行新就绪检查或接触试验；保留候选，先做本地适配研究。本次未安装新训练环境、下载权重或使用付费模型接口。
+
+当前已有三机 RGB、手部关节角、原生指令和 reported effort 记录；这些信号尚未融合为接触闭环策略。25 轮首次抬起约 9.619 mm 后，中指 DIP 的静态 reported effort 已回到空手量级，拇指/食指仍有额外负载，继续抬高后均回落；侧视最后确认绿色砖仍在桌面。这支持优先研究接触建立、支撑丢失和抬起切换，不能把失败仅归为颜色识别，也不能把 effort 当作已标定的触觉或接触力。
+
+| 研究与一手来源 | 实际输入/发布情况 | 当前适配判断 |
+|---|---|---|
+| [SoftGrasp，2025](https://www.sciencedirect.com/science/article/pii/S2667379725000087)；[作者代码](https://github.com/nubot-nudt/SoftGrasp) | 固定视角图像、关节角、手部 torque；公开训练和实际推理代码。README 未提供明确的预训练策略权重下载入口，本轮未验证权重可得性。 | 优先参考其多模态融合和角度/负载联合动作设计。公开推理代码对角度和 torque 做特定归一化，并调用原硬件环境，不能把本平台 raw effort 直接填进去。 |
+| [DexGraspVLA](https://github.com/Psi-Robot/DexGraspVLA) | RGB/目标掩码、腕部 RGB、13 维本体状态；公开控制器 checkpoint、训练代码和 51 条示例演示。公开配置的手部为 6 维控制，硬件适配代码未公开；高层规划使用 Qwen2.5-VL-72B，支持手工目标框模式绕过规划器。 | 是本轮确认有控制器权重的候选。我们使用固定视角和 11 个原生手指关节，需要相机分布、状态/动作映射以及数据适配；原论文的 zero-shot 结果不能直接外推到本平台。 |
+| [DexUMI](https://github.com/real-stanford/DexUMI) | 视觉、本体信息和可选 FSR 力输入；公开数据采集、处理、训练/评估代码及数据链接，支持 Inspire/XHand，FSR 可关闭。 | 可参考演示数据组织及可选力通道。其外骨骼、图像域转换和原手型演示不是当前比赛手的现成策略；本轮未验证可直接部署的预训练权重。 |
+| [See to Reach, Feel to Grasp，2026-09](https://arxiv.org/html/2609.31323v1)；[项目页](https://blindgraspreflex.github.io/) | 手部学生只读关节角及上一位置指令误差的短历史，输出手指目标和抓持分数；原实验是 20 自由度 HX5 手。教师用接触/物体状态训练，再蒸馏到本体输入学生；项目仍标注 Code Coming Soon。 | 方法与当前瓶颈贴近：视觉负责接近，手部反馈负责接触和保持，手臂依据抓持状态继续。不能直接复用未发布权重，也不能把我们已发送的阶段末态目标冒充论文控制器内部的限速位置指令。 |
+| [Transferring Contact, Not Just Motion / MARC，2026-06](https://arxiv.org/html/2606.15516v2)；[项目页](https://transferring-contact-not-just-motion.github.io/) | RGB-D、本体状态、经每种手系统辨识标定的 torque/接触描述；训练为单 RTX 4090、60K 步、batch 64，部署使用 RTX 4070。项目标注代码 Coming Soon。 | 直接说明 raw effort 与物理力矩之间需要标定；当前长指反推力欠定，不能直接套它的指尖力公式。缺深度流、标定及已发布实现，暂作方法参考。 |
+
+[DexVLG 官方仓库](https://github.com/jiaweihe1996/DexVLG)当前仅有 README，训练/推理代码与模型权重仍列为待发布；不因论文有大规模数据集就把它计为可立即运行的候选。需要密集触觉、二值触点或 FSR 的研究，也不能把当前 effort 通道替代为那些传感器输入。
+
+后续优先按“视觉定位 + 本体/负载历史反馈”的方向做本地适配：先对照 SoftGrasp 与 DexGraspVLA 的输入、归一化和动作接口，再复用保留数据检查接触持续与失持信号，决定最小闭环改动。当前还没有已验证的成功持砖样本，不能仅拿现有失败记录训练并宣称得到可靠的抓持成功分类器。轻量反馈方法和预训练控制器适配均需实际验证；本轮没有复现论文、运行模型或验证新抓持成功。涉及本机显存的查询未取得结果，不据此承诺训练耗时或模型可运行性。需要原生物理结果时再安排针对性的短仿真，不在 Rabokit 上从零训练大规模策略。
