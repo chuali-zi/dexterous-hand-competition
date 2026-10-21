@@ -77,7 +77,7 @@ def visible_pixels(images, rois, threshold, occluders=None):
     return observations
 
 
-def analyze(trial, reference, stage, top_z, side, threshold):
+def analyze(trial, reference, stage, top_z, side, threshold, rgb_folder=None):
     read = lambda p: json.loads(p.read_text(encoding='utf-8'))
     grasp = read(trial / 'grasp.json')
     frames = read(trial / 'contact/robot-frames.json')['frames']
@@ -127,7 +127,7 @@ def analyze(trial, reference, stage, top_z, side, threshold):
         return result
 
     initial_metadata = read(reference / 'initial/stereo.json')['camera_messages']
-    current_folder = trial / stage / 'camera'
+    current_folder = rgb_folder if rgb_folder is not None else trial / stage / 'camera'
     current_metadata = {cam: read(current_folder / cam / 'camera.json') for cam in CAMERAS}
     initial, current = images(reference / 'initial', initial_metadata), images(current_folder, current_metadata)
     baseline = fit_box_xy(visible_pixels(initial, rois, threshold), project, prior)
@@ -135,7 +135,7 @@ def analyze(trial, reference, stage, top_z, side, threshold):
     fitted = fit_box_xy(visible_pixels(current, rois, threshold), project, baseline_q)
     synthetic = fit_box_xy(visible_pixels(initial, rois, threshold, current), project, baseline_q)
     return {'scope': 'Offline fixed-horizontal-top box hypothesis; no motion or grasp decision',
-            'stage': stage, 'reference': str(reference), 'top_z_sdk_m': top_z,
+            'stage': stage, 'rgb_folder': str(current_folder), 'reference': str(reference), 'top_z_sdk_m': top_z,
             'box_side_m': side, 'green_threshold': threshold, 'baseline': baseline,
             'occluded': fitted, 'synthetic_occlusion': synthetic,
             'estimated_xy_shift_m': (np.array(fitted['xy_yaw'])[:2] - baseline_q[:2]).tolist(),
@@ -148,6 +148,7 @@ def main():
     parser.add_argument('--trial', type=Path, required=True)
     parser.add_argument('--reference', type=Path, help='Initial RGB directory source; defaults to trial')
     parser.add_argument('--stage', default='closed')
+    parser.add_argument('--rgb-folder', type=Path, help='Saved synchronized frame folder containing base_cam/ and base_cam2/; defaults to the stage camera folder')
     parser.add_argument('--top-z', type=float, required=True, help='Assumed horizontal top height in SDK metres')
     parser.add_argument('--side', type=float, default=.05)
     parser.add_argument('--threshold', type=int, default=160)
@@ -155,7 +156,7 @@ def main():
     args = parser.parse_args()
     if not np.isfinite(args.top_z) or not 0 < args.side < 1 or not 0 <= args.threshold <= 255:
         parser.error('Expected finite top height, box side in (0,1) metres and RGB threshold in [0,255]')
-    result = analyze(args.trial, args.reference or args.trial, args.stage, args.top_z, args.side, args.threshold)
+    result = analyze(args.trial, args.reference or args.trial, args.stage, args.top_z, args.side, args.threshold, args.rgb_folder)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
     print(json.dumps({'output': str(args.output), 'xy_shift_m': result['estimated_xy_shift_m'],
