@@ -105,11 +105,12 @@ def replay(trace, rgb_root, history_length=5, history_period=.08, max_age=.04):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('trace', type=Path, help='Saved *-command.json containing JointState and RGB trace metadata')
-    parser.add_argument('--rgb-root', type=Path, help='Local *-rgb folder; inferred beside the command trace by default')
+    parser.add_argument('trace', type=Path, help='Saved *-command.json or static hand-feedback.json containing JointState and RGB metadata')
+    parser.add_argument('--rgb-root', type=Path, help='Local *-rgb folder, or parent of the camera folder for static hand-feedback.json')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
-    rgb_root = args.rgb_root or args.trace.with_name(args.trace.name.removesuffix('-command.json') + '-rgb')
+    rgb_root = args.rgb_root or (args.trace.parent.parent if args.trace.name == 'hand-feedback.json' else
+                                args.trace.with_name(args.trace.name.removesuffix('-command.json') + '-rgb'))
     try:
         report = replay(json.loads(args.trace.read_text(encoding='utf-8')), rgb_root)
     except (OSError, ValueError, KeyError) as error:

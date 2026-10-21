@@ -48,6 +48,8 @@ def sample(arm, root, label, stereo=False, side_camera=False, hand_trace=False, 
                      '--output', str(folder / 'robot-frames.json')]
     if hand_trace:
         frame_command.append('--hand-trace')
+        if stereo and not hand_only:
+            camera_command.append('--hand-feedback')
     for command in ((frame_command,) if hand_only else (frame_command, camera_command)):
         result = subprocess.run([sys.executable, *command], capture_output=True, text=True, timeout=15)
         (folder / (Path(command[0]).stem + '.log')).write_text(

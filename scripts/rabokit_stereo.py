@@ -84,6 +84,7 @@ def main():
     parser.add_argument('--seconds', type=float, default=6)
     parser.add_argument('--capture-only', action='store_true', help='Save synchronized RGB without requiring visible brick matches')
     parser.add_argument('--side-camera', action='store_true', help='Also capture base_cam3 at the same timestamp (capture-only)')
+    parser.add_argument('--hand-feedback', action='store_true', help='Record left-hand JointState during the RGB capture; no commands')
     args = parser.parse_args()
     if args.side_camera and not args.capture_only:
         parser.error('--side-camera requires --capture-only; metric reconstruction uses the original stereo pair')
@@ -97,9 +98,22 @@ def main():
     names = ('base_cam', 'base_cam2', 'base_cam3') if args.side_camera else ('base_cam', 'base_cam2')
     topics = {name: (f'/{namespace}/base/{name}/image_raw', f'/{namespace}/base/{name}/camera_info')
               for name in names}
-    pairs, counts = capture_cameras(topics, args.seconds)
+    hand_samples = []
+    feedback_options = {'hand_topic': f'/{namespace}/arm_left/joint_states',
+                        'hand_samples': hand_samples} if args.hand_feedback else {}
+    pairs, counts = capture_cameras(topics, args.seconds, **feedback_options)
     metadata = {name: save_pair(*pairs[name], counts[name], args.seconds, *topics[name], args.output / name)
                 for name in topics}
+    if args.hand_feedback:
+        info = metadata['base_cam']
+        feedback = {'scope': 'Hand feedback received during this RGB capture; no commands or success labels',
+            'hand_topic': f'/{namespace}/arm_left/joint_states',
+            'observation_wall_seconds': args.seconds,
+            'joint_samples': hand_samples,
+            'rgb_trace': {'cameras': ['base_cam', 'base_cam2'], 'frames': [{
+                'stamp': [info['stamp']['sec'], info['stamp']['nanosec']],
+                'relative_command_seconds': None, 'directory': args.output.name}]}}
+        (args.output / 'hand-feedback.json').write_text(json.dumps(feedback, indent=2) + '\n', encoding='utf-8')
     if args.capture_only:
         (args.output / 'capture.json').write_text(json.dumps({'camera_messages': metadata,
             'metric_reconstruction_run': False, 'official_score': None}, indent=2) + '\n', encoding='utf-8')

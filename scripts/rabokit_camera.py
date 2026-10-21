@@ -40,7 +40,9 @@ def png_bytes(width, height, pixels):
             chunk(b'IDAT', zlib.compress(rows)) + chunk(b'IEND', b''))
 
 
-def capture_cameras(topics, seconds):
+def capture_cameras(topics, seconds, *, hand_topic=None, hand_samples=None):
+    if (hand_topic is None) != (hand_samples is None):
+        raise ValueError('Hand feedback needs both a topic and a sample list')
     import rclpy
     from rclpy.qos import QoSProfile, ReliabilityPolicy
     from sensor_msgs.msg import CameraInfo, Image
@@ -70,6 +72,20 @@ def capture_cameras(topics, seconds):
             del pending[next(iter(pending))]
 
     try:
+        if hand_topic is not None:
+            from rclpy.qos import qos_profile_sensor_data
+            from sensor_msgs.msg import JointState
+            from rabokit_hand import HAND_JOINTS
+
+            def receive_hand(msg):
+                indices = {name: i for i, name in enumerate(msg.name) if name in HAND_JOINTS}
+                hand_samples.append({'stamp': [msg.header.stamp.sec, msg.header.stamp.nanosec],
+                    **{field: {name: getattr(msg, field)[i] for name, i in indices.items()
+                               if i < len(getattr(msg, field))}
+                       for field in ('position', 'velocity', 'effort')}})
+
+            subscriptions.append(node.create_subscription(JointState, hand_topic, receive_hand,
+                                                          qos_profile_sensor_data))
         for name, (image_topic, info_topic) in topics.items():
             for kind, topic, message in (('image', image_topic, Image), ('info', info_topic, CameraInfo)):
                 subscriptions.append(node.create_subscription(

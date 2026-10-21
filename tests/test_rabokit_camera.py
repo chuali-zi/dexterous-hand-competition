@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import patch
 import zlib
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 spec = importlib.util.spec_from_file_location(
     'rabokit_camera', Path(__file__).resolve().parents[1] / 'scripts/rabokit_camera.py')
 camera = importlib.util.module_from_spec(spec)
@@ -64,7 +65,7 @@ class CameraTests(unittest.TestCase):
         self.assertEqual(report['frames'], [])
         self.assertEqual(report['message_counts']['base_cam'], {'image':33,'info':0})
 
-    def capture_events(self, events, names=('a', 'b')):
+    def capture_events(self, events, names=('a', 'b'), hand_samples=None):
         callbacks, cleanup = {}, []
         clock = [0.0]
 
@@ -83,12 +84,14 @@ class CameraTests(unittest.TestCase):
         modules = {'rclpy': SimpleNamespace(init=lambda: None, create_node=lambda name: node,
                                             spin_once=spin, try_shutdown=lambda: cleanup.append('shutdown')),
                    'rclpy.qos': SimpleNamespace(QoSProfile=lambda **kw: kw,
-                                               ReliabilityPolicy=SimpleNamespace(RELIABLE=1)),
+                                               ReliabilityPolicy=SimpleNamespace(RELIABLE=1),
+                                               qos_profile_sensor_data=object()),
                    'sensor_msgs': SimpleNamespace(),
-                   'sensor_msgs.msg': SimpleNamespace(CameraInfo=object, Image=object)}
+                   'sensor_msgs.msg': SimpleNamespace(CameraInfo=object, Image=object, JointState=object)}
         with patch.dict(sys.modules, modules), patch.object(camera.time, 'monotonic', lambda: clock[0]):
             try:
-                return camera.capture_cameras({name: (name + '/image', name + '/info') for name in names}, 1.2)
+                options = {'hand_topic': '/test/arm_left/joint_states', 'hand_samples': hand_samples} if hand_samples is not None else {}
+                return camera.capture_cameras({name: (name + '/image', name + '/info') for name in names}, 1.2, **options)
             finally:
                 self.assertEqual(cleanup, ['destroyed', 'shutdown'])
 
@@ -110,6 +113,25 @@ class CameraTests(unittest.TestCase):
         pairs, counts = self.capture_events(events)
         self.assertEqual([pairs[name][0].header.stamp.sec for name in ('a', 'b')], [2, 2])
         self.assertEqual(counts, {'a': {'image': 2, 'info': 2}, 'b': {'image': 2, 'info': 2}})
+
+    def test_hand_feedback_is_collected_in_the_rgb_window_without_filling_missing_fields(self):
+        msg = self.message(1, 'arm')
+        msg.name = ['arm_joint', 'lh_thumb_ip', 'lh_index_dip']
+        msg.position, msg.velocity, msg.effort = [99., .1, .2], [], [99., .4]
+        events = [('/test/arm_left/joint_states', msg)]
+        events += [(name + '/' + kind, self.message(2, name))
+                   for name in ('a', 'b') for kind in ('info', 'image')]
+        later = self.message(2, 'arm')
+        later.name, later.position, later.velocity, later.effort = ['lh_thumb_ip'], [.3], [.5], [.6]
+        events.append(('/test/arm_left/joint_states', later))
+        samples = []
+        pairs, _ = self.capture_events(events, hand_samples=samples)
+        self.assertEqual(pairs['a'][0].header.stamp.sec, 2)
+        self.assertEqual(samples, [
+            {'stamp': [1, 0], 'position': {'lh_thumb_ip': .1, 'lh_index_dip': .2},
+             'velocity': {}, 'effort': {'lh_thumb_ip': .4}},
+            {'stamp': [2, 0], 'position': {'lh_thumb_ip': .3},
+             'velocity': {'lh_thumb_ip': .5}, 'effort': {'lh_thumb_ip': .6}}])
 
     def test_three_views_require_all_six_messages_at_one_timestamp(self):
         events = [(name + '/' + kind, self.message(2, name))

@@ -1,17 +1,61 @@
 """Stereo matching checks independent of ROS and scene object truth."""
 from pathlib import Path
+import json
 import math
+import os
 import sys
+import tempfile
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from rabokit_stereo import match_candidates, reconstruct
+import rabokit_stereo as stereo
 from rabokit_calibration_analysis import LEFT_ROOT, RIGHT_ROOT
 from hand_competition.closed_loop.geometry import Camera
 
 
 class StereoTests(unittest.TestCase):
+    def test_static_capture_feedback_replays_at_the_rgb_stamp(self):
+        from rabokit_hand import HAND_JOINTS
+        import rabokit_multimodal as multimodal
+
+        def capture(topics, seconds, *, hand_topic, hand_samples):
+            self.assertEqual(hand_topic, '/test/arm_left/joint_states')
+            hand_samples.extend({'stamp': [1, nano],
+                **{field: dict.fromkeys(HAND_JOINTS, nano / 1e9)
+                   for field in ('position', 'velocity', 'effort')}}
+                for nano in (0, 80000000, 160000000, 240000000, 320000000, 340000000))
+            pairs = {}
+            for name in topics:
+                header = SimpleNamespace(stamp=SimpleNamespace(sec=1, nanosec=330000000), frame_id=name)
+                image = SimpleNamespace(header=header, width=2, height=2, encoding='rgb8', step=6, data=bytes(12))
+                info = SimpleNamespace(header=header, width=2, height=2,
+                    k=[1., 0., 1., 0., 1., 1., 0., 0., 1.], d=[], r=[], p=[], distortion_model='')
+                pairs[name] = (image, info)
+            return pairs, {name: {'image': 1, 'info': 1} for name in topics}
+
+        with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parents[1]/'runs') as tmp:
+            folder = Path(tmp)/'camera'
+            with patch.dict(os.environ, ROS2_NAMESPACE='test'), patch.object(sys, 'argv', [
+                    'rabokit_stereo.py', '--output', str(folder), '--capture-only', '--hand-feedback']), \
+                    patch.object(stereo, 'capture_cameras', side_effect=capture):
+                stereo.main()
+            trace = json.loads((folder/'hand-feedback.json').read_text())
+            result = Path(tmp)/'replay.json'
+            with patch.object(sys, 'argv', ['rabokit_multimodal.py', str(folder/'hand-feedback.json'),
+                                          '--output', str(result)]):
+                multimodal.main()
+            report = json.loads(result.read_text())
+            self.assertEqual(trace['hand_topic'], '/test/arm_left/joint_states')
+            self.assertEqual(report['usable_observation_count'], 1)
+            row = report['rows'][0]
+            self.assertIsNone(row['relative_command_seconds'])
+            self.assertAlmostEqual(row['history'][-1]['position'][0], .32)
+            self.assertEqual(row['history'][-1]['sample_stamp_ns'], 1320000000)
+            self.assertFalse(report['trace_command_complete'])
+
     def test_sensor_numeric_intrinsics_are_normalized_before_geometry(self):
         class SensorFloat(float):
             pass
