@@ -144,7 +144,7 @@ class GraspPlanTests(unittest.TestCase):
     def test_pass_through_only_marks_high_uncaptured_outbound_joint_points(self):
         def point(name, z, capture=False):
             return {'name': name, 'joints': [0.] * 7, 'position': [0., 0., z], 'capture': capture}
-        events = [{'name': 'opened', 'hand': 'open', 'capture': True}, point('high1', .3),
+        events = [{'name': 'opened', 'hand': 'open', 'capture': True}, point('bridge_022', .3), point('high1', .3),
                   point('snapshot', .3, True), point('low', .1), point('rising', .3), point('high2', .3),
                   point('before_hand', .3),
                   {'name': 'preshaped', 'hand': 'pinch_preshape_without_pinky', 'capture': True},

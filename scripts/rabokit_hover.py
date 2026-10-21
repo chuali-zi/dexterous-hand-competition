@@ -136,7 +136,9 @@ def move_joint_pose(arm, joints, forward, settle=.2, require_settled=True):
         time.sleep(.1)
     print(json.dumps({'joint_segment_timeout': {'target_joints': list(joints), 'measured': state,
         'position_error_m': float(np.linalg.norm(xyz - goal)), 'orientation_error_rad': angle,
-        'tracking_corrections': corrections}}), flush=True)
+        'tracking_corrections': corrections,
+        'observed_tool_position_bounds': {'minimum': minimum.tolist(), 'maximum': maximum.tolist()},
+        'recent_feedback': [{'monotonic_seconds': stamp, 'joints': values} for stamp, values in recent]}}), flush=True)
     raise TimeoutError(f'Measured planned joint segment did not settle: '
                        f'position={np.linalg.norm(xyz - goal):.6f} m, orientation={angle:.6f} rad, '
                        f'joint={max(abs(a - b) for a, b in zip(state["joints"], joints)):.6f} rad, '

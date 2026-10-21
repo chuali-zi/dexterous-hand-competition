@@ -35,7 +35,7 @@ def pickup_offset(yaw, tool_offset_y=0., tool_offset_x=0.):
 
 
 def high_pass_through_plan(events, start, surface_z):
-    """Mark only high outbound intermediate joints before hand prepositioning."""
+    """Pass through high Cartesian samples; settle the initial joint-space bridge."""
     previous = start['pose'][0]
     outbound = True
     result = []
@@ -44,7 +44,7 @@ def high_pass_through_plan(events, start, surface_z):
             outbound = False
         if outbound and 'joints' in event and 'position' in event:
             before_hand = index + 1 < len(events) and 'hand' in events[index + 1]
-            if (not event.get('capture') and not before_hand and
+            if (not event['name'].startswith('bridge_') and not event.get('capture') and not before_hand and
                     min(previous[2], event['position'][2]) >= surface_z + .15):
                 event = {**event, 'pass_through': True}
             previous = event['position']
