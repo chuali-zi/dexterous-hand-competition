@@ -37,6 +37,21 @@ class GraspPlanTests(unittest.TestCase):
         observe.assert_not_called()
         self.assertIn('Closure RGB recording requires --limited-pinch', errors.getvalue())
 
+    def test_first_lift_diagnostic_preserves_the_original_route_prefix(self):
+        events, _ = make_plan(self.start, self.source, .009, 'pickup')
+        index = next(i for i, event in enumerate(events) if event['name'] == 'lifted')
+        events.insert(index, {**events[index], 'name': 'lifted_000', 'capture': False})
+        options = dict(limited_pinch=True, prepare_thumb_high=True, compare_empty_closure=True, pad_grasp=True)
+        normal = preshape_fingers_plan(events, **options)
+        diagnostic = preshape_fingers_plan(events, **options, first_lift_diagnostic=True)
+        end = next(i for i, event in enumerate(normal) if event['name'] == 'lifted_000')
+        self.assertEqual(diagnostic, normal[:end+1])
+        self.assertTrue(diagnostic[-1]['capture'])
+        self.assertNotIn('released', [event['name'] for event in diagnostic])
+        for invalid in ({}, {**options, 'closure_rgb_diagnostic': True}):
+            with self.assertRaisesRegex(ValueError, 'First-lift diagnostic'):
+                preshape_fingers_plan(events, first_lift_diagnostic=True, **invalid)
+
     def test_closure_rgb_diagnostic_is_the_same_route_prefix_ending_before_lift(self):
         events, _ = make_plan(self.start, self.source, .009, 'pickup')
         options = dict(limited_pinch=True, prepare_thumb_high=True, compare_empty_closure=True, pad_grasp=True)
