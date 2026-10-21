@@ -23,7 +23,7 @@ CAMERAS = ('base_cam', 'base_cam2')
 def fit_box_xy(observations, project, prior):
     """Fit x/y/yaw from visible green/wood points; project supplies the fixed top."""
     if any(len(points) < 3 for view in observations for points in view):
-        raise ValueError('Both views need visible green and wood; no fit available')
+        raise ValueError('Each view needs visible green and wood; no fit available')
 
     def residual(q):
         rows = []
