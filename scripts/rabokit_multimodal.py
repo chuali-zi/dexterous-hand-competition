@@ -26,6 +26,33 @@ def vector(sample, field):
             math.isfinite(values[name]) else None for name in HAND_JOINTS]
 
 
+def published_target_context(sample, commands, command_times):
+    """Describe past publications, without claiming when the servo applied them."""
+    received = sample.get('wall_seconds')
+    if not isinstance(received, (int, float)) or not math.isfinite(received):
+        return None
+    index = bisect_right(command_times, received) - 1
+    if index < 0:
+        return None
+    command = commands[index]
+    reference = command.get('robot_tf_reference_stamp_sec')
+    if not isinstance(reference, (int, float)) or not math.isfinite(reference):
+        return None
+    reference_ns = round(reference * 10**9)
+    if reference_ns > stamp_ns(sample['stamp']):
+        return None
+    targets = vector(command, 'targets_rad')
+    if any(value is None for value in targets):
+        return None
+    positions = vector(sample, 'position')
+    return {'publication_wall_seconds': command['wall_seconds'],
+            'feedback_receipt_wall_seconds': received,
+            'publication_age_wall_seconds': received - command['wall_seconds'],
+            'robot_tf_reference_stamp_ns': reference_ns, 'targets_rad': targets,
+            'target_minus_position_rad': [target - position if position is not None else None
+                                          for target, position in zip(targets, positions)]}
+
+
 def rgb_observation(folder, stamp):
     """Check locally available capture metadata/PNG, leaving missing pixels explicit."""
     result = {'image': str(folder / 'frame.png'), 'available': False}
@@ -61,6 +88,11 @@ def replay(trace, rgb_root, history_length=5, history_period=.08, max_age=.04):
     stamps = [stamp_ns(row['stamp']) for row in samples]
     if len(set(stamps)) != len(stamps):
         raise ValueError('Ambiguous duplicate JointState stamps')
+    commands = trace.get('issued_commands', [])
+    command_times = [command.get('wall_seconds') for command in commands]
+    if any(not isinstance(t, (int, float)) or not math.isfinite(t) for t in command_times) or any(
+            b <= a for a, b in zip(command_times, command_times[1:])):
+        raise ValueError('Expected finite, strictly increasing publication wall times')
     rgb = trace['rgb_trace']
     if rgb['cameras'] != ['base_cam', 'base_cam2']:
         raise ValueError('Expected the captured fixed stereo camera pair')
@@ -81,7 +113,8 @@ def replay(trace, rgb_root, history_length=5, history_period=.08, max_age=.04):
             if any(value is None for values in fields.values() for value in values):
                 reasons.append('Missing or nonfinite hand feedback channel')
             history.append({'requested_stamp_ns': requested, 'sample_stamp_ns': stamps[index],
-                            'age_seconds': (requested - stamps[index]) / 10**9, **fields})
+                            'age_seconds': (requested - stamps[index]) / 10**9, **fields,
+                            'published_target_context': published_target_context(sample, commands, command_times)})
         folder = Path(frame['directory'])
         if folder.is_absolute() or len(folder.parts) != 1 or folder.name in ('.', '..'):
             raise ValueError('Expected one captured RGB frame directory name')
@@ -96,6 +129,12 @@ def replay(trace, rgb_root, history_length=5, history_period=.08, max_age=.04):
             'position_units': 'radian', 'velocity_units': 'radian/second',
             'effort_units': 'uncalibrated reported effort',
             'command_error_available': False,
+            'published_target_context_count': sum(h is not None and h['published_target_context'] is not None
+                                                  for row in rows for h in row['history']),
+            'published_target_scope': 'Last logged publication before the feedback callback in the same process, '
+                                     'with a robot TF reference no later than the feedback stamp. '
+                                     'Receipt/publication wall times do not establish application time; '
+                                     'target minus position is not an internal servo error or contact force.',
             'scope': 'Captured observations only; no policy, action labels, contact identity or grasp-success labels. '
                      'Stage endpoints are not the issued per-step command or an internal servo reference.',
             'trace_command_complete': trace.get('command_complete', False),

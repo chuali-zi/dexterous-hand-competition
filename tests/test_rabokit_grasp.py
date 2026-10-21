@@ -52,6 +52,24 @@ class GraspPlanTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'First-lift diagnostic'):
                 preshape_fingers_plan(events, first_lift_diagnostic=True, **invalid)
 
+    def test_second_lift_diagnostic_adds_only_the_existing_next_segment_and_capture(self):
+        events, _ = make_plan(self.start, self.source, .009, 'pickup')
+        index = next(i for i, event in enumerate(events) if event['name'] == 'lifted')
+        events[index:index] = [{**events[index], 'name': f'lifted_{i:03}', 'capture': False}
+                               for i in range(2)]
+        options = dict(limited_pinch=True, prepare_thumb_high=True, compare_empty_closure=True, pad_grasp=True)
+        normal = preshape_fingers_plan(events, **options)
+        diagnostic = preshape_fingers_plan(events, **options, second_lift_diagnostic=True)
+        end = next(i for i, event in enumerate(normal) if event['name'] == 'lifted_001')
+        self.assertEqual(diagnostic[:-1], normal[:end])
+        self.assertEqual(diagnostic[-1], {**normal[end], 'capture': True})
+        self.assertTrue(next(e for e in diagnostic if e['name']=='lifted_000')['capture'])
+        self.assertNotIn('released', [e['name'] for e in diagnostic])
+        for invalid in ({}, {**options, 'closure_rgb_diagnostic': True},
+                        {**options, 'first_lift_diagnostic': True}):
+            with self.assertRaisesRegex(ValueError, 'Second-lift diagnostic'):
+                preshape_fingers_plan(events, second_lift_diagnostic=True, **invalid)
+
     def test_closure_rgb_diagnostic_is_the_same_route_prefix_ending_before_lift(self):
         events, _ = make_plan(self.start, self.source, .009, 'pickup')
         options = dict(limited_pinch=True, prepare_thumb_high=True, compare_empty_closure=True, pad_grasp=True)

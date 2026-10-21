@@ -52,6 +52,28 @@ class MultimodalReplayTests(unittest.TestCase):
                 self.assertIsNone(history[2]['effort' if kind == 'missing' else 'velocity'][0])
             json.dumps(report, allow_nan=False)
 
+    def test_published_targets_do_not_use_later_publications_or_future_tf_references(self):
+        trace = fixture()
+        for sample in trace['joint_samples']:
+            sample['wall_seconds'] = sample['stamp'][1] / 10**9 + .02
+        trace['issued_commands'] = [
+            {'wall_seconds': wall, 'robot_tf_reference_stamp_sec': stamp,
+             'targets_rad': dict.fromkeys(HAND_JOINTS, target)}
+            for wall, stamp, target in ((.01, 1., .2), (.27, 1.25, .5), (.36, 1.34, 99.))]
+        report = replay(trace, Path('absent-rgb'))
+        contexts = [h['published_target_context'] for h in report['rows'][0]['history']]
+        self.assertEqual([c['targets_rad'][0] for c in contexts], [.2, .2, .2, .2, .5])
+        self.assertAlmostEqual(contexts[-1]['target_minus_position_rad'][0], .18)
+        self.assertEqual(report['published_target_context_count'], 5)
+        self.assertFalse(report['command_error_available'])
+        trace['issued_commands'][0]['robot_tf_reference_stamp_sec'] = 1.01
+        self.assertIsNone(replay(trace, Path('.'))['rows'][0]['history'][0]['published_target_context'])
+        del trace['joint_samples'][-2]['wall_seconds']
+        self.assertIsNone(replay(trace, Path('.'))['rows'][0]['history'][-1]['published_target_context'])
+        trace['issued_commands'][1]['wall_seconds'] = .01
+        with self.assertRaisesRegex(ValueError, 'publication wall times'):
+            replay(trace, Path('.'))
+
     def test_duplicate_stamps_and_invalid_timing_are_rejected(self):
         trace = fixture()
         trace['joint_samples'].append(deepcopy(trace['joint_samples'][0]))

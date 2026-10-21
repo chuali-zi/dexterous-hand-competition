@@ -53,7 +53,8 @@ def high_pass_through_plan(events, start, surface_z):
 
 
 def preshape_fingers_plan(events, limited_pinch=False, prepare_thumb_high=False, compare_empty_closure=False,
-                          pad_grasp=False, closure_rgb_diagnostic=False, first_lift_diagnostic=False):
+                          pad_grasp=False, closure_rgb_diagnostic=False, first_lift_diagnostic=False,
+                          second_lift_diagnostic=False):
     """Prepare high; limited closure opposes the thumb and releases to preparation."""
     if prepare_thumb_high and not limited_pinch:
         raise ValueError('High thumb preparation requires limited pinch')
@@ -65,6 +66,8 @@ def preshape_fingers_plan(events, limited_pinch=False, prepare_thumb_high=False,
         raise ValueError('Closure RGB diagnostic requires limited pinch')
     if first_lift_diagnostic and (not pad_grasp or closure_rgb_diagnostic):
         raise ValueError('First-lift diagnostic requires pad grasp and cannot stop before lift')
+    if second_lift_diagnostic and (not pad_grasp or closure_rgb_diagnostic or first_lift_diagnostic):
+        raise ValueError('Second-lift diagnostic requires pad grasp and no other diagnostic stop')
     names = [event['name'] for event in events]
     if any(names.count(name) != 1 for name in ('aligned', 'contact', 'closed', 'released')) or not (
             names.index('aligned') < names.index('contact') < names.index('closed') < names.index('released')):
@@ -121,6 +124,10 @@ def preshape_fingers_plan(events, limited_pinch=False, prepare_thumb_high=False,
         staged[first_lift] = {**staged[first_lift], 'capture': True}
         if first_lift_diagnostic:
             staged = staged[:first_lift + 1]
+        elif second_lift_diagnostic:
+            second_lift = next(i for i in range(first_lift + 1, len(staged)) if 'position' in staged[i])
+            staged[second_lift] = {**staged[second_lift], 'capture': True}
+            staged = staged[:second_lift + 1]
     if closure_rgb_diagnostic:
         staged = staged[:next(i for i, event in enumerate(staged) if event['name'] == 'closed') + 1]
     return [{**event, 'hand_ramp_seconds': 2.} if limited_pinch and 'hand' in event else event for event in staged]
@@ -253,6 +260,8 @@ def main():
                         help='Record the same low hand ramp RGB while keeping the full pickup/return plan')
     parser.add_argument('--diagnose-first-lift', action='store_true',
                         help='Pad grasp only: capture the first lift segment, then stop without return or success verdict')
+    parser.add_argument('--diagnose-second-lift', action='store_true',
+                        help='Pad grasp only: capture the first two lift segments, then stop without return or success verdict')
     parser.add_argument('--side-camera', action='store_true',
                         help='Record synchronized side RGB at static stages for grasp visibility diagnosis')
     parser.add_argument('--inspect-pickup', action='store_true',
@@ -283,6 +292,8 @@ def main():
         parser.error('Closure RGB recording requires --limited-pinch')
     if args.diagnose_first_lift and (not args.pad_grasp or args.diagnose_closure_rgb):
         parser.error('--diagnose-first-lift requires --pad-grasp and cannot stop before lift')
+    if args.diagnose_second_lift and (not args.pad_grasp or args.diagnose_closure_rgb or args.diagnose_first_lift):
+        parser.error('--diagnose-second-lift requires --pad-grasp and no other diagnostic stop')
     tool_rotation = None
     if args.pad_grasp:
         if not (args.limited_pinch and args.prepare_thumb_high):
@@ -366,7 +377,8 @@ def main():
                                           prepare_thumb_high=args.prepare_thumb_high,
                                           compare_empty_closure=args.compare_empty_closure, pad_grasp=args.pad_grasp,
                                           closure_rgb_diagnostic=args.diagnose_closure_rgb,
-                                          first_lift_diagnostic=args.diagnose_first_lift)
+                                          first_lift_diagnostic=args.diagnose_first_lift,
+                                          second_lift_diagnostic=args.diagnose_second_lift)
         if args.pass_through_high:
             events = high_pass_through_plan(events, start, point[2])
         if args.keep_pinky_open:
@@ -398,6 +410,7 @@ def main():
                   'closure_rgb_diagnostic_requested': args.diagnose_closure_rgb,
                   'closure_rgb_trace_requested': closure_rgb_trace,
                   'first_lift_diagnostic_requested': args.diagnose_first_lift,
+                  'second_lift_diagnostic_requested': args.diagnose_second_lift,
                   'hand_ramp_seconds': 2. if args.limited_pinch else 0.,
                   'pass_through_high_requested': args.pass_through_high,
                   'pass_through_joint_count': sum(bool(e.get('pass_through')) for e in events),
@@ -537,13 +550,15 @@ def main():
                         report['inspection_stopped_early'] = True
                         save()
                         raise RuntimeError('RGB did not verify clean pickup; inspection trial stopped before low return')
-            if args.diagnose_closure_rgb or args.diagnose_first_lift:
+            if args.diagnose_closure_rgb or args.diagnose_first_lift or args.diagnose_second_lift:
                 report.update(closure_rgb_diagnostic_stopped=args.diagnose_closure_rgb,
-                              first_lift_diagnostic_stopped=args.diagnose_first_lift, motion_sequence_completed=False,
+                              first_lift_diagnostic_stopped=args.diagnose_first_lift,
+                              second_lift_diagnostic_stopped=args.diagnose_second_lift, motion_sequence_completed=False,
                               return_completed=False, closure_rgb_trace_files=[name + '-command.json'
                                   for name in ('thumb_ready', 'thumb_opposed', 'closed')])
                 save()
-                print('STOP: first-lift diagnostic completed; no return or grasp verdict' if args.diagnose_first_lift else
+                print('STOP: second-lift diagnostic completed; no return or grasp verdict' if args.diagnose_second_lift else
+                      'STOP: first-lift diagnostic completed; no return or grasp verdict' if args.diagnose_first_lift else
                       'STOP: closure RGB diagnostic ended before lift; inspect capture coverage in command traces', flush=True)
                 return
             return_joints(arm, start['joints'])
