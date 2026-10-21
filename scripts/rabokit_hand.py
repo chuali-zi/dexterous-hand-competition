@@ -207,7 +207,9 @@ def main():
     trace = {'pose': args.pose, 'native_targets_rad': values, 'ramp_seconds': args.ramp_seconds,
              'pad_grasp': args.pad_grasp,
              'ramp_start_rad': None, 'command_start_stamp_sec': None,
-             'command_complete': False, 'joint_samples': []}
+             'command_complete': False, 'joint_samples': [], 'issued_commands': [],
+             'issued_command_scope': 'Published native targets with last observed robot TF time; '
+                                     'not measured application times or internal servo references'}
     rgb_trace = None
     try:
         if args.rgb_trace_output:
@@ -289,9 +291,15 @@ def main():
                         if ramp_start else time.monotonic() - started)
             if progress < command_seconds and (not ramp_start or progress >= next_publish):
                 fraction = min(1., max(0., progress) / args.ramp_seconds) if ramp_start else 1.
+                issued = {}
                 for name, pub in publishers.items():
                     value = ramp_start[name] + fraction * (values[name] - ramp_start[name]) if ramp_start else values[name]
                     pub.publish(Float64(data=value))
+                    issued[name] = value
+                if args.trace_output:
+                    trace['issued_commands'].append({'wall_seconds': time.monotonic() - trace_started,
+                        'robot_tf_reference_stamp_sec': command_stamp + progress if ramp_start else None,
+                        'targets_rad': issued})
                 next_publish = max(next_publish + .05, progress)
             if ramp_start and progress >= command_seconds:
                 command_complete = True

@@ -1388,3 +1388,24 @@ python scripts/check_pad_pickup.py runs/brick-deeper-pinch-25/grasp.json --seed-
 [DexVLG 官方仓库](https://github.com/jiaweihe1996/DexVLG)当前仅有 README，训练/推理代码与模型权重仍列为待发布；不因论文有大规模数据集就把它计为可立即运行的候选。需要密集触觉、二值触点或 FSR 的研究，也不能把当前 effort 通道替代为那些传感器输入。
 
 后续优先按“视觉定位 + 本体/负载历史反馈”的方向做本地适配：先对照 SoftGrasp 与 DexGraspVLA 的输入、归一化和动作接口，再复用保留数据检查接触持续与失持信号，决定最小闭环改动。当前还没有已验证的成功持砖样本，不能仅拿现有失败记录训练并宣称得到可靠的抓持成功分类器。轻量反馈方法和预训练控制器适配均需实际验证；本轮没有复现论文、运行模型或验证新抓持成功。涉及本机显存的查询未取得结果，不据此承诺训练耗时或模型可运行性。需要原生物理结果时再安排针对性的短仿真，不在 Rabokit 上从零训练大规模策略。
+
+## 多模态观察回放与指令记录（2026-10-20，仅本地）
+
+继续核对作者实际实现：[DexGraspVLA 输入/动作配置](https://github.com/Psi-Robot/DexGraspVLA/blob/main/controller/config/task/grasp.yaml)为 13 维状态与动作、外部 RGB+mask 和腕部 RGB；[推理代码](https://github.com/Psi-Robot/DexGraspVLA/blob/main/inference.py)将前 7 维按原机械臂限位缩放，后 6 维交由未公开的手部 `execute_action` 处理，没有 effort 输入。因此更换状态维数、把固定侧视当腕视、或把角度直接填入后 6 维，都不能构成有效的预训练控制器适配。[公开训练配置](https://github.com/Psi-Robot/DexGraspVLA/blob/main/controller/config/train_dexgraspvla_controller_workspace.yaml)还使用两种 DINOv2 编码器及目标掩码网络。本轮未下载权重或执行作者的硬件初始化代码。
+
+新增本地脚本 [rabokit_multimodal.py](../scripts/rabokit_multimodal.py)，直接读取保留的 `*-command.json` 与对应 `*-rgb/`，为每个图像时刻提取 **5 个、间隔 0.08 秒**的手部观察，每个观察按固定的 11 关节顺序包含角度、速度、reported effort。只选择请求时刻之前的 JointState，最大允许年龄为 **0.04 秒**；缺失/非有限通道、历史不足和缺图均明确标出，不补零或借用未来反馈。RGB 在本地实际解码，并与相机元数据时标、尺寸、编码及内参核对。这个观察格式是本项目的回放输入，并非已适配到上述模型的输入。
+
+| 实际保留数据 | 帧对数 | 完整本体历史 | 本地 RGB 帧对 | 完整多模态观察 |
+|---|---:|---:|---:|---:|
+| 24：准备 / 对向 / 闭合 | 14 / 12 / 12 | 12 / 10 / 11 | 14 / 12 / 12 | 12 / 10 / 11 |
+| 25：准备 / 对向 / 闭合 | 12 / 12 / 12 | 10 / 11 / 11 | 0 / 0 / 0 | 0 / 0 / 0 |
+
+已实际回放上述 **74 对**元数据，24 的 **33 对**完整观察中，全部 5 个历史采样点均精确匹配请求的机器人时标，最大选择年龄为 0；另外 5 对缺少完整前序历史。25 的 32 对完整本体历史也为精确匹配，但过程图像仍仅留云端，没有把元数据当成已取得的像素。没有为补图启动仿真或追加下载。结果保存到被忽略的 `runs/multimodal-replay-01/`。
+
+旧日志没有逐次发布的目标向量；阶段目标不等于限速过程中的实际发布目标，更不等于 SDK/仿真器内部伺服参考，因此回放中 `command_error_available` 保持 false。手部脚本现在随已有 `--trace-output` 记录 `issued_commands`：逐次实际发布的原生角度、发布墙钟和最后观测到的机器人 TF 时间。TF 时间只是参考，未宣称为指令的物理应用时间；后续仍需核对延迟后再生成相应指令误差输入。本轮没有更改目标、闭合路径、发布频率或等待阈值。
+
+本地 **4 项回放测试及 24 项既有手部测试通过**。首次在沙箱内运行回放测试时遇到 Windows 临时目录权限错误，随后在正常权限下完成 4 项；不把首次失败写成通过。脚本语法、CLI 入口、文档链接和差异另行检查。仅有观察仍不构成带成功动作标签的训练集，本轮没有训练、执行模型或验证接触闭环；候选 26 和实际稳定抓持仍待必要平台试验。复现其中一段：
+
+```powershell
+python scripts/rabokit_multimodal.py runs/brick-balanced-pinch-24/closed-command.json --output runs/closed-multimodal-replay.json
+```

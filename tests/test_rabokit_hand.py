@@ -227,6 +227,15 @@ class HandTargetsTests(unittest.TestCase):
             effort = [row['effort']['lh_thumb_cmc_yaw'] for row in trace['joint_samples']]
             self.assertEqual(set(effort), {0., 1.})
             self.assertEqual(effort[-1], 0.)
+            commands = trace['issued_commands']
+            self.assertTrue(commands)
+            self.assertEqual(set(commands[0]['targets_rad']), set(HAND_JOINTS))
+            for name, value in trace['ramp_start_rad'].items():
+                self.assertAlmostEqual(commands[0]['targets_rad'][name], value)
+            self.assertEqual(commands[-1]['targets_rad'], trace['native_targets_rad'])
+            self.assertTrue(all(a['wall_seconds'] <= b['wall_seconds'] and
+                a['robot_tf_reference_stamp_sec'] <= b['robot_tf_reference_stamp_sec']
+                for a, b in zip(commands, commands[1:])))
             self.assertLess(elapsed, 12.1 if overshoot else 5.)
 
     def test_high_preshape_waits_for_late_fresh_arrival_without_republishing(self):
