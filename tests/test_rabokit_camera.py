@@ -65,7 +65,7 @@ class CameraTests(unittest.TestCase):
         self.assertEqual(report['frames'], [])
         self.assertEqual(report['message_counts']['base_cam'], {'image':33,'info':0})
 
-    def capture_events(self, events, names=('a', 'b'), hand_samples=None):
+    def capture_events(self, events, names=('a', 'b'), hand_samples=None, publisher_info=None):
         callbacks, cleanup = {}, []
         clock = [0.0]
 
@@ -80,6 +80,7 @@ class CameraTests(unittest.TestCase):
             return object()
 
         node = SimpleNamespace(create_subscription=subscribe,
+                               get_publishers_info_by_topic=lambda topic: (publisher_info or {}).get(topic, []),
                                destroy_node=lambda: cleanup.append('destroyed'))
         modules = {'rclpy': SimpleNamespace(init=lambda: None, create_node=lambda name: node,
                                             spin_once=spin, try_shutdown=lambda: cleanup.append('shutdown')),
@@ -106,6 +107,18 @@ class CameraTests(unittest.TestCase):
                       ('b/info', self.message(other_stamp, info_frame))]
             with self.subTest(stamp=other_stamp, frame=info_frame), self.assertRaises(TimeoutError):
                 self.capture_events(events)
+
+    def test_timeout_reports_real_publishers_and_qos_without_changing_capture(self):
+        endpoint = SimpleNamespace(node_name='camera_service', node_namespace='/test',
+                                   qos_profile=SimpleNamespace(reliability=SimpleNamespace(name='BEST_EFFORT')))
+        for offered in ([], [endpoint]):
+            with self.assertRaises(TimeoutError) as raised:
+                self.capture_events([], publisher_info={'a/image': offered})
+            publishers = json.loads(str(raised.exception).split('; publishers=')[1])
+            self.assertEqual(publishers['a']['image'], [{'node': 'camera_service', 'namespace': '/test',
+                              'reliability': 'BEST_EFFORT'}] if offered else [])
+            self.assertEqual(publishers['a']['info'], [])
+            self.assertEqual(publishers['b'], {'image': [], 'info': []})
 
     def test_stereo_matches_all_four_messages_and_ignores_late_older_pair(self):
         events = [(name + '/' + kind, self.message(stamp, name))

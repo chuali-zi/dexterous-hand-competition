@@ -40,6 +40,16 @@ def png_bytes(width, height, pixels):
             chunk(b'IDAT', zlib.compress(rows)) + chunk(b'IEND', b''))
 
 
+def camera_publishers(node, topics):
+    """Inspect actual publisher endpoints; subscription-created topics are not evidence of a camera."""
+    return {name: {kind: [{'node': endpoint.node_name, 'namespace': endpoint.node_namespace,
+                         'reliability': getattr(endpoint.qos_profile.reliability, 'name',
+                                                str(endpoint.qos_profile.reliability))}
+                        for endpoint in node.get_publishers_info_by_topic(topic)]
+                   for kind, topic in zip(('image', 'info'), pair)}
+            for name, pair in topics.items()}
+
+
 def capture_cameras(topics, seconds, *, hand_topic=None, hand_samples=None):
     if (hand_topic is None) != (hand_samples is None):
         raise ValueError('Hand feedback needs both a topic and a sample list')
@@ -94,7 +104,8 @@ def capture_cameras(topics, seconds, *, hand_topic=None, hand_samples=None):
         while time.monotonic() < deadline:
             rclpy.spin_once(node, timeout_sec=0.1)
         if matched is None:
-            raise TimeoutError(f'No matching RGB/CameraInfo pair in {seconds}s: {counts}')
+            raise TimeoutError(f'No matching RGB/CameraInfo pair in {seconds}s: {counts}; '
+                               f'publishers={json.dumps(camera_publishers(node, topics))}')
         return matched, counts
     finally:
         node.destroy_node()
