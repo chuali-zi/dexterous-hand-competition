@@ -8,10 +8,22 @@ from scipy.spatial.transform import Rotation
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
 from rabokit_hand import HAND_JOINTS, target_quaternion
-from replay_hand_dynamics import joint_values, wxyz
+from replay_hand_dynamics import closure_targets, joint_values, parse_delta, wxyz
 
 
 class MappingTests(unittest.TestCase):
+    def test_synthetic_correction_preserves_recorded_prefix_and_other_joints(self):
+        targets = {n: i * .01 for i, n in enumerate(HAND_JOINTS)}
+        name = 'lh_index_dip'
+        original = dict(targets)
+        for seconds, fraction in [(-1., 0.), (0., 0.), (1., .5), (2., 1.), (3., 1.)]:
+            result = closure_targets(targets, {name: .08}, seconds)
+            self.assertAlmostEqual(result[name], targets[name] + .08 * fraction)
+            self.assertEqual({n: v for n, v in result.items() if n != name},
+                             {n: v for n, v in targets.items() if n != name})
+        self.assertEqual(targets, original)
+        self.assertEqual(parse_delta(name + '=.08'), (name, .08))
+
     def test_hinge_angles_ignore_quaternion_sign_and_scale(self):
         expected={n:(i-2)*.13 for i,n in enumerate(HAND_JOINTS)}
         for scale in (1.,-2.):
