@@ -123,7 +123,7 @@ def build_model(trial, assets, mass, friction, kp, kv, force, empty=False, conta
     return model, model_xml, frames, native, sr, sdk_origin
 
 
-def replay(trial, assets, mass=.1, friction=.6, kp=20., kv=.02, force=1., empty=False, contact_time=.02):
+def replay(trial, assets, mass=.1, friction=.6, kp=20., kv=1., force=1., empty=False, contact_time=.02):
     import mujoco
     started = time.monotonic()
     model, xml, frames, native, sr, sdk_origin = build_model(trial, assets, mass, friction, kp, kv, force, empty, contact_time)
@@ -205,7 +205,7 @@ def main():
     parser.add_argument('--trial',type=Path,required=True)
     parser.add_argument('--assets',type=Path,required=True)
     parser.add_argument('--output',type=Path,required=True)
-    for name,default in (('mass',.1),('friction',.6),('kp',20.),('kv',.02),('force',1.),('contact-time',.02)):
+    for name,default in (('mass',.1),('friction',.6),('kp',20.),('kv',1.),('force',1.),('contact-time',.02)):
         parser.add_argument('--'+name,type=float,default=default)
     parser.add_argument('--empty',action='store_true')
     args=parser.parse_args()
