@@ -51,7 +51,7 @@ def joint_values(frames):
     return values
 
 
-def build_model(trial, assets, mass, friction, kp, kv, force, empty=False, contact_time=.02):
+def build_model(trial, assets, mass, friction, kp, kv, force, empty=False, contact_time=.02, timestep=.002):
     """Use measured parent offsets/hinge axes; keep public inertias as explicit guesses."""
     import mujoco
     stage = 'empty_closed' if empty else 'contact'
@@ -68,7 +68,7 @@ def build_model(trial, assets, mass, friction, kp, kv, force, empty=False, conta
         raise ValueError('Expected the public twelve-link, eleven-joint O6 model')
     xml = ET.Element('mujoco', model='retained_hand_proxy')
     ET.SubElement(xml, 'compiler', angle='radian', autolimits='false', balanceinertia='true')
-    ET.SubElement(xml, 'option', timestep='.001', gravity='0 0 -9.81', integrator='implicitfast')
+    ET.SubElement(xml, 'option', timestep=str(timestep), gravity='0 0 -9.81', integrator='implicitfast')
     default = ET.SubElement(xml, 'default')
     ET.SubElement(default, 'geom', friction=vector_text([friction, .005, .0001]), condim='3',
                   solref=vector_text([contact_time, 1.]))
@@ -123,10 +123,10 @@ def build_model(trial, assets, mass, friction, kp, kv, force, empty=False, conta
     return model, model_xml, frames, native, sr, sdk_origin
 
 
-def replay(trial, assets, mass=.1, friction=.6, kp=20., kv=1., force=1., empty=False, contact_time=.02):
+def replay(trial, assets, mass=.1, friction=.6, kp=20., kv=1., force=1., empty=False, contact_time=.02, hold_seconds=6., timestep=.002):
     import mujoco
     started = time.monotonic()
-    model, xml, frames, native, sr, sdk_origin = build_model(trial, assets, mass, friction, kp, kv, force, empty, contact_time)
+    model, xml, frames, native, sr, sdk_origin = build_model(trial, assets, mass, friction, kp, kv, force, empty, contact_time, timestep)
     data = mujoco.MjData(model)
     indices = {n:int(model.jnt_qposadr[model.joint(n).id]) for n in HAND_JOINTS}
     for n, value in joint_values(frames).items():
@@ -156,9 +156,10 @@ def replay(trial, assets, mass=.1, friction=.6, kp=20., kv=1., force=1., empty=F
     mujoco.mj_forward(model,data)
     base_position = data.mocap_pos[0].copy()
     end_command = traces[-1]['joint_samples'][-1]['stamp']
-    hold_end = end_command[0] + end_command[1]*1e-9 - origin + 6.
+    hold_end = end_command[0] + end_command[1]*1e-9 - origin + hold_seconds
     duration = hold_end + (0. if empty else 4.)
     target_id = model.body('target').id if not empty else None
+    target_adr = int(model.jnt_qposadr[model.joint('target_free').id]) if not empty else None
     initial_target = data.xpos[target_id].copy() if not empty else None
     rows, next_sample, before_lift = [], 0., None
     while data.time < duration:
@@ -179,8 +180,9 @@ def replay(trial, assets, mass=.1, friction=.6, kp=20., kv=1., force=1., empty=F
                     contacts.append(pair)
             rows.append({'seconds':float(data.time),'hand_position_rad':{n:float(data.qpos[i]) for n,i in indices.items()},
                 'actuator_force':{n:float(data.actuator_force[model.actuator(n).id]) for n in HAND_JOINTS},
-                'tool_rise_m':float(rise), 'local_target_position':data.xpos[target_id].tolist() if not empty else None,
-                'local_target_quaternion_wxyz':data.xquat[target_id].tolist() if not empty else None,
+                # Free-root qpos is the post-step body pose; cached xpos/xquat still refer to the prior step.
+                'tool_rise_m':float(rise), 'local_target_position':data.qpos[target_adr:target_adr+3].tolist() if not empty else None,
+                'local_target_quaternion_wxyz':data.qpos[target_adr+3:target_adr+7].tolist() if not empty else None,
                 'local_target_contacts':contacts})
             next_sample = data.time + .02
         if not empty and before_lift is None and data.time >= hold_end:
@@ -193,9 +195,12 @@ def replay(trial, assets, mass=.1, friction=.6, kp=20., kv=1., force=1., empty=F
                     before_lift.append({'geom_pair':pair,'position_sdk_m':contact.pos.tolist(),
                         'frame_first_axis':contact.frame[:3].tolist(),'force_in_contact_frame':local_force.tolist()})
     return {'scope':__doc__, 'mujoco_version':mujoco.__version__, 'trial':str(trial),
-            'parameters':{'mass_kg':mass,'friction':friction,'kp':kp,'kv':kv,'force_limit':force,'empty':empty,'contact_time':contact_time},
+            'parameters':{'mass_kg':mass,'friction':friction,'kp':kp,'kv':kv,'force_limit':force,'empty':empty,
+                          'contact_time':contact_time,'hold_seconds':hold_seconds,'timestep':timestep},
+            'reference_origin_stamp_sec':origin,'synthetic_lift_start_seconds':None if empty else hold_end,
             'platform_physics_calibrated':False,'physical_grasp_verified':False,'platform_motion_commanded':False,
             'command_timing_scope':'Robot TF references at publication, not measured servo application times; post-command hold/lift is synthetic.',
+            'sample_timing_scope':'Joint and free-target qpos at row seconds; cached contact/actuator fields at the beginning of the last step.',
             'kinematic_errors':errors,'initial_local_target_position':initial_target.tolist() if not empty else None,
             'local_contacts_before_synthetic_lift':before_lift,'rows':rows,'wall_seconds':time.monotonic()-started},xml
 
@@ -205,14 +210,14 @@ def main():
     parser.add_argument('--trial',type=Path,required=True)
     parser.add_argument('--assets',type=Path,required=True)
     parser.add_argument('--output',type=Path,required=True)
-    for name,default in (('mass',.1),('friction',.6),('kp',20.),('kv',1.),('force',1.),('contact-time',.02)):
+    for name,default in (('mass',.1),('friction',.6),('kp',20.),('kv',1.),('force',1.),('contact-time',.02),('hold-seconds',6.),('timestep',.002)):
         parser.add_argument('--'+name,type=float,default=default)
     parser.add_argument('--empty',action='store_true')
     args=parser.parse_args()
     if (args.output.suffix.lower() != '.json' or args.output.exists() or args.output.with_suffix('.xml').exists()
-            or any(not math.isfinite(v) or v<=0 for v in (args.mass,args.friction,args.kp,args.kv,args.force,args.contact_time))):
+            or any(not math.isfinite(v) or v<=0 for v in (args.mass,args.friction,args.kp,args.kv,args.force,args.contact_time,args.hold_seconds,args.timestep))):
         parser.error('Expected a new .json output path and finite positive model parameters')
-    result,xml=replay(args.trial,args.assets,args.mass,args.friction,args.kp,args.kv,args.force,args.empty,args.contact_time)
+    result,xml=replay(args.trial,args.assets,args.mass,args.friction,args.kp,args.kv,args.force,args.empty,args.contact_time,args.hold_seconds,args.timestep)
     args.output.parent.mkdir(parents=True,exist_ok=True)
     with args.output.open('x',encoding='utf-8') as stream:
         stream.write(json.dumps(result,indent=2,allow_nan=False)+'\n')
