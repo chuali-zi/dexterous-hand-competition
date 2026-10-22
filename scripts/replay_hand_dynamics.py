@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Local reduced-hand MuJoCo replay from retained robot/RGB records, never ROS/SDK.
 
-Public inertias, convex mesh collision, cube mass/friction and servo gains are
-hypotheses. Local object states are diagnostic outputs, not platform truth or
+Public inertias, convex mesh collision and cube mass/friction remain hypotheses.
+Joint ranges, passive damping and default servo gains follow the saved editor.
+Local object states are diagnostic outputs, not platform truth or
 verified training labels. No arm dynamics or policy training is included.
 Requires mujoco, numpy and scipy; public O6 URDF/STLs are supplied separately.
 """
@@ -19,6 +20,29 @@ from scipy.spatial.transform import Rotation
 
 from rabokit_calibration_analysis import LEFT_HAND_BASE, LEFT_ROOT, RIGHT_ROOT, world_transform
 from rabokit_hand import HAND_JOINTS, quaternion_product, target_quaternion
+
+# Read-only scene editor check, 2026-10-22; not the public URDF's mimic limits.
+SAVED_JOINT_RANGES = {
+    'lh_thumb_cmc_yaw': (-.1, 1.4),
+    'lh_thumb_cmc_pitch': (-.1, .68),
+    'lh_thumb_ip': (-.1, 1.18),
+    **{f'lh_{finger}_{joint}': (-.1, upper)
+       for finger in ('index', 'middle', 'ring', 'pinky')
+       for joint, upper in (('mcp_pitch', 1.7), ('dip', 1.53))},
+}
+
+
+def add_hand_hinge(body, name, axis, joint_damping=.1, joint_limits=True):
+    """Keep passive joint damping separate from the position actuator's kv."""
+    return ET.SubElement(body, 'joint', name=name, type='hinge', axis=vector_text(np.eye(3)[axis]),
+        damping=str(joint_damping), limited='true' if joint_limits else 'false',
+        range=vector_text(SAVED_JOINT_RANGES[name]))
+
+
+def joint_limit_excess(targets):
+    """Report requested angles outside mechanical stops; do not clamp servo targets."""
+    return {name: float(excess) for name, (low, high) in SAVED_JOINT_RANGES.items()
+            if (excess := max(low-targets[name], targets[name]-high, 0.)) > 0.}
 
 
 def read(path):
@@ -94,7 +118,8 @@ def add_hand_root(xml, world, position, quaternion, root_mode):
 
 
 def build_model(trial, assets, mass, friction, kp, kv, force, empty=False, contact_time=.02,
-                timestep=.002, root_mode='weld', cone='pyramidal', impratio=1.):
+                timestep=.002, root_mode='weld', cone='pyramidal', impratio=1.,
+                joint_damping=.1, joint_limits=True):
     """Use measured parent offsets/hinge axes; keep public inertias as explicit guesses."""
     import mujoco
     stage = 'empty_closed' if empty else 'contact'
@@ -132,7 +157,7 @@ def build_model(trial, assets, mass, friction, kp, kv, force, empty=False, conta
             pos=vector_text(frames[native[link]]['xyz']), quat=vector_text([zero[3], *zero[:3]]))
         bodies[link] = body
         # Native topics command eleven independent hinges, unlike the public mimic hints.
-        ET.SubElement(body, 'joint', name=name, type='hinge', axis=vector_text(np.eye(3)[axis]), limited='false')
+        add_hand_hinge(body, name, axis, joint_damping, joint_limits)
         ET.SubElement(actuators, 'position', name=name, joint=name, kp=str(kp), kv=str(kv),
                       forcelimited='true', forcerange=vector_text([-force, force]))
     for name, body in bodies.items():
@@ -168,11 +193,12 @@ def build_model(trial, assets, mass, friction, kp, kv, force, empty=False, conta
 
 def replay(trial, assets, mass=.1, friction=.6, kp=20., kv=1., force=1., empty=False, contact_time=.02,
            hold_seconds=6., timestep=.002, closure_delta=None, root_mode='weld', settle_z=0., settle_y=0.,
-           cone='pyramidal', impratio=1.):
+           cone='pyramidal', impratio=1., joint_damping=.1, joint_limits=True):
     import mujoco
     started = time.monotonic()
     model, xml, frames, native, sr, sdk_origin = build_model(trial, assets, mass, friction, kp, kv, force,
-        empty=empty, contact_time=contact_time, timestep=timestep, root_mode=root_mode, cone=cone, impratio=impratio)
+        empty=empty, contact_time=contact_time, timestep=timestep, root_mode=root_mode, cone=cone,
+        impratio=impratio, joint_damping=joint_damping, joint_limits=joint_limits)
     data = mujoco.MjData(model)
     indices = {n:int(model.jnt_qposadr[model.joint(n).id]) for n in HAND_JOINTS}
     for n, value in joint_values(frames).items():
@@ -213,11 +239,14 @@ def replay(trial, assets, mass=.1, friction=.6, kp=20., kv=1., force=1., empty=F
     initial_target = data.xpos[target_id].copy() if not empty else None
     rows, next_sample, before_lift = [], 0., None
     other_contacts = {}
+    command_limit_excess = {}
     while data.time < duration:
         index = bisect_right(times, origin + data.time) - 1
         targets = commands[index]['targets_rad'] if index >= 0 else initial
         if closure_delta:
             targets = closure_targets(targets, closure_delta, data.time-command_end)
+        for name, excess in joint_limit_excess(targets).items():
+            command_limit_excess[name] = max(command_limit_excess.get(name, 0.), excess)
         for name in HAND_JOINTS:
             data.ctrl[model.actuator(name).id] = targets[name]
         rise = 0. if empty else .02 * np.clip((data.time-hold_end)/2.,0.,1.)
@@ -267,7 +296,10 @@ def replay(trial, assets, mass=.1, friction=.6, kp=20., kv=1., force=1., empty=F
     return {'scope':__doc__, 'mujoco_version':mujoco.__version__, 'trial':str(trial),
             'parameters':{'mass_kg':mass,'friction':friction,'kp':kp,'kv':kv,'force_limit':force,'empty':empty,
                           'contact_time':contact_time,'hold_seconds':hold_seconds,'timestep':timestep,
-                          'root_mode':root_mode,'cone':cone,'impratio':impratio},
+                          'root_mode':root_mode,'cone':cone,'impratio':impratio,
+                          'joint_damping':joint_damping,'joint_limits':joint_limits},
+            'saved_joint_ranges_rad':SAVED_JOINT_RANGES,
+            'maximum_commanded_joint_limit_excess_rad':command_limit_excess,
             'root_drive_scope':'Dynamic free body with 0.004 s weld to mocap reference; not native arm dynamics.' if root_mode == 'weld'
                                else 'Legacy direct mocap: root motion has no contact velocity; lift retention is not meaningful.',
             'synthetic_closure_delta_rad':dict(closure_delta or {}),
@@ -302,6 +334,10 @@ def main():
     parser.add_argument('--cone',choices=('pyramidal','elliptic'),default='pyramidal',
                         help='Local solver condition; does not edit the Rabokit scene')
     parser.add_argument('--impratio',type=float,default=1.,help='Local friction impedance ratio')
+    parser.add_argument('--joint-damping',type=float,default=.1,
+                        help='Passive hinge damping, separate from actuator kv; saved scene value is 0.1')
+    parser.add_argument('--unlimited-joints',action='store_true',
+                        help='Legacy local diagnostic only: disable the saved scene joint stops')
     parser.add_argument('--closure-delta',type=parse_delta,action='append',default=[],metavar='JOINT=RAD',
                         help='Local-only correction ramp after the saved command, repeat for selected joints')
     args=parser.parse_args()
@@ -310,12 +346,15 @@ def main():
         parser.error('Expected a new .json output path and finite positive model parameters')
     if not all(math.isfinite(v) for v in (args.settle_z,args.settle_y)):
         parser.error('Synthetic root offset must be finite')
+    if not math.isfinite(args.joint_damping) or args.joint_damping < 0:
+        parser.error('Passive joint damping must be finite and nonnegative')
     if (args.closure_delta or args.settle_z or args.settle_y) and (args.empty or args.hold_seconds < 2.):
         parser.error('Synthetic correction requires a contact replay with at least two seconds hold')
     result,xml=replay(args.trial,args.assets,mass=args.mass,friction=args.friction,kp=args.kp,kv=args.kv,
         force=args.force,empty=args.empty,contact_time=args.contact_time,hold_seconds=args.hold_seconds,
         timestep=args.timestep,closure_delta=dict(args.closure_delta),root_mode=args.root_mode,
-        settle_z=args.settle_z,settle_y=args.settle_y,cone=args.cone,impratio=args.impratio)
+        settle_z=args.settle_z,settle_y=args.settle_y,cone=args.cone,impratio=args.impratio,
+        joint_damping=args.joint_damping,joint_limits=not args.unlimited_joints)
     args.output.parent.mkdir(parents=True,exist_ok=True)
     with args.output.open('x',encoding='utf-8') as stream:
         stream.write(json.dumps(result,indent=2,allow_nan=False)+'\n')

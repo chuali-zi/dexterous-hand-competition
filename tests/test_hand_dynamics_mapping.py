@@ -8,10 +8,18 @@ from scipy.spatial.transform import Rotation
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
 from rabokit_hand import HAND_JOINTS, target_quaternion
-from replay_hand_dynamics import closure_targets, cube_bottom_z, joint_values, parse_delta, wxyz
+from replay_hand_dynamics import closure_targets, cube_bottom_z, joint_limit_excess, joint_values, parse_delta, wxyz
 
 
 class MappingTests(unittest.TestCase):
+    def test_requested_angle_past_stop_is_reported_without_clamping(self):
+        values = dict.fromkeys(HAND_JOINTS, 0.)
+        values['lh_thumb_ip'] = 1.3
+        self.assertAlmostEqual(joint_limit_excess(values)['lh_thumb_ip'], .12)
+        self.assertEqual(len(joint_limit_excess(values)), 1)
+        self.assertEqual(values['lh_thumb_ip'], 1.3)
+        self.assertEqual(joint_limit_excess(dict.fromkeys(HAND_JOINTS, -.1)), {})
+
     def test_tilted_cube_can_raise_its_center_without_leaving_table(self):
         angle = np.pi / 6
         center_z = .025 * (np.cos(angle) + np.sin(angle))

@@ -12,11 +12,36 @@ except ImportError:
     mujoco = None
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from replay_hand_dynamics import add_hand_root
+from replay_hand_dynamics import add_hand_hinge, add_hand_root
 
 
 @unittest.skipIf(mujoco is None, 'Optional MuJoCo runtime not installed')
 class MovingRootTests(unittest.TestCase):
+    def test_saved_joint_stop_and_passive_damping_affect_the_engine(self):
+        final = {}
+        for limited in (True, False):
+            xml = ET.Element('mujoco')
+            ET.SubElement(xml, 'compiler', angle='radian')
+            ET.SubElement(xml, 'option', timestep='.002', gravity='0 0 0', integrator='implicitfast')
+            body = ET.SubElement(ET.SubElement(xml, 'worldbody'), 'body')
+            add_hand_hinge(body, 'lh_thumb_ip', 1, .1 if limited else 0., limited)
+            ET.SubElement(body, 'geom', type='sphere', pos='.05 0 0', size='.01', mass='.1')
+            ET.SubElement(ET.SubElement(xml, 'actuator'), 'position', joint='lh_thumb_ip', kp='20', kv='1',
+                          forcelimited='true', forcerange='-.01 .01')
+            model = mujoco.MjModel.from_xml_string(ET.tostring(xml, encoding='unicode'))
+            data = mujoco.MjData(model)
+            data.qpos[0], data.qvel[0] = .5, .2
+            mujoco.mj_forward(model, data)
+            self.assertAlmostEqual(float(data.qfrc_passive[0]), -.02 if limited else 0., places=12)
+            # Light loading isolates the stop; a high torque can penetrate a soft limit substantially.
+            data.qpos[0], data.qvel[0] = 1.1, 0.
+            data.ctrl[0] = 1.35
+            while data.time < 3.:
+                mujoco.mj_step(model, data)
+            final[limited] = float(data.qpos[0])
+        self.assertLess(final[True], 1.20)  # MuJoCo joint stops are soft constraints.
+        self.assertGreater(final[False], 1.33)
+
     def test_dynamic_root_supplies_velocity_and_transports_a_friction_grasp(self):
         results = {}
         for mode in ['mocap', 'weld']:
