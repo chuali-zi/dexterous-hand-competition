@@ -8,10 +8,17 @@ from scipy.spatial.transform import Rotation
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
 from rabokit_hand import HAND_JOINTS, target_quaternion
-from replay_hand_dynamics import closure_targets, joint_values, parse_delta, wxyz
+from replay_hand_dynamics import closure_targets, cube_bottom_z, joint_values, parse_delta, wxyz
 
 
 class MappingTests(unittest.TestCase):
+    def test_tilted_cube_can_raise_its_center_without_leaving_table(self):
+        angle = np.pi / 6
+        center_z = .025 * (np.cos(angle) + np.sin(angle))
+        q = Rotation.from_euler('x', angle).as_quat()
+        self.assertGreater(center_z - .025, .005)
+        self.assertAlmostEqual(cube_bottom_z([0, 0, center_z], q[[3, 0, 1, 2]]), 0., places=12)
+
     def test_synthetic_correction_preserves_recorded_prefix_and_other_joints(self):
         targets = {n: i * .01 for i, n in enumerate(HAND_JOINTS)}
         name = 'lh_index_dip'

@@ -71,6 +71,13 @@ def parse_delta(value):
     return name, amount
 
 
+def cube_bottom_z(position, quaternion_wxyz):
+    """Lowest corner of the model's oriented 50 mm cube, not its center height."""
+    q = np.asarray(quaternion_wxyz)
+    rotation = Rotation.from_quat(q[[1, 2, 3, 0]]).as_matrix()
+    return float(position[2] - .025 * np.abs(rotation[2]).sum())
+
+
 def add_hand_root(xml, world, position, quaternion, root_mode):
     """A dynamic free root welded to a moving reference supplies contact velocity."""
     attributes = {'pos': vector_text(position), 'quat': vector_text(quaternion)}
@@ -86,7 +93,8 @@ def add_hand_root(xml, world, position, quaternion, root_mode):
     return root
 
 
-def build_model(trial, assets, mass, friction, kp, kv, force, empty=False, contact_time=.02, timestep=.002, root_mode='weld'):
+def build_model(trial, assets, mass, friction, kp, kv, force, empty=False, contact_time=.02,
+                timestep=.002, root_mode='weld', cone='pyramidal', impratio=1.):
     """Use measured parent offsets/hinge axes; keep public inertias as explicit guesses."""
     import mujoco
     stage = 'empty_closed' if empty else 'contact'
@@ -103,7 +111,8 @@ def build_model(trial, assets, mass, friction, kp, kv, force, empty=False, conta
         raise ValueError('Expected the public twelve-link, eleven-joint O6 model')
     xml = ET.Element('mujoco', model='retained_hand_proxy')
     ET.SubElement(xml, 'compiler', angle='radian', autolimits='false', balanceinertia='true')
-    ET.SubElement(xml, 'option', timestep=str(timestep), gravity='0 0 -9.81', integrator='implicitfast')
+    ET.SubElement(xml, 'option', timestep=str(timestep), gravity='0 0 -9.81', integrator='implicitfast',
+                  cone=cone, impratio=str(impratio))
     default = ET.SubElement(xml, 'default')
     ET.SubElement(default, 'geom', friction=vector_text([friction, .005, .0001]), condim='3',
                   solref=vector_text([contact_time, 1.]))
@@ -157,10 +166,13 @@ def build_model(trial, assets, mass, friction, kp, kv, force, empty=False, conta
     return model, model_xml, frames, native, sr, sdk_origin
 
 
-def replay(trial, assets, mass=.1, friction=.6, kp=20., kv=1., force=1., empty=False, contact_time=.02, hold_seconds=6., timestep=.002, closure_delta=None, root_mode='weld'):
+def replay(trial, assets, mass=.1, friction=.6, kp=20., kv=1., force=1., empty=False, contact_time=.02,
+           hold_seconds=6., timestep=.002, closure_delta=None, root_mode='weld', settle_z=0., settle_y=0.,
+           cone='pyramidal', impratio=1.):
     import mujoco
     started = time.monotonic()
-    model, xml, frames, native, sr, sdk_origin = build_model(trial, assets, mass, friction, kp, kv, force, empty, contact_time, timestep, root_mode)
+    model, xml, frames, native, sr, sdk_origin = build_model(trial, assets, mass, friction, kp, kv, force,
+        empty=empty, contact_time=contact_time, timestep=timestep, root_mode=root_mode, cone=cone, impratio=impratio)
     data = mujoco.MjData(model)
     indices = {n:int(model.jnt_qposadr[model.joint(n).id]) for n in HAND_JOINTS}
     for n, value in joint_values(frames).items():
@@ -197,6 +209,7 @@ def replay(trial, assets, mass=.1, friction=.6, kp=20., kv=1., force=1., empty=F
     duration = hold_end + (0. if empty else 4.)
     target_id = model.body('target').id if not empty else None
     target_adr = int(model.jnt_qposadr[model.joint('target_free').id]) if not empty else None
+    table_z = float(model.geom_pos[model.geom('table').id,2]) if not empty else None
     initial_target = data.xpos[target_id].copy() if not empty else None
     rows, next_sample, before_lift = [], 0., None
     other_contacts = {}
@@ -208,7 +221,9 @@ def replay(trial, assets, mass=.1, friction=.6, kp=20., kv=1., force=1., empty=F
         for name in HAND_JOINTS:
             data.ctrl[model.actuator(name).id] = targets[name]
         rise = 0. if empty else .02 * np.clip((data.time-hold_end)/2.,0.,1.)
-        data.mocap_pos[0] = base_position + [0,0,rise]
+        settle = settle_z * np.clip((data.time-command_end)/2.,0.,1.)
+        settle_side = settle_y * np.clip((data.time-command_end)/2.,0.,1.)
+        data.mocap_pos[0] = base_position + [0,settle_side,settle+rise]
         mujoco.mj_step(model,data)
         if not np.isfinite(data.qpos).all():
             raise RuntimeError('Nonfinite reduced-model state')
@@ -230,7 +245,11 @@ def replay(trial, assets, mass=.1, friction=.6, kp=20., kv=1., force=1., empty=F
                 'actuator_force':{n:float(data.actuator_force[model.actuator(n).id]) for n in HAND_JOINTS},
                 # Free-root qpos is the post-step body pose; cached xpos/xquat still refer to the prior step.
                 'tool_rise_m':float(rise), 'local_target_position':data.qpos[target_adr:target_adr+3].tolist() if not empty else None,
+                'synthetic_root_settle_z_m':float(settle),
+                'synthetic_root_settle_y_m':float(settle_side),
                 'local_target_quaternion_wxyz':data.qpos[target_adr+3:target_adr+7].tolist() if not empty else None,
+                'local_target_bottom_clearance_m':cube_bottom_z(data.qpos[target_adr:target_adr+3],
+                    data.qpos[target_adr+3:target_adr+7])-table_z if not empty else None,
                 'local_root_linear_velocity_m_s':root_velocity[3:].tolist(),
                 'local_root_tracking_error_m':float(np.linalg.norm(root_position-data.mocap_pos[0])),
                 'local_root_tracking_rotation_rad':2*math.acos(min(1.,abs(float(root_quaternion @ data.mocap_quat[0])))),
@@ -247,12 +266,16 @@ def replay(trial, assets, mass=.1, friction=.6, kp=20., kv=1., force=1., empty=F
                         'frame_first_axis':contact.frame[:3].tolist(),'force_in_contact_frame':local_force.tolist()})
     return {'scope':__doc__, 'mujoco_version':mujoco.__version__, 'trial':str(trial),
             'parameters':{'mass_kg':mass,'friction':friction,'kp':kp,'kv':kv,'force_limit':force,'empty':empty,
-                          'contact_time':contact_time,'hold_seconds':hold_seconds,'timestep':timestep,'root_mode':root_mode},
+                          'contact_time':contact_time,'hold_seconds':hold_seconds,'timestep':timestep,
+                          'root_mode':root_mode,'cone':cone,'impratio':impratio},
             'root_drive_scope':'Dynamic free body with 0.004 s weld to mocap reference; not native arm dynamics.' if root_mode == 'weld'
                                else 'Legacy direct mocap: root motion has no contact velocity; lift retention is not meaningful.',
             'synthetic_closure_delta_rad':dict(closure_delta or {}),
             'synthetic_closure_start_seconds':command_end if closure_delta else None,
             'synthetic_closure_ramp_seconds':2. if closure_delta else None,
+            'synthetic_root_settle_z_m':settle_z,
+            'synthetic_root_settle_y_m':settle_y,
+            'synthetic_root_settle_start_seconds':command_end if settle_z or settle_y else None,
             'local_non_target_hand_contacts':[{'geom_pair':list(p),'minimum_signed_gap_m':d} for p,d in other_contacts.items()],
             'reference_origin_stamp_sec':origin,'synthetic_lift_start_seconds':None if empty else hold_end,
             'platform_physics_calibrated':False,'physical_grasp_verified':False,'platform_motion_commanded':False,
@@ -272,16 +295,27 @@ def main():
     parser.add_argument('--empty',action='store_true')
     parser.add_argument('--root-mode',choices=('weld','mocap'),default='weld',
                         help='Dynamic welded root by default; direct mocap is only a legacy diagnostic')
+    parser.add_argument('--settle-z',type=float,default=0.,
+                        help='Local-only root Z offset in metres, ramped after the saved command')
+    parser.add_argument('--settle-y',type=float,default=0.,
+                        help='Local-only root Y offset in metres, ramped after the saved command')
+    parser.add_argument('--cone',choices=('pyramidal','elliptic'),default='pyramidal',
+                        help='Local solver condition; does not edit the Rabokit scene')
+    parser.add_argument('--impratio',type=float,default=1.,help='Local friction impedance ratio')
     parser.add_argument('--closure-delta',type=parse_delta,action='append',default=[],metavar='JOINT=RAD',
                         help='Local-only correction ramp after the saved command, repeat for selected joints')
     args=parser.parse_args()
     if (args.output.suffix.lower() != '.json' or args.output.exists() or args.output.with_suffix('.xml').exists()
-            or any(not math.isfinite(v) or v<=0 for v in (args.mass,args.friction,args.kp,args.kv,args.force,args.contact_time,args.hold_seconds,args.timestep))):
+            or any(not math.isfinite(v) or v<=0 for v in (args.mass,args.friction,args.kp,args.kv,args.force,args.contact_time,args.hold_seconds,args.timestep,args.impratio))):
         parser.error('Expected a new .json output path and finite positive model parameters')
-    if args.closure_delta and (args.empty or args.hold_seconds < 2.):
-        parser.error('Synthetic closure correction requires a contact replay with at least two seconds hold')
-    result,xml=replay(args.trial,args.assets,args.mass,args.friction,args.kp,args.kv,args.force,args.empty,
-                      args.contact_time,args.hold_seconds,args.timestep,dict(args.closure_delta),args.root_mode)
+    if not all(math.isfinite(v) for v in (args.settle_z,args.settle_y)):
+        parser.error('Synthetic root offset must be finite')
+    if (args.closure_delta or args.settle_z or args.settle_y) and (args.empty or args.hold_seconds < 2.):
+        parser.error('Synthetic correction requires a contact replay with at least two seconds hold')
+    result,xml=replay(args.trial,args.assets,mass=args.mass,friction=args.friction,kp=args.kp,kv=args.kv,
+        force=args.force,empty=args.empty,contact_time=args.contact_time,hold_seconds=args.hold_seconds,
+        timestep=args.timestep,closure_delta=dict(args.closure_delta),root_mode=args.root_mode,
+        settle_z=args.settle_z,settle_y=args.settle_y,cone=args.cone,impratio=args.impratio)
     args.output.parent.mkdir(parents=True,exist_ok=True)
     with args.output.open('x',encoding='utf-8') as stream:
         stream.write(json.dumps(result,indent=2,allow_nan=False)+'\n')

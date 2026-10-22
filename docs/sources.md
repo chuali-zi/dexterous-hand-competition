@@ -18,7 +18,7 @@
 | O4 | [教委方案](https://robot.bistu.edu.cn/docs/2026-09/f402c4be17fa4ca2ba45f1445abacd80.pdf) | 2026-09 路径；本次 web 不可访问，页码未获 |
 | O5 | [2026正式规则PDF](https://robot.bistu.edu.cn/docs/2026-09/7746a8e90714439cad8eea91355e0e06.pdf) | 灵巧操作印刷 pp.100–109；PDF物理 pp.102–111；本次 web 不可访问，HTTPS 代理 403。本环境没有全文散列；后续父核补充关键条款单页及短引文，见精确证据表 |
 | O6 | [LBot双臂机器人手册](https://www.rabokit.com/manual/lbot_dual_arm) / [公开只读数据接口](http://www.rabokit.com/v1/api/manual/docs/lbot_dual_arm) | 父任务读 2026-10-10 文档；本次网页不可访问，HTTP接口403；没有绕过限制 |
-| O7 | [腾讯问题表](https://docs.qq.com/sheet/DUmdlU3JJSkF6eWJu) | 本次 web 不可访问；父任务401。**未读到任何问答内容** |
+| O7 | [腾讯问题表](https://docs.qq.com/sheet/DUmdlU3JJSkF6eWJu?tab=BB08J2) | 初期 web 不可访问、父任务401；2026-10-22 通过正常浏览器只读访问，读取第 8–32 行中的部分问题与答复，非全表审核。D10 确认 50 mm 积木、D23 初始摆放不变、D20 相机自行添加、D31 各类传感器有数量限制；D11 与 D16 的 grasp_force 说明相互矛盾，按实际 SDK 和对应手册判断。D30 真值话题问题未答，未找到允许改物理配置的明确答复；详见[第 50 轮记录](rabokit-vision.md#接触部位与摩擦求解诊断2026-10-22第-50-轮仅本地)。本次选定单元格内容属于直接读取 A，不追溯改变其他官方来源的 B 等级 |
 | O8 | [后续通知索引](https://robot.bistu.edu.cn/tzgg/index.html) | 作为后续复核入口；本次未读取索引内容，不声称无新通知 |
 | O10 | [10月13日决赛改期公告](https://robot.bistu.edu.cn/tzgg/b13ac6deec9c497d99bb0c05ddee9ba8.html) | 父任务核实页面显示2026-10-13 15:23，决赛改为11月14日、报名截止日期不变；本环境web不可取得，普通HTTPS隧道403；全文与页面哈希未取得，证据等级B |
 | O11 | [首次答疑官方直播入口](https://meeting.tencent.com/l/GkiFvA6gq8KR) | 父任务转交；10月13日20:00、腾讯会议474-645-560仍依据O1；本轮仅记录入口，未进入/观看直播 |
