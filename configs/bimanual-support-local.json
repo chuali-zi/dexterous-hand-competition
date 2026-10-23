@@ -1,0 +1,15 @@
+{
+  "scope": "Local proxy candidate only; SDK hand-root metres and wxyz quaternion. Right tool mount assumes retained neutral joints were zero. Not a native controller profile.",
+  "yaw_degrees": 30,
+  "right_root_goal": [
+    0.11474345820941506,
+    -0.014969999534712813,
+    -0.5038647290479675
+  ],
+  "right_root_quaternion": [
+    -0.15876771607627402,
+    0.7628380360125976,
+    0.2044018357053192,
+    0.5925291829983247
+  ]
+}
