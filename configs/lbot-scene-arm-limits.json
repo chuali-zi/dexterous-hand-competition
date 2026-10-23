@@ -1,0 +1,8 @@
+{
+  "scope": "Read-only saved Rabokit scene arm joint ranges from visible aria-valuenow fields on 2026-10-23. Native joint coordinates, radians; no platform settings changed. These do not prove SDK acceptance or whole-arm clearance.",
+  "scene_id": "d69c19eb-250b-46f3-b095-5304a5031c90",
+  "native_ranges": {
+    "left": [[-2.28, 3.85], [-3.3, 0.17], [-2.79, 2.79], [-2.15, 2.15], [-2.79, 2.79], [-1.69, 1.69], [-1.69, 1.69]],
+    "right": [[-2.28, 3.85], [-3.3, 0.17], [-2.79, 2.79], [-2.15, 2.15], [-2.79, 2.79], [-1.69, 1.69], [-1.69, 1.69]]
+  }
+}

@@ -120,7 +120,7 @@ python /tmp/competition-probe-20261017/scripts/rabokit_probe.py
 后续用户已同意按有相机的方案继续，并明确告知相机使用已获许可；已添加相机、收到实际 RGB/内参，并完成 10 块砖的候选检测。该审核点已处理，后续按 [RGB 接入实测](rabokit-vision.md) 的最新配置与实际传输结果继续。
 
 
-## 双臂安装转换只读采样（2026-10-23，第58轮准备）
+## 双臂安装转换只读采样（2026-10-23，第58轮）
 
 `rabokit_robot_frames.py --arm-feedback` 在原有机器人/相机 TF 白名单外，只订阅左右 `JointState`，不初始化SDK、不创建运动发布器。输出的 `joint_aligned_sample` 必须使用完全相同的非零 ROS header stamp 合并动态TF、双臂关节及零时标静态TF；不插值、不把两臂各自最新但不同时刻的记录当成一个姿态。没有完整共同时标时保存诊断并退出1。默认无选项的输出和已有 `--hand-trace` 保持原用途。
 
@@ -133,3 +133,14 @@ python competition/scripts/rabokit_robot_frames.py --arm-feedback --seconds 3 --
 该采样用于消除本地右工具到手根转换的“右臂实际为零关节角”假设；只需静止姿态，不以此验证抓持、全路线可达或整臂碰撞。初始就绪不足时仅保留失败，不自动重启仿真。实际执行结果追加至RGB实测记录。
 
 本地新增同时间戳选择测试2项，加原标定几何5项，共7项通过，无跳过；脚本语法与参数入口通过。Ruff全文件检查发现既有回调中赋值lambda的E731（原代码即有），按该既有例外忽略E731后其余检查通过，未将首次完整Ruff报告为通过。
+
+
+第58轮原生采样已在 `f9415e1` 实际退出0并获得同时间戳双臂快照；本地分析及预算限制见[最新实测记录](rabokit-vision.md#双臂同时间戳标定与真实场景关节范围2026-10-23第58轮)。最终本地入口还会打印 `ARM_MOUNT_INPUT` 单行JSON，含离线安装分析所需的4个机器人世界变换和14个原生臂角，省去采样后单独打包大文件；完整原报告仍写入指定文件。紧凑输出是本地数据分支测试通过的新增收尾，不为此重复启动仿真。
+
+离线计算示例（不连接ROS或创建SDK机器人）：
+
+```powershell
+python scripts/analyze_arm_mount.py --input runs/robot-arm-alignment-58/mount-input.json --output runs/robot-arm-alignment-58/new-mounting.json --sdk-root runs/sdk-runtime-3 --scene-limits configs/lbot-scene-arm-limits.json
+```
+
+该入口也接受包含 `joint_aligned_sample` 的完整采集报告；缺少关节反馈时不回退到零位。场景保存范围与SDK预设分别记录，实际控制器是否接受、是否发生整臂碰撞，仍需对应的原生执行验证。

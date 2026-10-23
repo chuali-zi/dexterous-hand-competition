@@ -42,6 +42,18 @@ def aligned_arm_sample(frame_batches, joint_batches, static_frames):
     return None
 
 
+def mount_input_from_sample(sample):
+    """Compact calibration input for stdout, so data can leave before shutdown."""
+    from rabokit_calibration_analysis import LEFT_ROOT, RIGHT_ROOT, LEFT_HAND_BASE, world_transform
+    if sample is None:
+        raise ValueError('No aligned robot feedback sample')
+    names = (LEFT_ROOT, RIGHT_ROOT, LEFT_HAND_BASE, 'rcd72e2_link_88a3e0c332')
+    return {'stamp': sample['stamp'],
+            'world_transforms': {name: world_transform(sample['frames'], name) for name in names},
+            'arms': {side: {f'{side}_J{i}': row['position'][f'{side}_J{i}'] for i in range(1, 8)}
+                     for side, row in sample['arms'].items()}}
+
+
 def capture(seconds, trace_hand=False, trace_arms=False):
     import rclpy
     from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
@@ -195,6 +207,8 @@ def main():
     args.output.write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
     if args.arm_feedback and report['joint_aligned_sample'] is None:
         parser.exit(1, f'No complete common TF/arm feedback stamp; diagnostic saved to {args.output}\n')
+    if args.arm_feedback:
+        print('ARM_MOUNT_INPUT ' + json.dumps(mount_input_from_sample(report['joint_aligned_sample'])), flush=True)
     print(f'PASS: {len(report["frames"])} robot/camera frames saved to {args.output}')
     for name in ('r6ef2dc_link_57d50b5359', 'r412d23_link_c7c36cf32f',
                  'rbd03eb_link_13df66db66', 'base_cam', 'base_cam_optical'):
