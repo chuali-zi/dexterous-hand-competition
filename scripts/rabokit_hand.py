@@ -81,6 +81,10 @@ def bimanual_targets():
 
 
 def targets(pose, thumb_yaw=None, pad_grasp=False):
+    if pose == 'neutral':
+        if pad_grasp or thumb_yaw is not None:
+            raise ValueError('Neutral uses the original zero targets')
+        return {name:0. for name in HAND_JOINTS}
     if pose in ('bimanual_preshape', 'bimanual_grasp'):
         if pad_grasp or thumb_yaw is not None:
             raise ValueError('The checked bimanual shapes use their fixed thumb/index targets')
@@ -190,7 +194,7 @@ def main():
                                          'pinch_contact_ready_without_pinky',
                                          'pinch_high_thumb_opposed_without_pinky', 'pinch_thumb_opposed_without_pinky',
                                          'pinch_thumb_ready_without_pinky', 'pinch_without_pinky',
-                                         'bimanual_preshape', 'bimanual_grasp'), required=True)
+                                         'bimanual_preshape', 'bimanual_grasp', 'neutral'), required=True)
     parser.add_argument('--thumb-yaw', type=float, help='Thumb CMC yaw closure endpoint in native radians')
     parser.add_argument('--pad-grasp', action='store_true', help='Use the fitted opposing-pad hand targets')
     parser.add_argument('--preserve-prepared-targets', action='store_true',
@@ -220,7 +224,7 @@ def main():
         parser.error('--wait-open requires --pose open; a blocked grasp need not reach its closure targets')
     if args.wait_arrival and args.pose not in ('preshape_without_pinky', 'pinch_preshape_without_pinky',
                                               'pinch_high_thumb_ready_without_pinky', 'pinch_finger_ready_without_pinky',
-                                              'pinch_high_thumb_opposed_without_pinky', 'bimanual_preshape'):
+                                              'pinch_high_thumb_opposed_without_pinky', 'bimanual_preshape', 'neutral'):
         parser.error('--wait-arrival requires an empty-hand preshape')
     wait_arrival = args.wait_open or args.wait_arrival
     try:

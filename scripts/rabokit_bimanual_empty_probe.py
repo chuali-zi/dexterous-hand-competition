@@ -122,8 +122,18 @@ def main():
         / "configs/bimanual-empty-approach.json",
     )
     parser.add_argument("--output", type=Path)
+    parser.add_argument(
+        "--contact-plan",
+        type=Path,
+        default=Path(__file__).resolve().parents[1] / "configs/bimanual-contact.json",
+    )
     action = parser.add_mutually_exclusive_group()
     action.add_argument("--motion", action="store_true")
+    action.add_argument(
+        "--contact",
+        action="store_true",
+        help="Execute the compiled low contact diagnostic and recover; no payload lift",
+    )
     action.add_argument(
         "--export",
         action="store_true",
@@ -136,11 +146,23 @@ def main():
         export_report(args.output)
         return
     plans = load_plan(args.plan)
-    if not args.motion:
+    contact_config = json.loads(args.contact_plan.read_text())
+    for stage in contact_config["stages"].values():
+        check_plan(
+            dict(
+                neutral=stage["start_joints"],
+                points=[p["joints"] for p in stage["points"]],
+                joint_limits_sdk=contact_config["joint_limits_sdk"][stage["side"]],
+            )
+        )
+    if not (args.motion or args.contact):
         print(
             json.dumps(
                 dict(
                     motion_commanded=False,
+                    contact_stages={
+                        n: len(s["points"]) for n, s in contact_config["stages"].items()
+                    },
                     sides={
                         s: dict(
                             points=len(p["points"]),
@@ -172,6 +194,8 @@ def main():
     )
     started = time.monotonic()
     start = None
+    entry_return_allowed = True
+    report["mode"] = "low_contact" if args.contact else "empty_preparation"
 
     def executor(arm, points, completed, budget=120):
         side = "left" if arm is robot.left_arm else "right"
@@ -198,6 +222,14 @@ def main():
             raise RuntimeError(
                 "Native initial feedback disagrees or either hand is not open"
             )
+        if args.contact:
+            from rabokit_bimanual_contact import check_source, run_contact
+
+            report["source_check"] = check_source(args.output / "start", contact_config)
+            if not report["source_check"]["accepted"]:
+                raise RuntimeError(
+                    "Fresh RGB target differs from the locally checked contact scene"
+                )
         for side, label in [("right", "right_ready"), ("left", "both_ready")]:
             arm = getattr(robot, side + "_arm")
             if not arm.enable():
@@ -211,7 +243,25 @@ def main():
                 raise RuntimeError(
                     f"{label}: native arm target or open fingers unverified"
                 )
-        report["target_reached"] = True
+        report["preparation_reached"] = True
+        if args.contact:
+            entry_return_allowed = False
+            report["contact"] = {}
+            try:
+                run_contact(
+                    robot,
+                    args.output,
+                    contact_config,
+                    executor,
+                    dual_snapshot,
+                    k.to_sim_joints,
+                    report["contact"],
+                )
+            finally:
+                entry_return_allowed = report["contact"].get("recovered", False)
+            report["target_reached"] = report["contact"]["sequence_completed"]
+        else:
+            report["target_reached"] = True
     except Exception as exc:
         report["errors"].append(f"{type(exc).__name__}: {exc}")
         if "active_motion" in report:
@@ -231,6 +281,10 @@ def main():
                 report["failed_motion"]["diagnostic_error"] = str(diagnostic_error)
     finally:
         try:
+            if not entry_return_allowed:
+                raise RuntimeError(
+                    "Contact recovery unverified; holding both arms instead of returning through entry"
+                )
             return_completed(robot, history, executor)
             if any(history.values()):
                 report["restored"] = dual_snapshot(
@@ -245,6 +299,12 @@ def main():
                     saved_scene(args.output / "start"),
                     saved_scene(args.output / "restored"),
                 )
+                if args.contact:
+                    report["neighbor_layout"] = neighboring_layout(
+                        saved_scene(args.output / "start"),
+                        saved_scene(args.output / "restored"),
+                        exclude_green=True,
+                    )
         except Exception as exc:
             report["errors"].append(f"Return: {type(exc).__name__}: {exc}")
         finally:
@@ -269,7 +329,7 @@ def main():
         report["errors"]
         or not report["target_reached"]
         or not report["returned_verified"]
-        or not report.get("layout", {}).get("consistent")
+        or (not args.contact and not report.get("layout", {}).get("consistent"))
     ):
         raise SystemExit(1)
 

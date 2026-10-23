@@ -29,9 +29,12 @@ def replay(
     engage=0.012,
     release=False,
     support_feedback=False,
+    contact_only=False,
 ):
     import mujoco
 
+    if contact_only:
+        engage = 0.0
     m, xml, rvalues, mapping = build_bimanual_model(trial, left_assets, right_assets)
     d0 = mujoco.MjData(m)
     la = int(m.jnt_qposadr[m.joint("hand_root_free").id])
@@ -82,7 +85,7 @@ def replay(
     other = {}
     next_sample = 0
     started = time.monotonic()
-    duration = 29 if release else 19
+    duration = 21 if contact_only else 29 if release else 19
     decision = None
     engagement_stop = None
 
@@ -108,7 +111,9 @@ def replay(
         if support_feedback and decision is None and t >= 9.5:
             decision = dict(seconds=float(t), **evidence_at(t))
         action_time = (
-            min(t, 9.5) if decision is not None and not decision["ready"] else t
+            min(t, 9.5)
+            if not contact_only and decision is not None and not decision["ready"]
+            else t
         )
         down = 0.08 * (1 - float(np.clip((action_time - 0.5) / 3, 0, 1)))
         close = float(np.clip((action_time - 3.5) / 2, 0, 1))
@@ -134,6 +139,21 @@ def replay(
             0.015 * float(np.clip((action_time - 22) / 1, 0, 1)) if release else 0.0
         )
         clear = 0.06 * float(np.clip((action_time - 24) / 1, 0, 1)) if release else 0.0
+        if contact_only:
+            # Exercise the low contact sequence, then withdraw and undo the
+            # tilt before opening. No engagement or payload lift is commanded.
+            down = 0.08 * (1 - float(np.clip((t - 0.5) / 3, 0, 1))) + 0.08 * float(
+                np.clip((t - 15) / 3, 0, 1)
+            )
+            angle = (
+                0.6 * float(np.clip(t - 5.5, 0, 1)) * (1 - float(np.clip(t - 12, 0, 1)))
+            )
+            lr = Rotation.from_euler("y", angle).as_matrix()
+            opening = float(np.clip((t - 13) / 2, 0, 1))
+            insert = float(np.clip((t - 6.5) / 2, 0, 1)) - float(
+                np.clip((t - 10) / 2, 0, 1)
+            )
+            contact = lift = side = lowering = settle = clear = withdraw = 0.0
         d.mocap_pos[lm] = (
             lr @ (lbp - pivot) + pivot + [0, side, down + lift - lowering + clear]
         )
@@ -146,6 +166,8 @@ def replay(
         d.mocap_quat[rm] = rquat
         for n in HAND_JOINTS:
             d.ctrl[ai[n]] = pre[n] + close * (1 - opening) * (goal[n] - pre[n])
+            if contact_only:
+                d.ctrl[ai[n]] *= 1 - float(np.clip((t - 18) / 2, 0, 1))
         mujoco.mj_step(m, d)
         for c in d.contact:
             pair = tuple(m.geom(int(g)).name for g in c.geom)
@@ -197,6 +219,7 @@ def replay(
         gap_m=gap,
         engagement_m=engage,
         support_feedback=support_feedback,
+        contact_only=contact_only,
         support_decision=decision,
         engagement_stop=engagement_stop,
         right_root_goal_sdk_m=rp.tolist(),
@@ -279,6 +302,11 @@ def main():
         help="Lower, open and withdraw both hands after the carry",
     )
     parser.add_argument(
+        "--contact-only",
+        action="store_true",
+        help="Insert, hold, withdraw, untilt and reopen without a payload lift",
+    )
+    parser.add_argument(
         "--gap", type=float, default=0.002, help="Initial pad gap, metres"
     )
     parser.add_argument(
@@ -288,6 +316,8 @@ def main():
         help="Right support vertical engagement, metres",
     )
     args = parser.parse_args()
+    if args.release and args.contact_only:
+        parser.error("--release and --contact-only are separate local experiments")
     if args.output.exists() or args.output.with_suffix(".xml").exists():
         parser.error("Use a new output path")
     result, xml = replay(
@@ -299,6 +329,7 @@ def main():
         args.engage,
         args.release,
         args.support_feedback,
+        args.contact_only,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("x", encoding="utf-8") as stream:

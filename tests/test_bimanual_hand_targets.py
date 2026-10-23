@@ -33,7 +33,8 @@ class BimanualHandTargetsTests(unittest.TestCase):
         )
 
     def test_model_checked_shapes_do_not_silently_mix_with_other_thumb_profiles(self):
-        for pose in ("bimanual_preshape", "bimanual_grasp"):
+        self.assertEqual(targets("neutral"), dict.fromkeys(HAND_JOINTS, 0.0))
+        for pose in ("bimanual_preshape", "bimanual_grasp", "neutral"):
             with self.assertRaises(ValueError):
                 targets(pose, thumb_yaw=1.15)
             with self.assertRaises(ValueError):

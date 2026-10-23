@@ -180,3 +180,17 @@ python competition/scripts/rabokit_bimanual_empty_probe.py --export --output /tm
 输出 `BIMANUAL_EMPTY_EXPORT` 后的gzip/base64保存原报告和shell退出码；没有退出码文件时为null，不补造0。下次必要唤醒时先恢复本轮未取回的详细报告，不为补写记录单独启动环境。确认已复制到本地后再停止、休眠。
 
 手指命令入口新增 `bimanual_preshape` 与 `bimanual_grasp`，与40°本地回放共享目标。前者可在高处空手用原TF到位检查；后者是接触手形，不要求被砖阻挡的关节到达闭合目标。闭合时自动保持未改变的预形目标，不把受阻角度重新当成这些关节的起始指令。仍需既有SDK手部力限位初始化、RGB与负载记录；这些新手形没有在62轮原生执行。
+
+## 双臂低位接触诊断（第63轮）
+
+在62轮已完成的空手准备位之后，用 `--contact` 显式选择左手预形、下降、拇指/食指闭合、倾砖和右掌插入。本轮不抬起载荷；先采原生接触反馈，再沿已完成点撤掌、撤倾斜、张手、抬空手、恢复零位手形，最后走原进场路线返回。公开SDK未提供双臂同步运动方法，不直接照搬本地自由手根的同步搬运。
+
+```bash
+python competition/scripts/rabokit_bimanual_empty_probe.py --contact --output /tmp/bimanual-contact-63
+# 命令结束并保存shell退出码后，在停止仿真前执行并取回：
+python competition/scripts/rabokit_bimanual_empty_probe.py --export --output /tmp/bimanual-contact-63
+```
+
+默认无动作，`--motion` 仍是空手路线。开始前用新采双目绿砖表面点与保留RGB参考比较，偏差超过5mm或不可见则不进场。新增下降8点、倾斜21点、插入11点，使用本机SDK数值运动学预编译，最大相邻角差分别约0.075/0.056/0.028rad，保留原工具/关节跟踪约束。到倾斜及插入保持位时并发采三机RGB与机器人关节/effort，使用RGB时刻之前0.4秒的右无名指MCP/DIP历史；缺样本、非有限effort或末样本距RGB超过40ms时不输出有效支撑提示。本地阈值仍未原生标定，不以该提示宣称抓稳。
+
+起止布局与邻砖位移均记录，接触诊断不要求被操作的绿砖像素完全不动；恢复手形或臂姿未验证时不继续穿越进场路线。正常预计控制进程约6分钟，依据62轮270秒进场/返回，加新增80个往返目标、手形渐变和两次8秒采集；实例启动、同步和取数额外计时。结束先取数据，再停仿真、休眠运行环境；不在唤醒期间做本地分析。
