@@ -20,9 +20,14 @@ from rabokit_hand import HAND_JOINTS, bimanual_targets
 from bimanual_support_signal import support_evidence
 
 
-def contact_stage_time(seconds, tilt_seconds):
+def contact_stage_time(seconds, tilt_seconds, tilt_hold_seconds=0.0):
     """Stretch both tilting intervals while keeping the other low actions intact."""
     extra = tilt_seconds - 1
+    tilt_end = 5.5 + tilt_seconds
+    if seconds > tilt_end:
+        if seconds < tilt_end + tilt_hold_seconds:
+            return 6.5
+        seconds -= tilt_hold_seconds
     if seconds <= 5.5:
         return seconds
     if seconds < 5.5 + tilt_seconds:
@@ -46,6 +51,7 @@ def replay(
     contact_only=False,
     tilt_seconds=1.0,
     tilt_tool_chord=False,
+    tilt_hold_seconds=0.0,
 ):
     import mujoco
 
@@ -112,7 +118,10 @@ def replay(
     next_sample = 0
     started = time.monotonic()
     extra = tilt_seconds - 1 if contact_only else 0
-    duration = 21 + 2 * extra if contact_only else 29 if release else 19
+    duration = (
+        21 + 2 * extra + tilt_hold_seconds if contact_only else 29 if release else 19
+    )
+    observation_delay = extra + tilt_hold_seconds if contact_only else 0
     decision = None
     engagement_stop = None
 
@@ -130,16 +139,17 @@ def replay(
         if (
             support_feedback
             and engagement_stop is None
-            and 8.5 + extra <= t < 9.5 + extra
+            and 8.5 + observation_delay <= t < 9.5 + observation_delay
         ):
             signal = evidence_at(t)
             if signal["ready"]:
                 engagement_stop = dict(
                     seconds=float(t),
-                    engagement_m=engage * float(np.clip(t - 8.5 - extra, 0, 1)),
+                    engagement_m=engage
+                    * float(np.clip(t - 8.5 - observation_delay, 0, 1)),
                     **signal,
                 )
-        if support_feedback and decision is None and t >= 9.5 + extra:
+        if support_feedback and decision is None and t >= 9.5 + observation_delay:
             decision = dict(seconds=float(t), **evidence_at(t))
         action_time = (
             min(t, 9.5)
@@ -173,7 +183,7 @@ def replay(
         if contact_only:
             # Exercise the low contact sequence, then withdraw and undo the
             # tilt before opening. No engagement or payload lift is commanded.
-            action_time = contact_stage_time(t, tilt_seconds)
+            action_time = contact_stage_time(t, tilt_seconds, tilt_hold_seconds)
             down = 0.08 * (
                 1 - float(np.clip((action_time - 0.5) / 3, 0, 1))
             ) + 0.08 * float(np.clip((action_time - 15) / 3, 0, 1))
@@ -265,6 +275,7 @@ def replay(
         contact_only=contact_only,
         tilt_seconds=tilt_seconds,
         tilt_tool_chord=tilt_tool_chord,
+        tilt_hold_seconds=tilt_hold_seconds,
         support_decision=decision,
         engagement_stop=engagement_stop,
         right_root_goal_sdk_m=rp.tolist(),
@@ -366,6 +377,12 @@ def main():
         help="Reproduce the first native contact plan's tool chord locally",
     )
     parser.add_argument(
+        "--tilt-hold-seconds",
+        type=float,
+        default=0.0,
+        help="Local contact-only unsupported observation dwell before right insertion",
+    )
+    parser.add_argument(
         "--engage",
         type=float,
         default=0.012,
@@ -374,10 +391,17 @@ def main():
     args = parser.parse_args()
     if args.release and args.contact_only:
         parser.error("--release and --contact-only are separate local experiments")
-    if not 0.1 <= args.tilt_seconds <= 30 or (
-        (args.tilt_seconds != 1 or args.tilt_tool_chord) and not args.contact_only
+    if (
+        not 0 <= args.tilt_hold_seconds <= 30
+        or not 0.1 <= args.tilt_seconds <= 30
+        or (
+            (args.tilt_seconds != 1 or args.tilt_tool_chord or args.tilt_hold_seconds)
+            and not args.contact_only
+        )
     ):
-        parser.error("Tilt sensitivity requires --contact-only and 0.1–30 seconds")
+        parser.error(
+            "Tilt sensitivity requires --contact-only, tilt 0.1–30s and hold 0–30s"
+        )
     if args.output.exists() or args.output.with_suffix(".xml").exists():
         parser.error("Use a new output path")
     result, xml = replay(
@@ -392,6 +416,7 @@ def main():
         args.contact_only,
         args.tilt_seconds,
         args.tilt_tool_chord,
+        args.tilt_hold_seconds,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("x", encoding="utf-8") as stream:

@@ -156,7 +156,7 @@ def compare_support(baseline, loaded):
     )
 
 
-def capture_contact(root, label, goals, convert, snapshot):
+def capture_contact(root, label, goals, convert, snapshot, config=None):
     folder = root / label
     folder.mkdir()
     frame_command = [
@@ -250,6 +250,15 @@ def capture_contact(root, label, goals, convert, snapshot):
         and row["rgb_effort_gap_seconds"] <= 0.04
         and history[-1]["seconds"] - history[0]["seconds"] >= 0.16
     )
+    if config is not None:
+        from bimanual_contact_vision import check_tilt_visibility
+
+        metadata = json.loads((folder / "camera/capture.json").read_text())[
+            "camera_messages"
+        ]
+        row["nominal_tilt_visibility"] = check_tilt_visibility(
+            frames["frames"], metadata, row["green_rgb"], config
+        )
     return row
 
 
@@ -323,17 +332,25 @@ def run_contact(robot, root, config, executor, snapshot, convert, report):
         move_stage("tilt")
         report["active_step"] = "capture_tilted"
         report["observations"]["tilted"] = capture_contact(
-            root, "contact_tilted", goals, convert, snapshot
+            root, "contact_tilted", goals, convert, snapshot, config
         )
         if any(
             report["observations"]["tilted"][s + "_target_error_rad"] >= 0.01
             for s in goals
         ):
             raise RuntimeError("Tilted arm posture drifted during contact observation")
+        if (
+            report["observations"]["tilted"]
+            .get("nominal_tilt_visibility", {})
+            .get("excluded")
+        ):
+            raise RuntimeError(
+                "Two-camera RGB excludes the intended tilt region; withdrawing before right insertion"
+            )
         move_stage("insert")
         report["active_step"] = "capture_inserted"
         report["observations"]["inserted"] = capture_contact(
-            root, "contact_inserted", goals, convert, snapshot
+            root, "contact_inserted", goals, convert, snapshot, config
         )
         if any(
             report["observations"]["inserted"][s + "_target_error_rad"] >= 0.01

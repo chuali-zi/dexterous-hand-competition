@@ -81,6 +81,12 @@ class ContactTests(unittest.TestCase):
     def test_partial_insert_failure_recovers_both_prepared_arm_positions_and_neutral_hand(
         self,
     ):
+        self.run_recovery_case(False)
+
+    def test_rgb_exclusion_recovers_without_attempting_right_insertion(self):
+        self.run_recovery_case(True)
+
+    def run_recovery_case(self, excluded):
         cfg = json.loads(
             (
                 Path(__file__).resolve().parents[1] / "configs/bimanual-contact.json"
@@ -93,7 +99,11 @@ class ContactTests(unittest.TestCase):
         left, right = Mock(), Mock()
         state = {id(left): list(seeds["left"]), id(right): list(seeds["right"])}
         robot = SimpleNamespace(
-            left_arm=left, right_arm=right, left_hand=Mock(), right_hand=Mock()
+            left_arm=left,
+            right_arm=right,
+            left_hand=Mock(),
+            right_hand=Mock(),
+            stop=Mock(),
         )
         insert_failed = False
 
@@ -126,9 +136,10 @@ class ContactTests(unittest.TestCase):
                 left_target_error_rad=0.0,
                 right_target_error_rad=0.0,
                 feedback_alignment_valid=True,
+                nominal_tilt_visibility=dict(excluded=excluded),
             ),
         ):
-            with self.assertRaises(TimeoutError):
+            with self.assertRaises(RuntimeError if excluded else TimeoutError):
                 run_contact(
                     robot,
                     Path(temp),
@@ -143,6 +154,7 @@ class ContactTests(unittest.TestCase):
         self.assertEqual(state[id(left)], seeds["left"])
         self.assertEqual(state[id(right)], seeds["right"])
         self.assertEqual(hand.call_args.args[0], "neutral")
+        self.assertEqual(insert_failed, not excluded)
 
 
 if __name__ == "__main__":
