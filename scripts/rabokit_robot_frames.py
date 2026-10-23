@@ -164,6 +164,8 @@ def capture(seconds, trace_hand=False, trace_arms=False):
         if trace_arms:
             static = {name: row for name, row in frames.items() if row['stamp'] == [0, 0]}
             report.update(joint_aligned_sample=aligned_arm_sample(frame_batches, joint_batches, static),
+                          arm_feedback_samples={side: list(samples.values())
+                                                for side, samples in joint_batches.items()},
                           arm_feedback_stamps={side: [list(s) for s in samples]
                                                for side, samples in joint_batches.items()},
                           dynamic_tf_stamps=[list(s) for s in frame_batches],
