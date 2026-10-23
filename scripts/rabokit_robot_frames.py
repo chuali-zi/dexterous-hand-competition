@@ -18,7 +18,31 @@ def robot_frame(name):
     return name.startswith(ROBOT_PREFIXES) or name in CAMERA_FRAMES
 
 
-def capture(seconds, trace_hand=False):
+def aligned_arm_sample(frame_batches, joint_batches, static_frames):
+    """Select an exact common TF/left/right header stamp, without interpolation."""
+    common = set(frame_batches) & set(joint_batches['arm_left']) & set(joint_batches['arm_right'])
+    required = ('r6ef2dc_link_57d50b5359', 'r412d23_link_c7c36cf32f',
+                'rbd03eb_link_13df66db66', 'r136d7b_link_2848c4d4a8',
+                'rcd72e2_link_88a3e0c332')
+    for stamp in sorted(common, reverse=True):
+        if stamp == (0, 0):
+            continue
+        merged = {name: row for name, row in {**static_frames, **frame_batches[stamp]}.items()
+                  if robot_frame(name) and (row['parent'] == 'world' or robot_frame(row['parent']))}
+        if not all(name in merged for name in required):
+            continue
+        if any(v['parent'] != 'world' and v['parent'] not in merged for v in merged.values()):
+            continue
+        arms = {side: joint_batches[side][stamp] for side in joint_batches}
+        if any(not all(math.isfinite(row['position'].get(f'{side}_J{i}', float('nan')))
+                       for i in range(1, 8)) for side, row in arms.items()):
+            continue
+        return {'stamp': list(stamp), 'frames': merged, 'arms': arms,
+                'alignment': 'Exact equal ROS header stamps; static TF may have stamp zero.'}
+    return None
+
+
+def capture(seconds, trace_hand=False, trace_arms=False):
     import rclpy
     from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
     from tf2_msgs.msg import TFMessage
@@ -31,6 +55,7 @@ def capture(seconds, trace_hand=False):
     hand_samples, commands, joint_samples = [], [], []
     started = time.monotonic()
     ready = False
+    frame_batches, joint_batches = {}, {'arm_left': {}, 'arm_right': {}}
     def message_info(info):
         return {key: info.get(key) for key in ('source_timestamp', 'received_timestamp',
                 'publication_sequence_number', 'reception_sequence_number')}
@@ -60,6 +85,24 @@ def capture(seconds, trace_hand=False):
                 'message_info': message_info(info)})
         subscriptions.append(node.create_subscription(JointState, f'{namespace}/arm_left/joint_states',
                                                      receive_joints, qos_profile_sensor_data))
+    if trace_arms:
+        from sensor_msgs.msg import JointState
+        def receive_arm(side, msg):
+            stamp = (msg.header.stamp.sec, msg.header.stamp.nanosec)
+            prefix = 'lh_' if side == 'arm_left' else 'rh_'
+            indices = {name: i for i, name in enumerate(msg.name)
+                       if name.startswith((side + '_J', prefix))}
+            row = {'wall_seconds': time.monotonic() - started, 'stamp': list(stamp)}
+            for field in ('position', 'velocity', 'effort'):
+                values = getattr(msg, field)
+                row[field] = {name: values[i] for name, i in indices.items() if i < len(values)}
+            joint_batches[side][stamp] = row
+            while len(joint_batches[side]) > 150:
+                del joint_batches[side][next(iter(joint_batches[side]))]
+        for side in joint_batches:
+            subscriptions.append(node.create_subscription(
+                JointState, f'{namespace}/{side}/joint_states',
+                lambda msg, side=side: receive_arm(side, msg), qos_profile_sensor_data))
 
     def receive(msg, info):
         for item in msg.transforms:
@@ -70,6 +113,12 @@ def capture(seconds, trace_hand=False):
             frames[child] = {'parent': parent, 'xyz': [t.x, t.y, t.z],
                              'xyzw': [q.x, q.y, q.z, q.w],
                              'stamp': [item.header.stamp.sec, item.header.stamp.nanosec]}
+            if trace_arms:
+                stamp = tuple(frames[child]['stamp'])
+                if stamp != (0, 0):
+                    frame_batches.setdefault(stamp, {})[child] = frames[child]
+                    while len(frame_batches) > 150:
+                        del frame_batches[next(iter(frame_batches))]
             if trace_hand and info is not None:
                 frames[child]['message_info'] = message_info(info)
 
@@ -100,6 +149,13 @@ def capture(seconds, trace_hand=False):
         report = {'namespace': namespace, 'frames': frames,
                 'source': 'robot kinematics and manually installed camera; no object transforms',
                 'extrinsics_validated': False}
+        if trace_arms:
+            static = {name: row for name, row in frames.items() if row['stamp'] == [0, 0]}
+            report.update(joint_aligned_sample=aligned_arm_sample(frame_batches, joint_batches, static),
+                          arm_feedback_stamps={side: [list(s) for s in samples]
+                                               for side, samples in joint_batches.items()},
+                          dynamic_tf_stamps=[list(s) for s in frame_batches],
+                          motion_commanded=False)
         if trace_hand:
             def publishers(topic):
                 return [{'node': item.node_name, 'namespace': item.node_namespace,
@@ -126,6 +182,7 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--seconds', type=float, default=4)
     parser.add_argument('--hand-trace', action='store_true', help='Record hand TF, JointState and native thumb commands; read-only')
+    parser.add_argument('--arm-feedback', action='store_true', help='Also retain exact-stamp TF and both arms/fingers feedback; read-only, no SDK')
     args = parser.parse_args()
     if not os.getenv('ROS2_NAMESPACE'):
         parser.error('Run in the Rabokit cloud simulation terminal')
@@ -133,9 +190,11 @@ def main():
         parser.error('--seconds must be in (0, 30]')
     if args.output.exists():
         parser.error('--output must be a new file')
-    report = capture(args.seconds, trace_hand=args.hand_trace)
+    report = capture(args.seconds, trace_hand=args.hand_trace, trace_arms=args.arm_feedback)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
+    if args.arm_feedback and report['joint_aligned_sample'] is None:
+        parser.exit(1, f'No complete common TF/arm feedback stamp; diagnostic saved to {args.output}\n')
     print(f'PASS: {len(report["frames"])} robot/camera frames saved to {args.output}')
     for name in ('r6ef2dc_link_57d50b5359', 'r412d23_link_c7c36cf32f',
                  'rbd03eb_link_13df66db66', 'base_cam', 'base_cam_optical'):
