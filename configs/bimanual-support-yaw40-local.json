@@ -1,0 +1,39 @@
+{
+  "scope": "Local two-hand support candidate, not a native controller profile. Pivoted +10deg about the retained support region from the 30deg design; evaluated with aligned native58 mounts and the native59 right preinsert seed. Whole-arm collision and native grasp unverified.",
+  "yaw_degrees": 40,
+  "right_root_goal": [
+    0.13457915947351956,
+    -0.03818308339389004,
+    -0.5038647290479675
+  ],
+  "right_root_quaternion": [
+    -0.20980587802720183,
+    0.7421204131685878,
+    0.2701097406347018,
+    0.5764369123485877
+  ],
+  "entry_from_native59_preinsert": {
+    "joint_waypoints_sdk": [
+      [
+        -0.22895689800138444,
+        -0.14837694301987775,
+        -1.1328416854121224,
+        -0.9118406886287375,
+        1.9165054037707765,
+        -0.42371694886884387,
+        0.7937072619886351
+      ],
+      [
+        -0.1973366826156522,
+        -0.2155983514366721,
+        -1.1134324321587594,
+        -0.9477315484742523,
+        1.8666135804861488,
+        -0.3204153403727392,
+        0.7583529360088006
+      ]
+    ],
+    "native_verified": false,
+    "scope": "Empty hand-only sweep checked through 35deg then40deg; use only after the original right-empty-approach route. Not a command to run this profile."
+  }
+}
