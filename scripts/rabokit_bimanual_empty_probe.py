@@ -8,6 +8,7 @@ from pathlib import Path
 import time
 
 from rabokit_calibration_probe import measured
+from rabokit_hover import move_joint_pose
 from rabokit_right_empty_probe import check_plan, execute, joint_error, snapshot
 
 
@@ -64,7 +65,27 @@ def open_hands(row):
     )
 
 
-def return_completed(robot, history):
+def execute_tracked(arm, points, history, forward, report, side, budget=120):
+    """Reuse the previously native-tested tool/joint tracking, recording failures."""
+    deadline = time.monotonic() + budget
+    for index, goal in enumerate(points):
+        report["active_motion"] = dict(side=side, point=index + 1, target_joints=goal)
+        if time.monotonic() > deadline:
+            raise TimeoutError("Route time budget exceeded")
+        state = move_joint_pose(arm, goal, forward, require_settled=False)
+        history.append(list(goal))
+        if state["tracking_corrections"]:
+            report.setdefault("tracking_corrections", []).append(
+                dict(
+                    **report["active_motion"], corrections=state["tracking_corrections"]
+                )
+            )
+        if index % 10 == 0 or index == len(points) - 1:
+            print("BIMANUAL_EMPTY_POINT", side, index + 1, "/", len(points), flush=True)
+    report.pop("active_motion", None)
+
+
+def return_completed(robot, history, executor=None):
     # The left hand entered after the right. If its return fails, hold both arms
     # instead of moving the right through an unverified left-arm posture.
     for side in ("left", "right"):
@@ -74,7 +95,7 @@ def return_completed(robot, history):
         arm.stop()
         if joint_error(measured(arm)["joints"], history[side][-1]) > 0.3:
             raise RuntimeError(f"{side}: too far from last completed checkpoint")
-        execute(arm, list(reversed(history[side])), [], budget=120)
+        (executor or execute)(arm, list(reversed(history[side])), [], budget=120)
 
 
 def main():
@@ -125,6 +146,19 @@ def main():
     )
     started = time.monotonic()
     start = None
+
+    def executor(arm, points, completed, budget=120):
+        side = "left" if arm is robot.left_arm else "right"
+        execute_tracked(
+            arm,
+            points,
+            completed,
+            lambda q: k.forward_kinematics(side, q),
+            report,
+            side,
+            budget,
+        )
+
     try:
         time.sleep(1)
         start = {s: measured(getattr(robot, s + "_arm"))["joints"] for s in plans}
@@ -144,7 +178,7 @@ def main():
                 raise RuntimeError(f"{side} enable failed")
             history[side].append(start[side])
             print("BIMANUAL_EMPTY_STAGE " + side, flush=True)
-            execute(arm, plans[side]["points"], history[side], budget=120)
+            executor(arm, plans[side]["points"], history[side], budget=120)
             goals[side] = plans[side]["points"][-1]
             report[label] = dual_snapshot(args.output, label, goals, k.to_sim_joints)
             if not arrived(report[label]) or not open_hands(report[label]):
@@ -154,9 +188,24 @@ def main():
         report["target_reached"] = True
     except Exception as exc:
         report["errors"].append(f"{type(exc).__name__}: {exc}")
+        if "active_motion" in report:
+            report["failed_motion"] = dict(report["active_motion"])
+            try:
+                report["failed_motion"]["sdk"] = {
+                    s: measured(getattr(robot, s + "_arm")) for s in plans
+                }
+                failed_goals = dict(goals)
+                failed_goals[report["active_motion"]["side"]] = report["active_motion"][
+                    "target_joints"
+                ]
+                report["failed_motion"]["native"] = dual_snapshot(
+                    args.output, "failed_motion", failed_goals, k.to_sim_joints
+                )
+            except Exception as diagnostic_error:
+                report["failed_motion"]["diagnostic_error"] = str(diagnostic_error)
     finally:
         try:
-            return_completed(robot, history)
+            return_completed(robot, history, executor)
             if any(history.values()):
                 report["restored"] = dual_snapshot(
                     args.output, "restored", start, k.to_sim_joints, rgb=True
