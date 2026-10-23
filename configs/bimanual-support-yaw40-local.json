@@ -33,7 +33,8 @@
         0.7583529360088006
       ]
     ],
-    "native_verified": false,
-    "scope": "Empty hand-only sweep checked through 35deg then40deg; use only after the original right-empty-approach route. Not a command to run this profile."
+    "native_verified": true,
+    "scope": "Empty entry endpoints and reverse return verified in native runs 61/62a; whole-arm clearance and grasp unverified. Use only after the original right-empty-approach route.",
+    "native_source_commit": "6848168"
   }
 }

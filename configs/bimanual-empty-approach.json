@@ -144,5 +144,13 @@
     ]
   },
   "hand_commands": false,
-  "whole_arm_collision_checked": false
+  "whole_arm_collision_checked": false,
+  "native_empty_execution": {
+    "run": "62a",
+    "source_commit": "6848168",
+    "target_reached": true,
+    "returned_verified": true,
+    "exit_code": 0,
+    "scope": "Empty preparation and return only; no finger motion, verified grasp or whole-arm collision claim. Detailed native report remains in cloud."
+  }
 }

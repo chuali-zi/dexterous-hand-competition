@@ -16,7 +16,7 @@ import numpy as np
 from scipy.spatial.transform import Rotation
 from local_bimanual_proxy import build_bimanual_model
 from replay_hand_dynamics import read, wxyz, cube_bottom_z
-from rabokit_hand import HAND_JOINTS
+from rabokit_hand import HAND_JOINTS, bimanual_targets
 from bimanual_support_signal import support_evidence
 
 
@@ -43,26 +43,7 @@ def replay(
     lbp = d0.qpos[la : la + 3].copy() + [0, 0.007, -0.005]
     lbr = Rotation.from_quat(d0.qpos[la + 3 : la + 7][[1, 2, 3, 0]]).as_matrix()
     center = d0.qpos[ta : ta + 3].copy()
-    base = read(Path(__file__).resolve().parents[1] / "configs/pad-grasp-study.json")[
-        "goals"
-    ]
-    goal = dict(base)
-    goal.update(
-        lh_thumb_cmc_yaw=0.8,
-        lh_thumb_cmc_pitch=0.35,
-        lh_thumb_ip=1.18,
-        lh_index_mcp_pitch=base["lh_index_mcp_pitch"] + 0.3,
-        lh_index_dip=base["lh_index_dip"] - 0.1,
-        lh_middle_mcp_pitch=-0.082,
-        lh_middle_dip=-0.0837,
-    )
-    pre = dict(goal)
-    pre.update(
-        lh_thumb_cmc_pitch=0.05,
-        lh_thumb_ip=0.8,
-        lh_index_mcp_pitch=-0.082,
-        lh_index_dip=0.2,
-    )
+    pre, goal = bimanual_targets()
 
     pivot = center + [0.025, 0, -0.025]
     name = "local-bimanual-cycle" if release else "local-bimanual-hold"

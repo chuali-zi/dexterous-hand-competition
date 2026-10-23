@@ -1,6 +1,8 @@
 """Empty bimanual preparation and reverse return, fixed simulation mode only."""
 
 import argparse
+import base64
+import gzip
 import json
 import math
 import os
@@ -10,6 +12,19 @@ import time
 from rabokit_calibration_probe import measured
 from rabokit_hover import move_joint_pose
 from rabokit_right_empty_probe import check_plan, execute, joint_error, snapshot
+
+
+def export_report(folder):
+    """Export completed saved data before stopping the simulation resets terminals."""
+    exit_file = Path(str(folder) + ".exit")
+    record = dict(
+        report=json.loads((folder / "report.json").read_text()),
+        exit=exit_file.read_text().strip() if exit_file.exists() else None,
+    )
+    payload = base64.b64encode(
+        gzip.compress(json.dumps(record, allow_nan=False).encode())
+    ).decode()
+    print("BIMANUAL_EMPTY_EXPORT " + payload, flush=True)
 
 
 def load_plan(path):
@@ -107,8 +122,19 @@ def main():
         / "configs/bimanual-empty-approach.json",
     )
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--motion", action="store_true")
+    action = parser.add_mutually_exclusive_group()
+    action.add_argument("--motion", action="store_true")
+    action.add_argument(
+        "--export",
+        action="store_true",
+        help="Print saved report as compact data; no SDK/ROS initialization",
+    )
     args = parser.parse_args()
+    if args.export:
+        if args.output is None:
+            parser.error("--export requires --output of an existing saved run")
+        export_report(args.output)
+        return
     plans = load_plan(args.plan)
     if not args.motion:
         print(

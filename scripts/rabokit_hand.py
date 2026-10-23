@@ -66,7 +66,26 @@ def pad_grasp_profile():
     return json.loads((Path(__file__).resolve().parents[1] / 'configs/pad-grasp-study.json').read_text(encoding='utf-8'))
 
 
+def bimanual_targets():
+    """Shared local/native left thumb/index tilt shapes; other fingers stay open."""
+    base = pad_grasp_profile()['goals']
+    goal = dict(base)
+    goal.update(lh_thumb_cmc_yaw=.8, lh_thumb_cmc_pitch=.35, lh_thumb_ip=1.18,
+                lh_index_mcp_pitch=base['lh_index_mcp_pitch']+.3,
+                lh_index_dip=base['lh_index_dip']-.1,
+                lh_middle_mcp_pitch=-.082, lh_middle_dip=-.0837)
+    pre = dict(goal)
+    pre.update(lh_thumb_cmc_pitch=.05, lh_thumb_ip=.8,
+               lh_index_mcp_pitch=-.082, lh_index_dip=.2)
+    return pre, goal
+
+
 def targets(pose, thumb_yaw=None, pad_grasp=False):
+    if pose in ('bimanual_preshape', 'bimanual_grasp'):
+        if pad_grasp or thumb_yaw is not None:
+            raise ValueError('The checked bimanual shapes use their fixed thumb/index targets')
+        pre, goal = bimanual_targets()
+        return pre if pose == 'bimanual_preshape' else goal
     # Native radians observed on all 11 SDK /cmd topics in this scene, SDK 3.0.0.
     if pad_grasp:
         if pose == 'open':
@@ -151,7 +170,8 @@ def preparation_feedback(frames, pose, thumb_yaw=None, pad_grasp=False):
     # This low closure step can meet the brick. Joint goals are not a contact
     # sensor; retain all errors without requiring an empty-hand arrival pose.
     feedback['goal_arrival_required'] = pose not in ('thumb_ready_without_pinky', 'pinch_thumb_ready_without_pinky',
-                                                   'pinch_contact_ready_without_pinky', 'pinch_thumb_opposed_without_pinky')
+                                                   'pinch_contact_ready_without_pinky', 'pinch_thumb_opposed_without_pinky',
+                                                   'bimanual_grasp')
     return feedback
 
 
@@ -169,7 +189,8 @@ def main():
                                          'pinch_finger_ready_without_pinky',
                                          'pinch_contact_ready_without_pinky',
                                          'pinch_high_thumb_opposed_without_pinky', 'pinch_thumb_opposed_without_pinky',
-                                         'pinch_thumb_ready_without_pinky', 'pinch_without_pinky'), required=True)
+                                         'pinch_thumb_ready_without_pinky', 'pinch_without_pinky',
+                                         'bimanual_preshape', 'bimanual_grasp'), required=True)
     parser.add_argument('--thumb-yaw', type=float, help='Thumb CMC yaw closure endpoint in native radians')
     parser.add_argument('--pad-grasp', action='store_true', help='Use the fitted opposing-pad hand targets')
     parser.add_argument('--preserve-prepared-targets', action='store_true',
@@ -199,14 +220,15 @@ def main():
         parser.error('--wait-open requires --pose open; a blocked grasp need not reach its closure targets')
     if args.wait_arrival and args.pose not in ('preshape_without_pinky', 'pinch_preshape_without_pinky',
                                               'pinch_high_thumb_ready_without_pinky', 'pinch_finger_ready_without_pinky',
-                                              'pinch_high_thumb_opposed_without_pinky'):
+                                              'pinch_high_thumb_opposed_without_pinky', 'bimanual_preshape'):
         parser.error('--wait-arrival requires an empty-hand preshape')
     wait_arrival = args.wait_open or args.wait_arrival
     try:
         values = targets(args.pose, args.thumb_yaw, args.pad_grasp)
     except ValueError as error:
         parser.error(str(error))
-    prepared = targets('pinch_high_thumb_ready_without_pinky', pad_grasp=True) if args.preserve_prepared_targets else {}
+    prepared = (targets('bimanual_preshape') if args.pose == 'bimanual_grasp' else
+                targets('pinch_high_thumb_ready_without_pinky', pad_grasp=True) if args.preserve_prepared_targets else {})
     held = tuple(name for name, value in values.items() if prepared.get(name) == value)
     namespace = os.getenv('ROS2_NAMESPACE', '').strip('/')
     if not namespace:

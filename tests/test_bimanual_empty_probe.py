@@ -1,14 +1,44 @@
 from pathlib import Path
+from contextlib import redirect_stdout
+import base64
+import gzip
+import io
+import json
+import tempfile
 from types import SimpleNamespace
 import sys
 import unittest
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from rabokit_bimanual_empty_probe import execute_tracked, load_plan, return_completed
+from rabokit_bimanual_empty_probe import (
+    execute_tracked,
+    export_report,
+    load_plan,
+    return_completed,
+)
 
 
 class BimanualEmptyTests(unittest.TestCase):
+    def test_compact_export_preserves_failed_run_and_nonzero_shell_status(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory) / "run"
+            folder.mkdir()
+            report = dict(
+                target_reached=False, returned_verified=True, errors=["timeout"]
+            )
+            (folder / "report.json").write_text(json.dumps(report))
+            Path(str(folder) + ".exit").write_text("1\n")
+            output = io.StringIO()
+            with redirect_stdout(output):
+                export_report(folder)
+            prefix, data = output.getvalue().strip().split(" ", 1)
+            self.assertEqual(prefix, "BIMANUAL_EMPTY_EXPORT")
+            self.assertEqual(
+                json.loads(gzip.decompress(base64.b64decode(data))),
+                dict(report=report, exit="1"),
+            )
+
     def test_tracked_failure_retains_active_target_before_any_return(self):
         report, history = {}, [[0] * 7]
         with patch(
