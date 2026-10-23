@@ -4,7 +4,8 @@
 Initial cubes come from retained RGB. Supplied support poses are offline design
 inputs. Object states and solver forces below are diagnostic outputs, not policy
 inputs or native success labels. Whole-arm dynamics/collision are not included.
-The motion is a timed mechanical hypothesis, not a multimodal feedback policy.
+The default is timed; --support-feedback adds an experimental pre-lift decision
+from actuator history, not a trained multimodal policy or a grasp-success label.
 """
 
 import argparse
@@ -16,6 +17,7 @@ from scipy.spatial.transform import Rotation
 from local_bimanual_proxy import build_bimanual_model
 from replay_hand_dynamics import read, wxyz, cube_bottom_z
 from rabokit_hand import HAND_JOINTS
+from bimanual_support_signal import support_evidence
 
 
 def replay(
@@ -26,6 +28,7 @@ def replay(
     gap=0.002,
     engage=0.012,
     release=False,
+    support_feedback=False,
 ):
     import mujoco
 
@@ -99,21 +102,57 @@ def replay(
     next_sample = 0
     started = time.monotonic()
     duration = 29 if release else 19
+    decision = None
+    engagement_stop = None
+
+    def evidence_at(stamp):
+        # Pass only measured effort history, without object/contact outputs.
+        observations = [
+            dict(seconds=r["seconds"], servo_effort=r["servo_effort"]) for r in rows
+        ]
+        before = [r for r in observations if 6.1 <= r["seconds"] < 6.5]
+        recent = [r for r in observations if stamp - 0.2 <= r["seconds"] < stamp]
+        return support_evidence(before, recent)
+
     while d.time < duration:
         t = d.time
-        down = 0.08 * (1 - float(np.clip((t - 0.5) / 3, 0, 1)))
-        close = float(np.clip((t - 3.5) / 2, 0, 1))
-        angle = 0.6 * float(np.clip((t - 5.5) / 1, 0, 1))
+        if support_feedback and engagement_stop is None and 8.5 <= t < 9.5:
+            signal = evidence_at(t)
+            if signal["ready"]:
+                engagement_stop = dict(
+                    seconds=float(t),
+                    engagement_m=engage * float(np.clip(t - 8.5, 0, 1)),
+                    **signal,
+                )
+        if support_feedback and decision is None and t >= 9.5:
+            decision = dict(seconds=float(t), **evidence_at(t))
+        action_time = (
+            min(t, 9.5) if decision is not None and not decision["ready"] else t
+        )
+        down = 0.08 * (1 - float(np.clip((action_time - 0.5) / 3, 0, 1)))
+        close = float(np.clip((action_time - 3.5) / 2, 0, 1))
+        angle = 0.6 * float(np.clip((action_time - 5.5) / 1, 0, 1))
         lr = Rotation.from_euler("y", angle).as_matrix()
-        insert = float(np.clip((t - 6.5) / 2, 0, 1))
-        contact = engage * float(np.clip((t - 8.5) / 1, 0, 1))
-        lift = 0.08 * float(np.clip((t - 9.5) / 2, 0, 1))
-        side = -0.04 * float(np.clip((t - 14) / 2, 0, 1))
-        lowering = 0.075 * float(np.clip((t - 19) / 2, 0, 1)) if release else 0.0
-        opening = float(np.clip((t - 21) / 1, 0, 1)) if release else 0.0
-        withdraw = float(np.clip((t - 22) / 2, 0, 1)) if release else 0.0
-        settle = 0.015 * float(np.clip((t - 22) / 1, 0, 1)) if release else 0.0
-        clear = 0.06 * float(np.clip((t - 24) / 1, 0, 1)) if release else 0.0
+        insert = float(np.clip((action_time - 6.5) / 2, 0, 1))
+        contact = engage * float(np.clip((action_time - 8.5) / 1, 0, 1))
+        if engagement_stop is not None:
+            contact = min(contact, engagement_stop["engagement_m"])
+        lift = 0.08 * float(np.clip((action_time - 9.5) / 2, 0, 1))
+        side = -0.04 * float(np.clip((action_time - 14) / 2, 0, 1))
+        # Preserve the right hand's previous release clearance after reducing
+        # its upward engagement; repeating the full descent would hit the table.
+        descent = 0.075 - (
+            engage - engagement_stop["engagement_m"] if engagement_stop else 0.0
+        )
+        lowering = (
+            descent * float(np.clip((action_time - 19) / 2, 0, 1)) if release else 0.0
+        )
+        opening = float(np.clip((action_time - 21) / 1, 0, 1)) if release else 0.0
+        withdraw = float(np.clip((action_time - 22) / 2, 0, 1)) if release else 0.0
+        settle = (
+            0.015 * float(np.clip((action_time - 22) / 1, 0, 1)) if release else 0.0
+        )
+        clear = 0.06 * float(np.clip((action_time - 24) / 1, 0, 1)) if release else 0.0
         d.mocap_pos[lm] = (
             lr @ (lbp - pivot) + pivot + [0, side, down + lift - lowering + clear]
         )
@@ -176,6 +215,9 @@ def replay(
         release=release,
         gap_m=gap,
         engagement_m=engage,
+        support_feedback=support_feedback,
+        support_decision=decision,
+        engagement_stop=engagement_stop,
         right_root_goal_sdk_m=rp.tolist(),
         right_root_quaternion_wxyz=rquat.tolist(),
         right_config=right_config,
@@ -246,6 +288,11 @@ def main():
     for name in ("trial", "left-assets", "right-assets", "support-config", "output"):
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument(
+        "--support-feedback",
+        action="store_true",
+        help="Stop upward engagement on the experimental support pattern and require it before lifting; otherwise hold at the low pose",
+    )
+    parser.add_argument(
         "--release",
         action="store_true",
         help="Lower, open and withdraw both hands after the carry",
@@ -270,6 +317,7 @@ def main():
         args.gap,
         args.engage,
         args.release,
+        args.support_feedback,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("x", encoding="utf-8") as stream:
