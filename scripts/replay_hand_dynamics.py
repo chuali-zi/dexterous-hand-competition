@@ -3,6 +3,7 @@
 
 Public inertias, convex mesh collision and cube mass/friction remain hypotheses.
 Joint ranges, passive damping and default servo gains follow the saved editor.
+Neighbor cubes move freely by default; --fixed-neighbors retains the old proxy.
 Local object states are diagnostic outputs, not platform truth or
 verified training labels. No arm dynamics or policy training is included.
 Requires mujoco, numpy and scipy; public O6 URDF/STLs are supplied separately.
@@ -117,9 +118,21 @@ def add_hand_root(xml, world, position, quaternion, root_mode):
     return root
 
 
+def add_neighbor_block(world, name, position, mass, dynamic=False):
+    """Fixed neighbors are a legacy approximation; movable ones can reveal bracing."""
+    parent = world
+    attributes = {'pos': vector_text(position)}
+    if dynamic:
+        parent = ET.SubElement(world, 'body', name=name, **attributes)
+        ET.SubElement(parent, 'freejoint', name=name+'_free')
+        attributes = {'mass': str(mass)}
+    return ET.SubElement(parent, 'geom', name=name, type='box',
+                         size='.025 .025 .025', **attributes)
+
+
 def build_model(trial, assets, mass, friction, kp, kv, force, empty=False, contact_time=.02,
                 timestep=.002, root_mode='weld', cone='pyramidal', impratio=1.,
-                joint_damping=.1, joint_limits=True):
+                joint_damping=.1, joint_limits=True, dynamic_neighbors=True):
     """Use measured parent offsets/hinge axes; keep public inertias as explicit guesses."""
     import mujoco
     stage = 'empty_closed' if empty else 'contact'
@@ -184,8 +197,7 @@ def build_model(trial, assets, mass, friction, kp, kv, force, empty=False, conta
                 ET.SubElement(body, 'freejoint', name='target_free')
                 ET.SubElement(body, 'geom', name='target', type='box', size='.025 .025 .025', mass=str(mass))
             else:
-                ET.SubElement(world, 'geom', name=f'neighbor_{i}', type='box',
-                              pos=vector_text(position), size='.025 .025 .025')
+                add_neighbor_block(world, f'neighbor_{i}', position, mass, dynamic_neighbors)
     model_xml = ET.tostring(xml, encoding='unicode')
     model = mujoco.MjModel.from_xml_string(model_xml)
     return model, model_xml, frames, native, sr, sdk_origin
@@ -193,12 +205,13 @@ def build_model(trial, assets, mass, friction, kp, kv, force, empty=False, conta
 
 def replay(trial, assets, mass=.1, friction=.6, kp=20., kv=1., force=1., empty=False, contact_time=.02,
            hold_seconds=6., timestep=.002, closure_delta=None, root_mode='weld', settle_z=0., settle_y=0.,
-           cone='pyramidal', impratio=1., joint_damping=.1, joint_limits=True):
+           cone='pyramidal', impratio=1., joint_damping=.1, joint_limits=True, dynamic_neighbors=True):
     import mujoco
     started = time.monotonic()
     model, xml, frames, native, sr, sdk_origin = build_model(trial, assets, mass, friction, kp, kv, force,
         empty=empty, contact_time=contact_time, timestep=timestep, root_mode=root_mode, cone=cone,
-        impratio=impratio, joint_damping=joint_damping, joint_limits=joint_limits)
+        impratio=impratio, joint_damping=joint_damping, joint_limits=joint_limits,
+        dynamic_neighbors=dynamic_neighbors)
     data = mujoco.MjData(model)
     indices = {n:int(model.jnt_qposadr[model.joint(n).id]) for n in HAND_JOINTS}
     for n, value in joint_values(frames).items():
@@ -237,6 +250,9 @@ def replay(trial, assets, mass=.1, friction=.6, kp=20., kv=1., force=1., empty=F
     target_adr = int(model.jnt_qposadr[model.joint('target_free').id]) if not empty else None
     table_z = float(model.geom_pos[model.geom('table').id,2]) if not empty else None
     initial_target = data.xpos[target_id].copy() if not empty else None
+    neighbor_addresses = {model.geom(i).name: int(model.jnt_qposadr[model.joint(model.geom(i).name+'_free').id])
+                          for i in range(model.ngeom)
+                          if dynamic_neighbors and model.geom(i).name.startswith('neighbor_')}
     rows, next_sample, before_lift = [], 0., None
     other_contacts = {}
     command_limit_excess = {}
@@ -283,6 +299,9 @@ def replay(trial, assets, mass=.1, friction=.6, kp=20., kv=1., force=1., empty=F
                 'local_root_tracking_error_m':float(np.linalg.norm(root_position-data.mocap_pos[0])),
                 'local_root_tracking_rotation_rad':2*math.acos(min(1.,abs(float(root_quaternion @ data.mocap_quat[0])))),
                 'local_target_contacts':contacts})
+            if neighbor_addresses:
+                rows[-1]['local_neighbor_position_m'] = {name: data.qpos[address:address+3].tolist()
+                                                         for name, address in neighbor_addresses.items()}
             next_sample = data.time + .02
         if not empty and before_lift is None and data.time >= hold_end:
             before_lift = []
@@ -297,7 +316,10 @@ def replay(trial, assets, mass=.1, friction=.6, kp=20., kv=1., force=1., empty=F
             'parameters':{'mass_kg':mass,'friction':friction,'kp':kp,'kv':kv,'force_limit':force,'empty':empty,
                           'contact_time':contact_time,'hold_seconds':hold_seconds,'timestep':timestep,
                           'root_mode':root_mode,'cone':cone,'impratio':impratio,
-                          'joint_damping':joint_damping,'joint_limits':joint_limits},
+                          'joint_damping':joint_damping,'joint_limits':joint_limits,
+                          'dynamic_neighbors':dynamic_neighbors},
+            'neighbor_scope':'Free 50 mm boxes, each with the target mass hypothesis; not native mass calibration.'
+                             if dynamic_neighbors else 'Legacy fixed world geoms; may artificially brace the target.',
             'saved_joint_ranges_rad':SAVED_JOINT_RANGES,
             'maximum_commanded_joint_limit_excess_rad':command_limit_excess,
             'root_drive_scope':'Dynamic free body with 0.004 s weld to mocap reference; not native arm dynamics.' if root_mode == 'weld'
@@ -338,6 +360,8 @@ def main():
                         help='Passive hinge damping, separate from actuator kv; saved scene value is 0.1')
     parser.add_argument('--unlimited-joints',action='store_true',
                         help='Legacy local diagnostic only: disable the saved scene joint stops')
+    parser.add_argument('--fixed-neighbors', action='store_true',
+                        help='Legacy diagnostic: freeze neighboring boxes; these can artificially brace the target')
     parser.add_argument('--closure-delta',type=parse_delta,action='append',default=[],metavar='JOINT=RAD',
                         help='Local-only correction ramp after the saved command, repeat for selected joints')
     args=parser.parse_args()
@@ -354,7 +378,8 @@ def main():
         force=args.force,empty=args.empty,contact_time=args.contact_time,hold_seconds=args.hold_seconds,
         timestep=args.timestep,closure_delta=dict(args.closure_delta),root_mode=args.root_mode,
         settle_z=args.settle_z,settle_y=args.settle_y,cone=args.cone,impratio=args.impratio,
-        joint_damping=args.joint_damping,joint_limits=not args.unlimited_joints)
+        joint_damping=args.joint_damping,joint_limits=not args.unlimited_joints,
+        dynamic_neighbors=not args.fixed_neighbors)
     args.output.parent.mkdir(parents=True,exist_ok=True)
     with args.output.open('x',encoding='utf-8') as stream:
         stream.write(json.dumps(result,indent=2,allow_nan=False)+'\n')

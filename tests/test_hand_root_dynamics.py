@@ -12,11 +12,30 @@ except ImportError:
     mujoco = None
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from replay_hand_dynamics import add_hand_hinge, add_hand_root
+from replay_hand_dynamics import add_hand_hinge, add_hand_root, add_neighbor_block
 
 
 @unittest.skipIf(mujoco is None, 'Optional MuJoCo runtime not installed')
 class MovingRootTests(unittest.TestCase):
+    def test_movable_neighbor_responds_to_force_while_legacy_neighbor_is_fixed(self):
+        final_x = {}
+        for dynamic in (False, True):
+            xml = ET.Element('mujoco')
+            ET.SubElement(xml, 'option', timestep='.002', integrator='implicitfast')
+            world = ET.SubElement(xml, 'worldbody')
+            ET.SubElement(world, 'geom', type='plane', size='1 1 .01')
+            add_neighbor_block(world, 'neighbor_0', [0, 0, .025], .1, dynamic)
+            model = mujoco.MjModel.from_xml_string(ET.tostring(xml, encoding='unicode'))
+            data = mujoco.MjData(model)
+            if dynamic:
+                data.xfrc_applied[model.body('neighbor_0').id, 0] = 2.
+            while data.time < .5:
+                mujoco.mj_step(model, data)
+            mujoco.mj_forward(model, data)
+            final_x[dynamic] = float(data.geom_xpos[model.geom('neighbor_0').id, 0])
+        self.assertEqual(final_x[False], 0.)
+        self.assertGreater(final_x[True], .1)
+
     def test_saved_joint_stop_and_passive_damping_affect_the_engine(self):
         final = {}
         for limited in (True, False):
