@@ -28,14 +28,30 @@ class ContactTests(unittest.TestCase):
         ]
         with tempfile.TemporaryDirectory() as temp:
             folder = Path(temp)
+            left = [
+                dict(
+                    stamp=r["stamp"],
+                    position=dict(lh_thumb_ip=1.1),
+                    effort=dict(lh_thumb_ip=0.2),
+                )
+                for r in rows
+            ]
             (folder / "robot-frames.json").write_text(
                 json.dumps(dict(arm_feedback_samples=dict(arm_right=rows)))
             )
             window = hand_history(folder, 10.6)
+            (folder / "robot-frames.json").write_text(
+                json.dumps(
+                    dict(arm_feedback_samples=dict(arm_right=rows, arm_left=left))
+                )
+            )
+            left_window = hand_history(folder, 10.6, side="left")
         self.assertEqual(
             [round(r["seconds"], 1) for r in window], [10.2, 10.3, 10.4, 10.5, 10.6]
         )
         self.assertIsNone(window[0]["servo_effort"]["rh_ring_mcp_pitch"])
+        self.assertEqual(left_window[-1]["position"]["lh_thumb_ip"], 1.1)
+        self.assertEqual(left_window[-1]["servo_effort"]["lh_thumb_ip"], 0.2)
 
     def test_rgb_reference_must_be_visible_and_close_before_contact(self):
         config = dict(source_surface_sdk_m=[0, 0, 0], source_tolerance_m=0.005)

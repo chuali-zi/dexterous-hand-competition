@@ -28,6 +28,25 @@ def check_source(folder, config):
     )
 
 
+def tilt_hand_pose(config, fraction):
+    """Rotate the hand about the retained brick edge, including translation."""
+    import numpy as np
+    from scipy.spatial.transform import Rotation
+
+    low = config["hand_goals"]["descend"]
+    pivot = np.asarray(config["tilt_pivot_sdk_m"])
+    spin = Rotation.from_euler("y", config["tilt_angle_rad"] * fraction).as_matrix()
+    target = np.eye(4)
+    target[:3, 3] = pivot + spin @ (np.asarray(low["position"]) - pivot)
+    target[:3, :3] = (
+        spin
+        @ Rotation.from_quat(
+            np.asarray(low["quaternion_wxyz"])[[1, 2, 3, 0]]
+        ).as_matrix()
+    )
+    return target
+
+
 def plan_contact(config, seeds, forward):
     import numpy as np
     from scipy.spatial.transform import Rotation
@@ -41,7 +60,14 @@ def plan_contact(config, seeds, forward):
         target[:3, :3] = Rotation.from_quat(
             np.array(hand["quaternion_wxyz"])[[1, 2, 3, 0]]
         ).as_matrix()
-        target = target @ np.linalg.inv(np.array(config["tool_to_hand"][side]))
+        mount_inverse = np.linalg.inv(np.array(config["tool_to_hand"][side]))
+        # A single straight tool path between these endpoints cuts inside the
+        # hand's pivot arc. Preserve the contact arc at every intermediate pose.
+        hand_targets = (
+            [tilt_hand_pose(config, i / 24) for i in range(1, 25)]
+            if name == "tilt"
+            else [target]
+        )
 
         def fk(q):
             return forward(side, q)
@@ -49,30 +75,50 @@ def plan_contact(config, seeds, forward):
         def inverse(t, q):
             return centered_inverse(t, q, fk, config["joint_limits_sdk"][side])
 
-        start = np.asarray(fk(joints[side]))
-        path = pose_path(
-            dict(joints=joints[side], pose=[start[:3, 3].tolist(), [0, 0, 0]]),
-            target,
-            inverse,
-            fk,
-            spacing=0.005,
+        first = list(joints[side])
+        points = []
+        for hand_target in hand_targets:
+            start = np.asarray(fk(joints[side]))
+            path = pose_path(
+                dict(joints=joints[side], pose=[start[:3, 3].tolist(), [0, 0, 0]]),
+                hand_target @ mount_inverse,
+                inverse,
+                fk,
+                spacing=0.005,
+            )
+            if not path["continuous"]:
+                raise RuntimeError(f"{name}: no continuous local contact path")
+            points.extend(path["points"])
+            joints[side] = points[-1]["joints"]
+        result[name] = dict(
+            side=side,
+            start_joints=first,
+            continuous=True,
+            points=points,
+            scope="Sampled tool/joint path only; whole-arm clearance unverified",
         )
-        if not path["continuous"]:
-            raise RuntimeError(f"{name}: no continuous local contact path")
-        result[name] = dict(side=side, start_joints=joints[side], **path)
-        joints[side] = path["points"][-1]["joints"]
     return result
 
 
-def hand_history(folder, end_seconds=None):
+def hand_history(folder, end_seconds=None, side="right"):
     frames = json.loads((folder / "robot-frames.json").read_text())
-    rows = frames["arm_feedback_samples"]["arm_right"]
+    rows = frames["arm_feedback_samples"]["arm_" + side]
     last = (
         end_seconds
         if end_seconds is not None
         else max(r["stamp"][0] + r["stamp"][1] * 1e-9 for r in rows)
     )
-    channels = ("rh_ring_mcp_pitch", "rh_ring_dip")
+    channels = (
+        ("rh_ring_mcp_pitch", "rh_ring_dip")
+        if side == "right"
+        else (
+            "lh_thumb_cmc_yaw",
+            "lh_thumb_cmc_pitch",
+            "lh_thumb_ip",
+            "lh_index_mcp_pitch",
+            "lh_index_dip",
+        )
+    )
 
     def number(value):
         return (
@@ -161,6 +207,14 @@ def capture_contact(root, label, goals, convert, snapshot):
         angles = native_angles(sample, side, convert)
         row[side + "_joints_sdk"] = angles
         row[side + "_target_error_rad"] = joint_error(angles, goals[side])
+    row["left_fingers"] = {
+        field: {
+            n: v
+            for n, v in sample["arms"]["arm_left"][field].items()
+            if n.startswith("lh_")
+        }
+        for field in ("position", "velocity", "effort")
+    }
     from rabokit_bricks import detect, saturated_color
     from hand_competition.closed_loop.artifacts import read_ppm
 
@@ -186,6 +240,7 @@ def capture_contact(root, label, goals, convert, snapshot):
     rgb_seconds = info["sec"] + info["nanosec"] * 1e-9
     row["rgb_stamp"] = [info["sec"], info["nanosec"]]
     row["right_hand_history"] = hand_history(folder, rgb_seconds)
+    row["left_hand_history"] = hand_history(folder, rgb_seconds, side="left")
     history = row["right_hand_history"]
     row["rgb_effort_gap_seconds"] = (
         rgb_seconds - history[-1]["seconds"] if history else None
