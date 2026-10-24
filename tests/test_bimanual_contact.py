@@ -89,6 +89,9 @@ class ContactTests(unittest.TestCase):
     def test_closed_rgb_exclusion_recovers_before_any_tilting(self):
         self.run_recovery_case("closed")
 
+    def test_latest_load_loss_blocks_insertion_even_when_rgb_does_not_exclude(self):
+        self.run_recovery_case("released")
+
     def run_recovery_case(self, excluded):
         cfg = json.loads(
             (
@@ -141,6 +144,27 @@ class ContactTests(unittest.TestCase):
                 left_target_error_rad=0.0,
                 right_target_error_rad=0.0,
                 feedback_alignment_valid=True,
+                left_hand_history=(
+                    [
+                        dict(
+                            seconds=1 + i * 0.1,
+                            position=dict(
+                                lh_thumb_cmc_pitch=0.31, lh_index_mcp_pitch=0.18
+                            ),
+                            servo_effort=dict(
+                                lh_thumb_cmc_pitch=0.8, lh_index_mcp_pitch=0.8
+                            ),
+                        )
+                        for i in range(5)
+                    ]
+                    if excluded == "released"
+                    else []
+                ),
+                left_fingers=dict(
+                    position=dict(lh_thumb_cmc_pitch=0.35, lh_index_mcp_pitch=0.218),
+                    velocity=dict(lh_thumb_cmc_pitch=0, lh_index_mcp_pitch=0),
+                    effort=dict(lh_thumb_cmc_pitch=0, lh_index_mcp_pitch=0),
+                ),
                 nominal_tilt_visibility=dict(
                     excluded=label == "contact_" + str(excluded)
                 ),

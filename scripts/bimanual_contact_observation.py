@@ -29,6 +29,7 @@ def stamp_seconds(row):
 def compact_hand(row):
     return dict(
         stamp=row["stamp"],
+        wall_seconds=row.get("wall_seconds"),
         **{
             field: {
                 n: (
@@ -166,5 +167,5 @@ def finish_tilt_recording(process, root, until=None):
     return dict(
         samples=retained,
         started_monotonic=trace["started_monotonic"],
-        scope="Native hand samples at at least 0.2s spacing, ending at the tilted RGB when available; coverage is recorded, not assumed",
+        scope="Native hand samples at at least 0.2s spacing, ending at the latest tilted native snapshot when available; coverage is recorded, not assumed",
     )

@@ -13,6 +13,61 @@ import statistics
 MINIMUM_DELTA = {"rh_ring_mcp_pitch": 0.03, "rh_ring_dip": 0.01}
 
 
+def left_blocking_loss(baseline, latest, targets):
+    """Flag two formerly blocked fingers becoming almost free at the latest sample.
+
+    This is an experimental withdrawal hint, not contact identity or grasp proof.
+    Effort and command error are correlated by the native PD law.
+    """
+    if len(baseline) < 5:
+        return dict(
+            lost_hint=False, reference_usable=False, reason="insufficient_reference"
+        )
+    channels = {}
+    for name in ("lh_thumb_cmc_pitch", "lh_index_mcp_pitch"):
+        positions = [r.get("position", {}).get(name) for r in baseline]
+        efforts = [r.get("servo_effort", {}).get(name) for r in baseline]
+        current = [
+            latest.get(field, {}).get(name)
+            for field in ("position", "velocity", "effort")
+        ]
+        if not all(
+            isinstance(v, (int, float)) and math.isfinite(v)
+            for v in [*positions, *efforts, *current]
+        ):
+            return dict(
+                lost_hint=False,
+                reference_usable=False,
+                reason="missing_or_nonfinite_feedback",
+            )
+        errors = [targets[name] - v for v in positions]
+        blocked = statistics.median(errors)
+        load = statistics.median(abs(v) for v in efforts)
+        error = abs(targets[name] - current[0])
+        usable = blocked >= 0.015 and load >= 0.1
+        channels[name] = dict(
+            reference_error_rad=blocked,
+            reference_effort=load,
+            latest_error_rad=error,
+            latest_effort=current[2],
+            latest_velocity_rad_s=current[1],
+            reference_usable=usable,
+            released=usable
+            and error <= 0.2 * blocked
+            and abs(current[2]) <= 0.2 * load
+            and abs(current[1]) <= 0.03,
+        )
+    usable = all(c["reference_usable"] for c in channels.values())
+    lost = all(c["released"] for c in channels.values())
+    return dict(
+        lost_hint=lost,
+        reference_usable=usable,
+        channels=channels,
+        reason="blocked_to_free" if lost else "no_blocked_to_free_pattern",
+        scope="Latest native snapshot compared with earlier closed reference; PD error and effort are not independent tactile measurements",
+    )
+
+
 def support_evidence(baseline, recent):
     """Read only timestamps and actuator efforts; never object/contact outputs."""
     if len(baseline) < 5 or len(recent) < 5:

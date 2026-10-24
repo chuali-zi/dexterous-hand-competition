@@ -8,7 +8,7 @@ import sys
 import time
 
 
-from bimanual_support_signal import support_evidence
+from bimanual_support_signal import left_blocking_loss, support_evidence
 from rabokit_calibration_probe import hand_command, measured
 from rabokit_joint_path import centered_inverse, pose_path
 from rabokit_pickup_vision import target_observation
@@ -171,7 +171,7 @@ def capture_contact(root, label, goals, convert, snapshot, config=None):
         str(Path(__file__).with_name("rabokit_robot_frames.py")),
         "--arm-feedback",
         "--seconds",
-        "8",
+        "1.6",
         "--output",
         str(folder / "robot-frames.json"),
     ]
@@ -181,7 +181,7 @@ def capture_contact(root, label, goals, convert, snapshot, config=None):
         "--capture-only",
         "--side-camera",
         "--seconds",
-        "6",
+        "1",
         "--output",
         str(folder / "camera"),
     ]
@@ -252,6 +252,7 @@ def capture_contact(root, label, goals, convert, snapshot, config=None):
     row["rgb_stamp"] = [info["sec"], info["nanosec"]]
     row["right_hand_history"] = hand_history(folder, rgb_seconds)
     row["left_hand_history"] = hand_history(folder, rgb_seconds, side="left")
+    row["latest_left_hand_history"] = hand_history(folder, side="left")
     history = row["right_hand_history"]
     row["rgb_effort_gap_seconds"] = (
         rgb_seconds - history[-1]["seconds"] if history else None
@@ -364,6 +365,17 @@ def run_contact(robot, root, config, executor, snapshot, convert, report):
         move_stage("tilt")
         report["tilt_finished_monotonic"] = time.monotonic()
         observe("tilted")
+        from rabokit_hand import bimanual_targets
+
+        report["tilt_blocking_loss"] = left_blocking_loss(
+            report["observations"]["closed"]["left_hand_history"],
+            report["observations"]["tilted"]["left_fingers"],
+            bimanual_targets()[1],
+        )
+        if report["tilt_blocking_loss"]["lost_hint"]:
+            raise RuntimeError(
+                "Tilted fingers changed from blocked to nearly free; withdrawing before right insertion"
+            )
         move_stage("insert")
         observe("inserted")
         report["support_pattern"] = compare_support(
@@ -427,7 +439,7 @@ def run_contact(robot, root, config, executor, snapshot, convert, report):
             raise
         finally:
             try:
-                stamp = report["observations"].get("tilted", {}).get("rgb_stamp")
+                stamp = report["observations"].get("tilted", {}).get("stamp")
                 report["tilt_trace"] = finish_tilt_recording(
                     tilt_recorder,
                     root,
