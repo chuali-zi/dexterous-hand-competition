@@ -60,13 +60,14 @@ def replay(
     tilt_hold_seconds=0.0,
     closed_hold_seconds=0.0,
     target_mass=0.1,
+    contact_time=0.02,
 ):
     import mujoco
 
     if contact_only:
         engage = 0.0
     m, xml, rvalues, mapping = build_bimanual_model(
-        trial, left_assets, right_assets, target_mass
+        trial, left_assets, right_assets, target_mass, contact_time
     )
     d0 = mujoco.MjData(m)
     la = int(m.jnt_qposadr[m.joint("hand_root_free").id])
@@ -300,6 +301,7 @@ def replay(
         tilt_hold_seconds=tilt_hold_seconds,
         closed_hold_seconds=closed_hold_seconds,
         target_mass_kg_assumed=target_mass,
+        contact_time_s_assumed=contact_time,
         support_decision=decision,
         engagement_stop=engagement_stop,
         right_root_goal_sdk_m=rp.tolist(),
@@ -413,6 +415,12 @@ def main():
         help="Right support vertical engagement, metres",
     )
     parser.add_argument(
+        "--contact-time",
+        type=float,
+        default=0.02,
+        help="Local soft-contact time constant in seconds; an effective model hypothesis, not a native parameter measurement",
+    )
+    parser.add_argument(
         "--target-mass",
         type=float,
         default=0.1,
@@ -427,6 +435,8 @@ def main():
     args = parser.parse_args()
     if not np.isfinite(args.target_mass) or args.target_mass <= 0:
         parser.error("--target-mass must be positive and finite")
+    if not np.isfinite(args.contact_time) or args.contact_time <= 0:
+        parser.error("--contact-time must be positive and finite")
     if args.release and args.contact_only:
         parser.error("--release and --contact-only are separate local experiments")
     if (
@@ -463,6 +473,7 @@ def main():
         args.tilt_hold_seconds,
         args.closed_hold_seconds,
         args.target_mass,
+        args.contact_time,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("x", encoding="utf-8") as stream:
