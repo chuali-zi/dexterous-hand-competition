@@ -33,9 +33,11 @@ def measured_hinge_angle(zero, measured_xyzw, axis, tolerance=5e-5):
     return angle, residual
 
 
-def build_bimanual_model(trial, left_assets, right_assets):
+def build_bimanual_model(trial, left_assets, right_assets, target_mass=0.1):
     import mujoco
 
+    if not np.isfinite(target_mass) or target_mass <= 0:
+        raise ValueError("Expected a positive finite target mass hypothesis")
     assets = Path(right_assets)
     _, xml, frames, *_ = build_model(Path(trial), Path(left_assets), 0.1, 1, 20, 1, 1)
     urdf = ET.parse(assets / "linkerhand_o6_right.urdf").getroot()
@@ -43,6 +45,8 @@ def build_bimanual_model(trial, left_assets, right_assets):
     joints = urdf.findall("joint")
     tree = ET.fromstring(xml)
     world = tree.find("worldbody")
+    # Vary only the target; neighboring cubes keep the original 0.1 kg model.
+    world.find("body[@name='target']/geom").set("mass", str(target_mass))
     asset = tree.find("asset")
     actuator = tree.find("actuator")
     contacts = tree.find("contact")
@@ -198,6 +202,7 @@ def build_bimanual_model(trial, left_assets, right_assets):
         fk=fk,
         right_dynamics_scope="Public inertias and URDF stops; kp20 kv1 force1 damping0.1 hypotheses, not native right dynamics calibration.",
         native_collision_mesh_identity_verified=False,
+        target_mass_kg_assumed=target_mass,
     )
     return model, xml, values, report
 

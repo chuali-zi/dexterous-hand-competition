@@ -59,12 +59,15 @@ def replay(
     tilt_tool_chord=False,
     tilt_hold_seconds=0.0,
     closed_hold_seconds=0.0,
+    target_mass=0.1,
 ):
     import mujoco
 
     if contact_only:
         engage = 0.0
-    m, xml, rvalues, mapping = build_bimanual_model(trial, left_assets, right_assets)
+    m, xml, rvalues, mapping = build_bimanual_model(
+        trial, left_assets, right_assets, target_mass
+    )
     d0 = mujoco.MjData(m)
     la = int(m.jnt_qposadr[m.joint("hand_root_free").id])
     ra = int(m.jnt_qposadr[m.joint("right_hand_root_free").id])
@@ -296,6 +299,7 @@ def replay(
         tilt_tool_chord=tilt_tool_chord,
         tilt_hold_seconds=tilt_hold_seconds,
         closed_hold_seconds=closed_hold_seconds,
+        target_mass_kg_assumed=target_mass,
         support_decision=decision,
         engagement_stop=engagement_stop,
         right_root_goal_sdk_m=rp.tolist(),
@@ -409,12 +413,20 @@ def main():
         help="Right support vertical engagement, metres",
     )
     parser.add_argument(
+        "--target-mass",
+        type=float,
+        default=0.1,
+        help="Local target mass hypothesis in kg; neighbors stay at 0.1 kg, native effective mass remains unknown",
+    )
+    parser.add_argument(
         "--closed-hold-seconds",
         type=float,
         default=0.0,
         help="Local contact-only closed observation dwell before tilt",
     )
     args = parser.parse_args()
+    if not np.isfinite(args.target_mass) or args.target_mass <= 0:
+        parser.error("--target-mass must be positive and finite")
     if args.release and args.contact_only:
         parser.error("--release and --contact-only are separate local experiments")
     if (
@@ -450,6 +462,7 @@ def main():
         args.tilt_tool_chord,
         args.tilt_hold_seconds,
         args.closed_hold_seconds,
+        args.target_mass,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("x", encoding="utf-8") as stream:
