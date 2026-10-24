@@ -81,10 +81,13 @@ class ContactTests(unittest.TestCase):
     def test_partial_insert_failure_recovers_both_prepared_arm_positions_and_neutral_hand(
         self,
     ):
-        self.run_recovery_case(False)
+        self.run_recovery_case(None)
 
     def test_rgb_exclusion_recovers_without_attempting_right_insertion(self):
-        self.run_recovery_case(True)
+        self.run_recovery_case("tilted")
+
+    def test_closed_rgb_exclusion_recovers_before_any_tilting(self):
+        self.run_recovery_case("closed")
 
     def run_recovery_case(self, excluded):
         cfg = json.loads(
@@ -130,13 +133,17 @@ class ContactTests(unittest.TestCase):
             "rabokit_bimanual_contact.hand_command",
             return_value=dict(hand_arrival_verified=True),
         ) as hand, patch(
+            "rabokit_bimanual_contact.start_tilt_recording", return_value=None
+        ), patch(
             "rabokit_bimanual_contact.capture_contact",
-            return_value=dict(
+            side_effect=lambda root, label, *args: dict(
                 right_hand_history=[],
                 left_target_error_rad=0.0,
                 right_target_error_rad=0.0,
                 feedback_alignment_valid=True,
-                nominal_tilt_visibility=dict(excluded=excluded),
+                nominal_tilt_visibility=dict(
+                    excluded=label == "contact_" + str(excluded)
+                ),
             ),
         ):
             with self.assertRaises(RuntimeError if excluded else TimeoutError):
@@ -155,6 +162,8 @@ class ContactTests(unittest.TestCase):
         self.assertEqual(state[id(right)], seeds["right"])
         self.assertEqual(hand.call_args.args[0], "neutral")
         self.assertEqual(insert_failed, not excluded)
+        if excluded == "closed":
+            self.assertEqual(report["completed_points"]["tilt"], 0)
 
 
 if __name__ == "__main__":

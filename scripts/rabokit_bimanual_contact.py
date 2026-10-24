@@ -5,6 +5,7 @@ import math
 from pathlib import Path
 import subprocess
 import sys
+import time
 
 
 from bimanual_support_signal import support_evidence
@@ -12,6 +13,12 @@ from rabokit_calibration_probe import hand_command, measured
 from rabokit_joint_path import centered_inverse, pose_path
 from rabokit_pickup_vision import target_observation
 from rabokit_right_empty_probe import joint_error, native_angles
+from bimanual_contact_observation import (
+    closing_rgb_evidence,
+    finish_tilt_recording,
+    side_preview,
+    start_tilt_recording,
+)
 
 
 def check_source(folder, config):
@@ -233,6 +240,10 @@ def capture_contact(root, label, goals, convert, snapshot, config=None):
                 if c["color"] == "green"
             ],
         )
+        if camera == "base_cam3":
+            row["side_rgb_preview"] = side_preview(
+                width, height, pixels, row["green_rgb"][camera]["components"]
+            )
     row["stereo_target"] = target_observation(folder)
     info = json.loads((folder / "camera/capture.json").read_text())["camera_messages"][
         "base_cam"
@@ -286,6 +297,20 @@ def run_contact(robot, root, config, executor, snapshot, convert, report):
     history = {name: [] for name in paths}
     goals = {s: list(q) for s, q in seeds.items()}
     hand_started = False
+    tilt_recorder = None
+
+    def observe(name):
+        report["active_step"] = "capture_" + name
+        row = capture_contact(root, "contact_" + name, goals, convert, snapshot, config)
+        report["observations"][name] = row
+        if any(row[s + "_target_error_rad"] >= 0.01 for s in goals):
+            raise RuntimeError(
+                f"{name}: arm posture drifted during contact observation"
+            )
+        if row.get("nominal_tilt_visibility", {}).get("excluded"):
+            raise RuntimeError(
+                f"{name}: two-camera RGB excludes the intended contact region; withdrawing"
+            )
 
     def move_stage(name):
         report["active_step"] = name
@@ -327,38 +352,20 @@ def run_contact(robot, root, config, executor, snapshot, convert, report):
         move_stage("descend")
         report["active_step"] = "close"
         hand_command(
-            "bimanual_grasp", ramp_seconds=2.0, trace_output=root / "contact-close.json"
+            "bimanual_grasp",
+            ramp_seconds=2.0,
+            trace_output=root / "contact-close.json",
+            rgb_trace_output=root / "contact-close-rgb",
         )
+        observe("closed")
+        report["active_step"] = "start_tilt_recording"
+        tilt_recorder = start_tilt_recording(root)
+        report["tilt_started_monotonic"] = time.monotonic()
         move_stage("tilt")
-        report["active_step"] = "capture_tilted"
-        report["observations"]["tilted"] = capture_contact(
-            root, "contact_tilted", goals, convert, snapshot, config
-        )
-        if any(
-            report["observations"]["tilted"][s + "_target_error_rad"] >= 0.01
-            for s in goals
-        ):
-            raise RuntimeError("Tilted arm posture drifted during contact observation")
-        if (
-            report["observations"]["tilted"]
-            .get("nominal_tilt_visibility", {})
-            .get("excluded")
-        ):
-            raise RuntimeError(
-                "Two-camera RGB excludes the intended tilt region; withdrawing before right insertion"
-            )
+        report["tilt_finished_monotonic"] = time.monotonic()
+        observe("tilted")
         move_stage("insert")
-        report["active_step"] = "capture_inserted"
-        report["observations"]["inserted"] = capture_contact(
-            root, "contact_inserted", goals, convert, snapshot, config
-        )
-        if any(
-            report["observations"]["inserted"][s + "_target_error_rad"] >= 0.01
-            for s in goals
-        ):
-            raise RuntimeError(
-                "Inserted arm posture drifted during contact observation"
-            )
+        observe("inserted")
         report["support_pattern"] = compare_support(
             report["observations"]["tilted"]["right_hand_history"],
             report["observations"]["inserted"]["right_hand_history"],
@@ -418,3 +425,15 @@ def run_contact(robot, root, config, executor, snapshot, convert, report):
         except Exception as error:
             report["recovery_error"] = f"{type(error).__name__}: {error}"
             raise
+        finally:
+            try:
+                stamp = report["observations"].get("tilted", {}).get("rgb_stamp")
+                report["tilt_trace"] = finish_tilt_recording(
+                    tilt_recorder,
+                    root,
+                    stamp[0] + stamp[1] * 1e-9 if stamp is not None else None,
+                )
+                if (root / "contact-close.json").exists():
+                    report["closing_rgb_trace"] = closing_rgb_evidence(root, config)
+            except Exception as error:
+                report["trace_processing_error"] = f"{type(error).__name__}: {error}"
