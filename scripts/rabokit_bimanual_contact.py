@@ -283,6 +283,7 @@ def run_contact(robot, root, config, executor, snapshot, convert, report):
         recovered=True,
         payload_lift_commanded=False,
         observations={},
+        stage_timing={},
     )
     paths = config["stages"]
     for name in ("descend", "insert"):
@@ -302,7 +303,14 @@ def run_contact(robot, root, config, executor, snapshot, convert, report):
 
     def observe(name):
         report["active_step"] = "capture_" + name
-        row = capture_contact(root, "contact_" + name, goals, convert, snapshot, config)
+        timing = report["stage_timing"].setdefault("capture_" + name, {})
+        timing["started_monotonic"] = time.monotonic()
+        try:
+            row = capture_contact(
+                root, "contact_" + name, goals, convert, snapshot, config
+            )
+        finally:
+            timing["finished_monotonic"] = time.monotonic()
         report["observations"][name] = row
         if any(row[s + "_target_error_rad"] >= 0.01 for s in goals):
             raise RuntimeError(
@@ -320,7 +328,12 @@ def run_contact(robot, root, config, executor, snapshot, convert, report):
         arm = getattr(robot, side + "_arm")
         history[name].append(measured(arm)["joints"])
         print("BIMANUAL_CONTACT_STAGE " + name, flush=True)
-        executor(arm, [p["joints"] for p in stage["points"]], history[name])
+        timing = report["stage_timing"].setdefault(name, {})
+        timing["started_monotonic"] = time.monotonic()
+        try:
+            executor(arm, [p["joints"] for p in stage["points"]], history[name])
+        finally:
+            timing["finished_monotonic"] = time.monotonic()
         goals[side] = stage["points"][-1]["joints"]
 
     def undo(name):
@@ -439,7 +452,14 @@ def run_contact(robot, root, config, executor, snapshot, convert, report):
             raise
         finally:
             try:
-                stamp = report["observations"].get("tilted", {}).get("stamp")
+                stamp = max(
+                    (
+                        row["stamp"]
+                        for row in report["observations"].values()
+                        if row.get("stamp") is not None
+                    ),
+                    default=None,
+                )
                 report["tilt_trace"] = finish_tilt_recording(
                     tilt_recorder,
                     root,

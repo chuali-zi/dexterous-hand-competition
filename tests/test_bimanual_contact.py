@@ -92,6 +92,9 @@ class ContactTests(unittest.TestCase):
     def test_latest_load_loss_blocks_insertion_even_when_rgb_does_not_exclude(self):
         self.run_recovery_case("released")
 
+    def test_inserted_rgb_failure_keeps_trace_through_inserted_snapshot(self):
+        self.run_recovery_case("inserted")
+
     def run_recovery_case(self, excluded):
         cfg = json.loads(
             (
@@ -116,10 +119,11 @@ class ContactTests(unittest.TestCase):
         def execute(arm, points, history, budget=120):
             nonlocal insert_failed
             if arm is right and not insert_failed:
-                state[id(arm)] = list(points[0])
-                history.append(list(points[0]))
                 insert_failed = True
-                raise TimeoutError("partial insert")
+                if excluded != "inserted":
+                    state[id(arm)] = list(points[0])
+                    history.append(list(points[0]))
+                    raise TimeoutError("partial insert")
             for q in points:
                 state[id(arm)] = list(q)
                 history.append(list(q))
@@ -138,8 +142,18 @@ class ContactTests(unittest.TestCase):
         ) as hand, patch(
             "rabokit_bimanual_contact.start_tilt_recording", return_value=None
         ), patch(
+            "rabokit_bimanual_contact.finish_tilt_recording", return_value=None
+        ) as finish, patch(
+            "rabokit_bimanual_contact.closing_rgb_evidence", return_value={}
+        ), patch(
             "rabokit_bimanual_contact.capture_contact",
             side_effect=lambda root, label, *args: dict(
+                stamp=[
+                    {"contact_closed": 1, "contact_tilted": 2, "contact_inserted": 3}[
+                        label
+                    ],
+                    0,
+                ],
                 right_hand_history=[],
                 left_target_error_rad=0.0,
                 right_target_error_rad=0.0,
@@ -185,9 +199,12 @@ class ContactTests(unittest.TestCase):
         self.assertEqual(state[id(left)], seeds["left"])
         self.assertEqual(state[id(right)], seeds["right"])
         self.assertEqual(hand.call_args.args[0], "neutral")
-        self.assertEqual(insert_failed, not excluded)
+        self.assertEqual(insert_failed, excluded in (None, "inserted"))
         if excluded == "closed":
             self.assertEqual(report["completed_points"]["tilt"], 0)
+        if excluded == "inserted":
+            self.assertEqual(finish.call_args.args[2], 3.0)
+            self.assertIn("finished_monotonic", report["stage_timing"]["insert"])
 
 
 if __name__ == "__main__":

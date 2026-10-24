@@ -1,5 +1,5 @@
 {
-  "scope": "Locally checked pivot-arc contact candidate, not yet natively tested; retained source RGB and robot-only calibration. Low contact then reverse; no payload lift.",
+  "scope": "Pivot-arc low contact and reverse recovery executed in native runs65/66; inserted RGB excluded the intended region and grasp remains unverified. Retained source RGB and robot-only calibration; no payload lift.",
   "source_surface_sdk_m": [
     0.22930452697811687,
     0.08055292610947161,

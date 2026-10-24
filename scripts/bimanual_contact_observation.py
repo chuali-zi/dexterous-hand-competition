@@ -167,5 +167,5 @@ def finish_tilt_recording(process, root, until=None):
     return dict(
         samples=retained,
         started_monotonic=trace["started_monotonic"],
-        scope="Native hand samples at at least 0.2s spacing, ending at the latest tilted native snapshot when available; coverage is recorded, not assumed",
+        scope="Native hand samples from tilt through the latest available contact snapshot, at at least 0.2s spacing; coverage is recorded, not assumed",
     )
