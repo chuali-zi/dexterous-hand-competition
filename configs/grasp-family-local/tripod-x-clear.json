@@ -1,0 +1,47 @@
+{
+  "name": "tripod-x-clear",
+  "family": "tripod",
+  "hand_root_position": [
+    0.14356620282957758,
+    0.04736711551407123,
+    -0.42810580150759453
+  ],
+  "hand_root_quaternion_wxyz": [
+    0.4637768603713439,
+    0.10929209458793256,
+    0.8521551827994516,
+    0.21632800621443932
+  ],
+  "preshape_targets": {
+    "lh_index_mcp_pitch": -0.09899999999999999,
+    "lh_index_dip": 0.5230851571640334,
+    "lh_middle_mcp_pitch": 0.21160644731376432,
+    "lh_middle_dip": 0.1699770972124277,
+    "lh_ring_mcp_pitch": -0.082,
+    "lh_ring_dip": -0.0837,
+    "lh_pinky_mcp_pitch": -0.082,
+    "lh_pinky_dip": -0.0837,
+    "lh_thumb_cmc_yaw": 1.2257342678985697,
+    "lh_thumb_cmc_pitch": 0.05840970412103519,
+    "lh_thumb_ip": 1.0589999999999997
+  },
+  "closure_targets": {
+    "lh_index_mcp_pitch": -0.09899999999999999,
+    "lh_index_dip": 0.7030851571640334,
+    "lh_middle_mcp_pitch": 0.21160644731376432,
+    "lh_middle_dip": 0.3499770972124277,
+    "lh_ring_mcp_pitch": -0.082,
+    "lh_ring_dip": -0.0837,
+    "lh_pinky_mcp_pitch": -0.082,
+    "lh_pinky_dip": -0.0837,
+    "lh_thumb_cmc_yaw": 1.2257342678985697,
+    "lh_thumb_cmc_pitch": 0.2184097041210352,
+    "lh_thumb_ip": 1.1789999999999998
+  },
+  "approach_offset_m": [
+    0,
+    0,
+    0.08
+  ],
+  "scope": "Offline comparison with the retained round-68 local model only. Not a native robot motion configuration. Original-model and noslip_iterations=3 diagnostic lifts failed."
+}

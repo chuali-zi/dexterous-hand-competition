@@ -1,0 +1,47 @@
+{
+  "name": "side-pinch-x-preload",
+  "family": "side_pinch",
+  "hand_root_position": [
+    0.14681744996753865,
+    0.09242828290878045,
+    -0.41916408697708823
+  ],
+  "hand_root_quaternion_wxyz": [
+    0.5254865455943167,
+    0.04038820410408883,
+    0.8476026610799093,
+    0.061663703252843316
+  ],
+  "preshape_targets": {
+    "lh_index_mcp_pitch": 0.4071219971707617,
+    "lh_index_dip": 0.15522842749589402,
+    "lh_middle_mcp_pitch": 1.45,
+    "lh_middle_dip": 1.45,
+    "lh_ring_mcp_pitch": 1.45,
+    "lh_ring_dip": 1.45,
+    "lh_pinky_mcp_pitch": 1.45,
+    "lh_pinky_dip": 1.45,
+    "lh_thumb_cmc_yaw": 0.9754507243719414,
+    "lh_thumb_cmc_pitch": -0.08,
+    "lh_thumb_ip": 1.1799999999999957
+  },
+  "closure_targets": {
+    "lh_index_mcp_pitch": 0.5615507738971655,
+    "lh_index_dip": 0.15674876068067967,
+    "lh_middle_mcp_pitch": 1.45,
+    "lh_middle_dip": 1.45,
+    "lh_ring_mcp_pitch": 1.45,
+    "lh_ring_dip": 1.45,
+    "lh_pinky_mcp_pitch": 1.45,
+    "lh_pinky_dip": 1.45,
+    "lh_thumb_cmc_yaw": 0.9753763075843073,
+    "lh_thumb_cmc_pitch": 0.0380234994016688,
+    "lh_thumb_ip": 1.18
+  },
+  "approach_offset_m": [
+    0,
+    0,
+    0.08
+  ],
+  "scope": "Offline comparison with the retained round-68 local model only. Not a native robot motion configuration. Original-model lift failed; lift/hold passed only in a noslip_iterations=3 diagnostic and failed again at mu=0.4."
+}
