@@ -1,0 +1,59 @@
+{
+  "name": "conditional_single_index_edge_5mm",
+  "family": "thin_finger_under_support",
+  "status": "conditional_geometry_only_not_executable_grasp",
+  "initial_flat_target_position": [
+    0.22930452697811687,
+    0.08055292610947161,
+    -0.5311684780567548
+  ],
+  "target_preoperation_verified": false,
+  "conditional_target_position": [
+    0.21924633891462286,
+    0.08055292610947161,
+    -0.5241256589539655
+  ],
+  "conditional_target_quaternion_wxyz": [
+    0.984807753012208,
+    0.0,
+    -0.17364817766693033,
+    0.0
+  ],
+  "right_root_quaternion_wxyz": [
+    -0.6134313493560127,
+    0.7897480481946515,
+    0.0,
+    0.0
+  ],
+  "preshape_targets_rad": {
+    "rh_thumb_cmc_yaw": 0.8,
+    "rh_thumb_cmc_pitch": 0.0,
+    "rh_thumb_ip": 0.0,
+    "rh_index_mcp_pitch": 0.0,
+    "rh_index_dip": 0.0,
+    "rh_middle_mcp_pitch": 1.2,
+    "rh_middle_dip": 1.2,
+    "rh_ring_mcp_pitch": 1.2,
+    "rh_ring_dip": 1.2,
+    "rh_pinky_mcp_pitch": 1.2,
+    "rh_pinky_dip": 1.2
+  },
+  "right_root_start_position": [
+    0.23572674152751436,
+    -0.1352497726112466,
+    -0.48144929127561625
+  ],
+  "right_root_inserted_position": [
+    0.23572674152751436,
+    -0.1002497726112466,
+    -0.48144929127561625
+  ],
+  "approach_direction": [
+    0.0,
+    1.0,
+    0.0
+  ],
+  "entry_depth_mm": 5.0,
+  "approach_travel_mm": 35.0,
+  "scope": "Offline conditional geometry only: original target hypothetically tipped 20 degrees about its initial -X bottom edge. Neither measured pre-operation reaches this pose. No support, lift, arm route or native motion is verified."
+}
