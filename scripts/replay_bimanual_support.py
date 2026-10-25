@@ -45,6 +45,45 @@ def contact_stage_time(
     return seconds - 2 * extra
 
 
+def sample_due(seconds, sample_count):
+    """Keep the 40 ms observation clock anchored to the start of the replay."""
+    return seconds + 1e-9 >= sample_count * 0.04
+
+
+def carry_metrics(rows, contact_only):
+    """The carry/hold windows belong only to the unchanged payload schedule."""
+    result = dict(
+        carry_metrics_available=not contact_only,
+        minimum_carry_bottom_mm=None,
+        carry_table_fraction=None,
+        carry_neighbor_fraction=None,
+        hold_drift_mm=None,
+    )
+    if contact_only:
+        return result
+    hold = [v for v in rows if 16 <= v["seconds"] <= 19]
+    carry = [v for v in rows if 11.5 <= v["seconds"] <= 19]
+    result.update(
+        minimum_carry_bottom_mm=1000 * min(v["bottom_m"] for v in carry),
+        carry_table_fraction=sum(
+            any("table" in p for p in v["contacts"]) for v in carry
+        )
+        / len(carry),
+        carry_neighbor_fraction=sum(
+            any(any(n.startswith("neighbor_") for n in p) for p in v["contacts"])
+            for v in carry
+        )
+        / len(carry),
+        hold_drift_mm=1000
+        * float(
+            np.linalg.norm(
+                np.array(hold[-1]["target_position"]) - hold[0]["target_position"]
+            )
+        ),
+    )
+    return result
+
+
 def replay(
     trial,
     left_assets,
@@ -126,7 +165,6 @@ def replay(
     initial_neighbors = {n: d.qpos[a : a + 3].copy() for n, a in neighbors.items()}
     rows = []
     other = {}
-    next_sample = 0
     started = time.monotonic()
     extra = tilt_seconds - 1 if contact_only else 0
     duration = (
@@ -249,7 +287,7 @@ def replay(
             pair = tuple(m.geom(int(g)).name for g in c.geom)
             if "target" not in pair and any(n.startswith(("lh_", "rh_")) for n in pair):
                 other[pair] = min(other.get(pair, 0), float(c.dist))
-        if t >= next_sample:
+        if sample_due(t, len(rows)):
             contacts = []
             forces = []
             for i, c in enumerate(d.contact):
@@ -287,7 +325,6 @@ def replay(
                     },
                 )
             )
-            next_sample = t + 0.04
     late = [v for v in rows if v["seconds"] > duration - 1]
     summary = dict(
         name=name,
@@ -326,26 +363,9 @@ def replay(
         wall_seconds=time.monotonic() - started,
     )
 
-    hold = [v for v in rows if 16 <= v["seconds"] <= 19]
-    carry = [v for v in rows if 11.5 <= v["seconds"] <= 19]
     final = [v for v in rows if duration - 3 <= v["seconds"]]
     summary.update(
-        minimum_carry_bottom_mm=1000 * min(v["bottom_m"] for v in carry),
-        carry_table_fraction=sum(
-            any("table" in p for p in v["contacts"]) for v in carry
-        )
-        / len(carry),
-        carry_neighbor_fraction=sum(
-            any(any(n.startswith("neighbor_") for n in p) for p in v["contacts"])
-            for v in carry
-        )
-        / len(carry),
-        hold_drift_mm=1000
-        * float(
-            np.linalg.norm(
-                np.array(hold[-1]["target_position"]) - hold[0]["target_position"]
-            )
-        ),
+        **carry_metrics(rows, contact_only),
         final_drift_mm=1000
         * float(
             np.linalg.norm(

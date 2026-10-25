@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Offline point-contact wrench proxy, requiring numpy/scipy; no physical grasp verdict.
 
-Positions, inward object-force normals and friction are hypotheses. Polyhedral
-friction cones omit finite patches, force limits, compliance and native contacts.
+Positions, inward object-force normals and friction are hypotheses. The original
+closure proxy omits force limits; gravity_support_proxy accepts explicit limits.
+Both omit finite contact patches, compliance and native contact verification.
 """
 import argparse
 import json
@@ -47,6 +48,91 @@ def balance_proxy(positions, normals, mu, rays=16):
             'positive_internal_equilibrium': margin > 1e-8,
             'full_dimensional_positive_equilibrium_proxy': rank == 6 and margin > 1e-8,
             'solver_status': int(result.status), 'physical_grasp_verified': False}
+
+
+def gravity_support_proxy(
+    positions, normals, center_of_mass, mass, mu, normal_force_limits, rays=16
+):
+    """Can bounded hypothetical point contacts balance gravity without a table?
+
+    Coordinates are in metres in a common frame with +Z upward. Normals point
+    INTO the object. Force limits are assumed contact-normal forces in newtons,
+    not SDK normalized force settings or reported joint efforts. A feasible LP
+    is only a static force-distribution hypothesis: no reachability, actuator/Jacobian limits,
+    contact retention, finite-patch torsion or robustness is established. The
+    polygonal cones are inscribed; their infeasibility need not imply that of
+    exact circular cones, or of a different contact model.
+    """
+
+    p, n = np.asarray(positions, float), np.asarray(normals, float)
+    com, limits = np.asarray(center_of_mass, float), np.asarray(
+        normal_force_limits, float
+    )
+    if (
+        p.ndim != 2
+        or p.shape[1:] != (3,)
+        or len(p) < 1
+        or n.shape != p.shape
+        or com.shape != (3,)
+        or limits.shape != (len(p),)
+        or not all(np.isfinite(v).all() for v in (p, n, com, limits))
+        or np.any(limits < 0)
+        or not np.isfinite(mass)
+        or mass <= 0
+        or not np.isfinite(mu)
+        or mu < 0
+        or not isinstance(rays, int)
+        or rays < 4
+    ):
+        raise ValueError(
+            "Expected finite contacts/COM, positive mass, nonnegative friction and force limits"
+        )
+    lengths = np.linalg.norm(n, axis=1)
+    if np.any(lengths < 1e-12):
+        raise ValueError("Contact normals must be nonzero")
+    columns = []
+    for point, normal in zip(p - com, n / lengths[:, None]):
+        reference = [0.0, 0.0, 1.0] if abs(normal[2]) < 0.9 else [1.0, 0.0, 0.0]
+        tangent = np.cross(normal, reference)
+        tangent /= np.linalg.norm(tangent)
+        other = np.cross(normal, tangent)
+        for angle in np.linspace(0, 2 * np.pi, rays, endpoint=False):
+            force = normal + mu * (np.cos(angle) * tangent + np.sin(angle) * other)
+            columns.append(np.r_[force, np.cross(point, force)])
+    wrench = np.asarray(columns).T
+    normal_sum = np.kron(np.eye(len(p)), np.ones((1, rays)))
+    required = np.array([0.0, 0.0, mass * 9.81, 0.0, 0.0, 0.0])
+    # Scaling moment equations improves conditioning without moving the COM.
+    scale = np.array([1.0, 1.0, 1.0, 40.0, 40.0, 40.0])
+    result = linprog(
+        np.ones(wrench.shape[1]),
+        A_ub=normal_sum,
+        b_ub=limits,
+        A_eq=scale[:, None] * wrench,
+        b_eq=scale * required,
+        bounds=(0, None),
+        method="highs",
+    )
+    return {
+        "gravity_support_feasible": bool(result.success),
+        "solver_status": int(result.status),
+        "assumed_mass_kg": float(mass),
+        "assumed_friction_coefficient": float(mu),
+        "assumed_normal_force_limits_n": limits.tolist(),
+        "minimum_total_normal_force_n": float(result.fun) if result.success else None,
+        "normal_forces_n": (normal_sum @ result.x).tolist() if result.success else None,
+        "force_residual_n": (
+            float(np.linalg.norm((wrench @ result.x - required)[:3]))
+            if result.success
+            else None
+        ),
+        "torque_residual_nm": (
+            float(np.linalg.norm((wrench @ result.x - required)[3:]))
+            if result.success
+            else None
+        ),
+        "physical_grasp_verified": False,
+    }
 
 
 def main():
