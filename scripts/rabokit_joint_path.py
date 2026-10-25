@@ -113,8 +113,8 @@ def centered_inverse(target, seed, forward, limits, stats=None):
     return solved.x.tolist() if accepted else None
 
 
-def pose_path(start, goal, inverse, forward, spacing=.01, joint_step_limit=.15):
-    """Plan translation and rotation with seeded IK; never send controller commands."""
+def pose_path(start, goal, inverse, forward, spacing=.01, joint_step_limit=.15, *, refine_once=False):
+    """Plan seeded IK, optionally halving a rejected segment once; never send commands."""
     import numpy as np
 
     joints = list(start['joints'])
@@ -132,7 +132,23 @@ def pose_path(start, goal, inverse, forward, spacing=.01, joint_step_limit=.15):
         target[:3, :3] = interpolate_rotation(transform[:3, :3], goal[:3, :3], index / count)
         solved = inverse(target, joints)
         if solved is None:
-            return {'continuous': False, 'failed_step': index, 'reason': 'No seeded IK solution', 'points': points}
+            if not refine_once:
+                return {'continuous': False, 'failed_step': index, 'reason': 'No seeded IK solution', 'points': points}
+            previous = np.asarray(forward(joints), dtype=float)
+            for fraction in (.5, 1.):
+                half_target = previous.copy()
+                half_target[:3, 3] += fraction * (target[:3, 3] - previous[:3, 3])
+                half_target[:3, :3] = interpolate_rotation(previous[:3, :3], target[:3, :3], fraction)
+                current = np.asarray(forward(joints))
+                # Explicit half-segments retain all ordinary checks and cannot refine again.
+                half = pose_path({'joints': joints, 'pose': [current[:3, 3].tolist(), [0.] * 3]},
+                                 half_target, inverse, forward, spacing=float('inf'),
+                                 joint_step_limit=joint_step_limit, refine_once=False)
+                points.extend(half['points'])
+                if not half['continuous']:
+                    return {**half, 'failed_step': index, 'points': points}
+                joints = half['points'][-1]['joints']
+            continue
         solved = [float(value) for value in solved]
         if len(solved) != len(joints) or not all(math.isfinite(value) for value in solved):
             return {'continuous': False, 'failed_step': index, 'reason': 'Invalid IK joints', 'points': points}

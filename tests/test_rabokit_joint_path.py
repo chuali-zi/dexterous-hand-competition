@@ -104,6 +104,56 @@ class JointPathTests(unittest.TestCase):
                                     unexpected_forward, [(-1., 1.)] * 7)
         self.assertEqual(result, solution)
 
+    def test_optional_midpoint_recovers_high_jacobian_segment_without_merging_it(self):
+        def forward(joints):
+            pose = np.eye(4)
+            pose[2, 3] = joints[0] / 40
+            return pose
+        calls = []
+        def inverse(target, seed):
+            calls.append(float(target[2, 3]))
+            return centered_inverse(target, seed, forward, [(-1., 1.)] * 7)
+        start = {'joints': [0.] * 7, 'pose': [[0.] * 3, [0.] * 3]}
+        target = np.eye(4)
+        target[2, 3] = .005
+        default = pose_path(start, target, inverse, forward, spacing=.005)
+        self.assertFalse(default['continuous'])
+        self.assertEqual(len(calls), 1)
+        calls.clear()
+        refined = pose_path(start, target, inverse, forward, spacing=.005, refine_once=True)
+        self.assertTrue(refined['continuous'])
+        np.testing.assert_allclose(calls, [.005, .0025, .005])
+        self.assertEqual(len(refined['points']), 2)
+        self.assertEqual(refined['control_point_reduction']['retained_count'], 2)
+        self.assertGreater(refined['points'][-1]['joints'][0], .15)
+        self.assertTrue(all(p['maximum_joint_step_rad'] <= .15 for p in refined['points']))
+        np.testing.assert_allclose(forward(refined['points'][-1]['joints']), target, atol=1e-5)
+        calls.clear()
+        target[2, 3] = .0025
+        accepted = pose_path(start, target, inverse, forward, spacing=.005, refine_once=True)
+        self.assertTrue(accepted['continuous'])
+        self.assertEqual(len(calls), 1)
+
+    def test_optional_midpoint_keeps_real_limits_and_never_refines_a_half_again(self):
+        def forward(joints):
+            pose = np.eye(4)
+            pose[2, 3] = joints[0] / 40
+            return pose
+        calls = []
+        def inverse(target, seed):
+            calls.append(float(target[2, 3]))
+            return centered_inverse(target, seed, forward, [(-1., .15)] + [(-1., 1.)] * 6)
+        start = {'joints': [0.] * 7, 'pose': [[0.] * 3, [0.] * 3]}
+        target = np.eye(4)
+        target[2, 3] = .005
+        result = pose_path(start, target, inverse, forward, spacing=.005, refine_once=True)
+        self.assertFalse(result['continuous'])
+        self.assertEqual(result['failed_step'], 1)
+        self.assertEqual(result['reason'], 'No seeded IK solution')
+        np.testing.assert_allclose(calls, [.005, .0025, .005])
+        self.assertEqual(len(result['points']), 1)
+        self.assertLessEqual(result['points'][0]['joints'][0], .15)
+
     def test_fk_continuation_recovers_a_close_pose_but_rejects_bounds(self):
         def forward(joints):
             pose = np.eye(4)
