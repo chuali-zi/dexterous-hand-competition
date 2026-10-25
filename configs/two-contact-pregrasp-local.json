@@ -1,0 +1,60 @@
+{
+  "name": "right-low-index-stop-left-20deg-arc",
+  "model": "runs/bimanual-contact-68/local-calibrated-contact.xml",
+  "hand_targets": {
+    "lh_thumb_cmc_yaw": 0.0,
+    "lh_thumb_cmc_pitch": 0.0,
+    "lh_thumb_ip": 0.0,
+    "lh_index_mcp_pitch": 0.0,
+    "lh_index_dip": 0.0,
+    "lh_middle_mcp_pitch": 1.45,
+    "lh_middle_dip": 1.45,
+    "lh_ring_mcp_pitch": 1.45,
+    "lh_ring_dip": 1.45,
+    "lh_pinky_mcp_pitch": 1.45,
+    "lh_pinky_dip": 1.45,
+    "rh_thumb_cmc_yaw": 0.8,
+    "rh_thumb_cmc_pitch": 0.0,
+    "rh_thumb_ip": 0.0,
+    "rh_index_mcp_pitch": 0.0,
+    "rh_index_dip": 0.0,
+    "rh_middle_mcp_pitch": 1.2,
+    "rh_middle_dip": 1.2,
+    "rh_ring_mcp_pitch": 1.2,
+    "rh_ring_dip": 1.2,
+    "rh_pinky_mcp_pitch": 1.2,
+    "rh_pinky_dip": 1.2
+  },
+  "left_root_position": [
+    0.26807022770760003,
+    0.10834004845130304,
+    -0.345763880342473
+  ],
+  "left_root_quaternion_wxyz": [
+    6.123031769111886e-17,
+    0.0,
+    1.0,
+    0.0
+  ],
+  "right_root_position": [
+    0.07281322025280068,
+    0.10858425458738558,
+    -0.43380395400485156
+  ],
+  "right_root_quaternion_wxyz": [
+    5.656943728398846e-17,
+    0.9238795325112867,
+    -2.3431828138842247e-17,
+    0.3826834323650898
+  ],
+  "fixed_pivot_world_m": [
+    0.20430452697811688,
+    0.08055292610947161,
+    -0.5561684780567548
+  ],
+  "schedule": "0.5 s settle; right descend 80 mm over 3 s at -40 mm X offset; right move +40 mm X over 2 s; left descend 80 mm over 3 s; left same 20 degree arc over 3 s; hold 2 s. Initial target untouched. Commands depend only on clock.",
+  "status": "local_tilt_hold_only",
+  "physical_grasp_verified": false,
+  "native_route_verified": false,
+  "scope": "Original local model pre-operation only. Maintains a tilted opening with both hands occupied and the table carrying the brick. Direct bilateral lift failed. Current SDK branch does not supply a complete native route."
+}
