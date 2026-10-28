@@ -15,6 +15,10 @@ m,d,mj=p.m,p.d,p.mujoco
 OUT=None
 ALIGN_ON_SUPPORT=False
 BRIDGE_ADJACENT=False
+GUIDE_BRIDGE=False
+BRACE_BRIDGE=False
+FIRM_BRACE_BRIDGE=False
+STRAIGHT_BRACED_PUSH=False
 PUSHER_DROP_MM=0.
 PLACEMENT_SHIFT=np.array([.014,.019,0.])
 old=json.loads(Path('runs/edge-transfer-78/bimanual/bimanual.json').read_text())
@@ -39,6 +43,24 @@ def alignment_offsets(t):
  return offsets
 
 
+def intentional_brace_contact(t,names):
+ if FIRM_BRACE_BRIDGE:
+  return 31<=t<=41.5 and any(set(names)=={finger,'neighbor_4'} for finger in ['lh_middle_distal','lh_index_distal'])
+ return BRACE_BRIDGE and 30<=t<=40.5 and set(names)=={'lh_middle_distal','neighbor_4'}
+
+
+def forbidden_contact(t,names):
+ if any(n.startswith(('lh_','rh_')) for n in names) and 'target' not in names:
+  return not intentional_brace_contact(t,names)
+ # The raised transit must not push the top brick on its way in or out.
+ if FIRM_BRACE_BRIDGE and 'target' in names and any(n.startswith('lh_') for n in names) and (27<=t<33 or t>=41.5):return True
+ return STRAIGHT_BRACED_PUSH and 'target' in names and any(n.startswith('rh_') for n in names) and (27<=t<33 or t>=39.5)
+
+
+def right_turn(t):
+ return Rotation.from_euler('z',30*np.clip((t-27)/3,0,1) if STRAIGHT_BRACED_PUSH else 0,degrees=True)
+
+
 def commands(t,initial=False):
  positions,phase=p.command(min(t,22))
  for side in positions:
@@ -50,8 +72,11 @@ def commands(t,initial=False):
   for side,delta in alignment_offsets(t).items():positions[side]+=delta
   phase=next((name for start,end,_,_,name in ALIGN_STAGES if start<=t<end),'aligned_released')
  for s,a in p.roots.items():
-  d.mocap_pos[mocaps[s]]=positions[s];d.mocap_quat[mocaps[s]]=p.quats[s]
-  if initial:d.qpos[a:a+3]=positions[s];d.qpos[a+3:a+7]=p.quats[s]
+  quat=p.quats[s]
+  if s=='right' and STRAIGHT_BRACED_PUSH:
+   quat=(right_turn(t)*Rotation.from_quat(np.array(quat)[[1,2,3,0]])).as_quat()[[3,0,1,2]]
+  d.mocap_pos[mocaps[s]]=positions[s];d.mocap_quat[mocaps[s]]=quat
+  if initial:d.qpos[a:a+3]=positions[s];d.qpos[a+3:a+7]=quat
  for n,v in p.targets.items():
   d.ctrl[m.actuator(n).id]=v
   if initial:d.qpos[m.jnt_qposadr[m.joint(n).id]]=v
@@ -95,7 +120,11 @@ def check_alignment():
  q={s:source['ik'][s][-1]['final_joints_sdk'] for s in p.roots}
  for start,end,side,delta,name in ALIGN_STAGES:
   offset=np.array([.100,0.,.080 if side=='left' else .090])+PLACEMENT_SHIFT+shifts[side]+alignment_offsets(end)[side]
-  checked=routes.stage(side,ctx[side],q[side],name,offset.tolist());checks.append(checked)
+  stage_context=ctx[side]
+  if side=='right' and STRAIGHT_BRACED_PUSH:
+   stage_context=dict(ctx[side]);stage_context['root']=ctx[side]['root'].copy()
+   stage_context['root'][:3,:3]=right_turn(end).as_matrix()@ctx[side]['root'][:3,:3]
+  checked=routes.stage(side,stage_context,q[side],name,offset.tolist());checks.append(checked)
   if not checked['continuous']:break
   q[side]=checked['final_joints_sdk']
  # Preserve actual unloaded finger geometry. Target contact is intentional;
@@ -104,10 +133,13 @@ def check_alignment():
   d.qpos[:]=retained['rows'][-1]['qpos'];d.qvel[:]=0
   for side,delta in alignment_offsets(t).items():
    address=p.roots[side];d.qpos[address:address+3]+=delta
+   if side=='right' and STRAIGHT_BRACED_PUSH:
+    quat=d.qpos[address+3:address+7].copy()
+    d.qpos[address+3:address+7]=(right_turn(t)*Rotation.from_quat(quat[[1,2,3,0]])).as_quat()[[3,0,1,2]]
   mj.mj_forward(m,d)
   for c in d.contact:
    names=[m.geom(int(g)).name for g in c.geom]
-   if any(n.startswith(('lh_','rh_')) for n in names) and 'target' not in names:
+   if forbidden_contact(float(t),names):
     bad.append(dict(t=float(t),pair=names,depth_mm=-float(c.dist)*1000))
  passed=len(checks)==len(ALIGN_STAGES) and all(x['continuous'] for x in checks) and not bad
  (OUT/'alignment-precheck.json').write_text(json.dumps(dict(passed=passed,ik=checks,non_target_contacts=bad),indent=2))
@@ -127,20 +159,24 @@ def run():
    phase=commands(float(d.time));mj.mj_step(m,d);mj.mj_forward(m,d)
    for c in d.contact:
     names=[m.geom(int(g)).name for g in c.geom]
-    if any(n.startswith(('lh_','rh_')) for n in names) and 'target' not in names:
+    if forbidden_contact(float(d.time),names):
      unexpected.append(dict(t=float(d.time),pair=names,depth_mm=-float(c.dist)*1000))
      if c.dist<-.0005:abort='unintended_hand_collision'
    if step%10==0 or abort:
-    contact=[]
+    contact=[];brace=[]
     for ci,c in enumerate(d.contact):
      names=[m.geom(int(g)).name for g in c.geom]
+     if intentional_brace_contact(float(d.time),names):
+      f=np.zeros(6);mj.mj_contactForce(m,d,ci,f)
+      force=c.frame.reshape(3,3).T@f[:3]*(1 if names[1]=='neighbor_4' else -1)
+      brace.append(dict(pair=names,normal_n=float(f[0]),force_on_support_xyz_n=force.tolist()))
      if 'target' not in names:continue
      f=np.zeros(6);mj.mj_contactForce(m,d,ci,f)
      force=c.frame.reshape(3,3).T@f[:3]*(1 if names[1]=='target' else -1)
-     contact.append(dict(pair=names,normal_n=float(f[0]),up_n=float(force[2])))
+     contact.append(dict(pair=names,normal_n=float(f[0]),up_n=float(force[2]),force_xyz_n=force.tolist(),position_m=c.pos.tolist()))
     pos=d.xpos[target].copy();quat=d.xquat[target].copy()
     row=dict(t=float(d.time),phase=phase,qpos=d.qpos.tolist(),qvel=d.qvel.tolist(),position=pos.tolist(),quaternion=quat.tolist(),
-       support_position=d.xpos[support].tolist(),support_quaternion=d.xquat[support].tolist(),second_support_position=d.xpos[second_support].tolist(),contacts=contact,
+       support_position=d.xpos[support].tolist(),support_quaternion=d.xquat[support].tolist(),second_support_position=d.xpos[second_support].tolist(),contacts=contact,brace_contacts=brace,
        bottom_m=float((corners@d.xmat[target].reshape(3,3).T+pos)[:,2].min()-p.FLOOR))
     if len(rows)<len(old['rows']):prefix_error=max(prefix_error,float(np.max(np.abs(d.qpos-old['rows'][len(rows)]['qpos']))))
     rows.append(row);stream.write(json.dumps(row,allow_nan=False)+'\n');stream.flush()
@@ -155,18 +191,25 @@ def run():
  angular=float(np.rad2deg((rot[0].inv()*rot).magnitude().max()))
  hand_clear=all(not any(any(n.startswith(('lh_','rh_')) for n in c['pair']) for c in r['contacts']) for r in held)
  supported=all(any('neighbor_6' in c['pair'] and c['up_n']>.1 for c in r['contacts']) for r in held)
+ allowed={'neighbor_6','neighbor_4'} if BRIDGE_ADJACENT else {'neighbor_6'}
+ support_only=all(all(n=='target' or n in allowed for n in c['pair']) for r in held for c in r['contacts'])
  offset=positions[-1,:2]-np.array(held[-1]['support_position'][:2])
  summary=dict(abort=abort,wall_seconds=time.monotonic()-start,simulation_seconds=float(d.time),prefix_max_qpos_difference=prefix_error,
  released_duration_s=held[-1]['t']-held[0]['t'],released_samples=len(held),position_drift_mm=drift,rotation_drift_deg=angular,
- hand_contact_absent=hand_clear,red_brick_support_continuous=supported,final_xy_offset_from_support_mm=(offset*1000).tolist(),
+ hand_contact_absent=hand_clear,red_brick_support_continuous=supported,allowed_support_contacts_only=support_only,final_xy_offset_from_support_mm=(offset*1000).tolist(),
  final_bottom_above_table_mm=held[-1]['bottom_m']*1000,unintended_hand_contacts=unexpected,
- local_released_two_brick_stack=bool(not abort and not unexpected and hand_clear and supported and drift<=.002*1000 and angular<=2 and held[-1]['t']-held[0]['t']>=2.98),
+ local_released_two_brick_stack=bool(not abort and not unexpected and hand_clear and supported and support_only and drift<=.002*1000 and angular<=2 and held[-1]['t']-held[0]['t']>=2.98),
  native_verified=False,full_pyramid_verified=False,official_build_region_verified=False)
  summary['planned_diagonal_shift_m']=PLACEMENT_SHIFT.tolist()
  summary['alignment_on_support']=ALIGN_ON_SUPPORT
  summary['center_tolerance_mm']=5.
  summary['centered_placement']=bool(summary['local_released_two_brick_stack'] and np.linalg.norm(offset)<=.005)
  summary['bridge_adjacent']=BRIDGE_ADJACENT
+ summary['guide_bridge']=GUIDE_BRIDGE
+ summary['brace_bridge']=BRACE_BRIDGE
+ summary['firm_brace_bridge']=FIRM_BRACE_BRIDGE
+ summary['straight_braced_push']=STRAIGHT_BRACED_PUSH
+ summary['maximum_brace_normal_n']=max((sum(c['normal_n'] for c in r['brace_contacts']) for r in rows),default=0.)
  summary['pusher_drop_mm']=PUSHER_DROP_MM
  if BRIDGE_ADJACENT:
   second_supported=all(any('neighbor_4' in c['pair'] and c['up_n']>.1 for c in r['contacts']) for r in held)
@@ -186,10 +229,16 @@ if __name__=='__main__':
  parser.add_argument('--out',type=Path,required=True,help='New local result directory; existing results are never overwritten.')
  parser.add_argument('--align-on-support',action='store_true',help='Append two fixed side pushes after the retained diagonal placement.')
  parser.add_argument('--bridge-adjacent',action='store_true',help='Push toward the midpoint of adjacent lower bricks 6 and 4; implies --align-on-support.')
+ parser.add_argument('--guide-bridge',action='store_true',help='Use the left hand as a moving side guide during the right push; implies --bridge-adjacent.')
+ parser.add_argument('--brace-bridge',action='store_true',help='Brace lower brick 4 with the left middle finger while pushing the top brick; implies --bridge-adjacent.')
+ parser.add_argument('--firm-brace-bridge',action='store_true',help='Use raised transit and a 48 mm brace descent; implies --brace-bridge.')
+ parser.add_argument('--straight-braced-push',action='store_true',help='Turn the right fingers 30 degrees toward the push direction; use an 8 mm raised left transit and firm brace.')
  parser.add_argument('--bridge-pusher-drop-mm',type=float,default=0.,help='Lower the right pusher before bridging (0 to 20 mm); requires --bridge-adjacent.')
- args=parser.parse_args();OUT=args.out;BRIDGE_ADJACENT=args.bridge_adjacent;ALIGN_ON_SUPPORT=args.align_on_support or BRIDGE_ADJACENT
+ args=parser.parse_args();OUT=args.out;GUIDE_BRIDGE=args.guide_bridge;STRAIGHT_BRACED_PUSH=args.straight_braced_push;FIRM_BRACE_BRIDGE=args.firm_brace_bridge or STRAIGHT_BRACED_PUSH;BRACE_BRIDGE=args.brace_bridge or FIRM_BRACE_BRIDGE;BRIDGE_ADJACENT=args.bridge_adjacent or GUIDE_BRIDGE or BRACE_BRIDGE;ALIGN_ON_SUPPORT=args.align_on_support or BRIDGE_ADJACENT
  PUSHER_DROP_MM=args.bridge_pusher_drop_mm
  if not 0<=PUSHER_DROP_MM<=20 or (PUSHER_DROP_MM and not BRIDGE_ADJACENT):parser.error('Pusher drop requires bridge mode and a finite value from 0 to 20 mm.')
+ if GUIDE_BRIDGE and PUSHER_DROP_MM:parser.error('The fixed guide experiment does not combine with pusher-drop variants.')
+ if BRACE_BRIDGE and (GUIDE_BRIDGE or PUSHER_DROP_MM):parser.error('The fixed brace experiment does not combine with guide or pusher-drop variants.')
  if BRIDGE_ADJACENT:
   ALIGN_STAGES[0]=(27.,30.5,'right',[0.,.085,0.],'push_y')
   ALIGN_STAGES[1]=(30.5,33.5,'right',[0.,-.085,0.],'retreat_y')
@@ -200,6 +249,47 @@ if __name__=='__main__':
    ALIGN_STAGES += [(a+1,b+1,s,v,n) for a,b,s,v,n in push]
    ALIGN_STAGES += [(34.5,35.5,'right',[0.,0.,PUSHER_DROP_MM/1000],'raise_pusher')]
    ALIGN_STAGES += [(a+2,b+2,s,v,n) for a,b,s,v,n in rest]
+ if GUIDE_BRIDGE:
+  ALIGN_STAGES=[
+   (27.,29.,'left',[-.022,.010,-.020],'approach_guide'),
+   (29.,32.5,'right',[0.,.085,0.],'guided_push'),
+   (29.,32.5,'left',[0.,.048,0.],'follow_guide'),
+   (32.5,35.5,'right',[0.,-.085,0.],'retreat_pusher'),
+   (35.5,37.5,'left',[.040,0.,0.],'retreat_guide'),
+   (37.5,38.5,'left',[0.,0.,.020],'raise_guide'),
+  ]
+ if BRACE_BRIDGE:
+  ALIGN_STAGES=[
+   (27.,30.,'left',[-.065,.095,0.],'approach_brace'),
+   (30.,32.,'left',[0.,0.,-.044],'press_support'),
+   (32.,35.5,'right',[0.,.085,0.],'braced_push'),
+   (35.5,38.5,'right',[0.,-.085,0.],'retreat_pusher'),
+   (38.5,40.5,'left',[0.,0.,.044],'release_brace'),
+   (40.5,42.5,'left',[.065,-.095,0.],'retreat_brace'),
+  ]
+ if FIRM_BRACE_BRIDGE:
+  ALIGN_STAGES=[
+   (27.,28.,'left',[0.,0.,.050],'raise_for_brace'),
+   (28.,31.,'left',[-.065,.095,0.],'approach_brace'),
+   (31.,33.,'left',[0.,0.,-.098],'press_support'),
+   (33.,36.5,'right',[0.,.085,0.],'braced_push'),
+   (36.5,39.5,'right',[0.,-.085,0.],'retreat_pusher'),
+   (39.5,41.5,'left',[0.,0.,.098],'release_brace'),
+   (41.5,44.5,'left',[.065,-.095,0.],'retreat_brace'),
+   (44.5,45.5,'left',[0.,0.,-.050],'lower_clear'),
+  ]
+ if STRAIGHT_BRACED_PUSH:
+  ALIGN_STAGES=[
+   (27.,28.,'left',[0.,0.,.008],'raise_for_brace'),
+   (27.,30.,'right',[.099,-.006,0.],'align_pusher'),
+   (28.,31.,'left',[-.065,.095,0.],'approach_brace'),
+   (31.,33.,'left',[0.,0.,-.056],'press_support'),
+   (33.,36.5,'right',[0.,.060,0.],'braced_push'),
+   (36.5,39.5,'right',[0.,-.060,0.],'retreat_pusher'),
+   (39.5,41.5,'left',[0.,0.,.056],'release_brace'),
+   (41.5,44.5,'left',[.065,-.095,0.],'retreat_brace'),
+   (44.5,45.5,'left',[0.,0.,-.008],'lower_clear'),
+  ]
  OUT.mkdir(parents=True,exist_ok=False)
  if ALIGN_ON_SUPPORT:
   old=json.loads(Path('runs/placement-80/diagonal/release.json').read_text())
