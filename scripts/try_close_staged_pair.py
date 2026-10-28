@@ -19,10 +19,19 @@ CHECK=json.loads((SOURCE/'precheck.json').read_text())
 STATE=np.load(SOURCE/'integration-state.npz',allow_pickle=False)
 CORNERS=previous.w.CORNERS
 MODE='transverse'
+TARGET='neighbor_6'
 
 
 def restore():
-    if not RECORD['summary']['two_red_staging_verified'] or RECORD['summary']['checkpoint_next_step_maximum_difference']>1e-10:
+    summary=RECORD['summary']
+    usable=summary.get('two_red_staging_verified',False)
+    if MODE.startswith('align-first') or MODE=='close-final':
+        expected='align-first-side' if MODE=='close-final' else 'transverse'
+        protected='neighbor_6' if MODE=='close-final' else 'neighbor_9'
+        usable=(summary.get('mode')==expected and summary.get('abort') is None
+                and summary.get('held_duration_s',0)>=2.98 and not summary.get('unintended_hand_contacts',[])
+                and summary.get('other_bricks_max_shift_mm',{}).get(protected,float('inf'))<=2)
+    if not usable or summary.get('checkpoint_next_step_maximum_difference',float('inf'))>1e-10:
         raise ValueError('Source staging or continuation equivalence is unverified')
     if str(STATE['mujoco_version'])!=mj.__version__ or len(STATE['state'])!=mj.mj_stateSize(m,int(STATE['spec'])):
         raise ValueError('Checkpoint runtime or dimensions differ')
@@ -36,19 +45,28 @@ START_ROT=Rotation.from_quat(d.mocap_quat[t.LM][[1,2,3,0]])
 
 
 def parameters():
+    if MODE=='close-final':return 0.,.010
+    if MODE.startswith('align-first'):
+        if MODE=='align-first-side':return 0.,.022
+        return (90. if MODE=='align-first-front' else -90.)+np.rad2deg(np.arctan(.08)),.022
     return (90.,.035) if MODE=='transverse' else (60.,.040)
 
 
 def contact_root():
     angle,_=parameters();rotation=Rotation.from_euler('z',angle,degrees=True)
-    normal=rotation.apply([1,0,0]);tangent=rotation.apply([0,1,0])
+    # The continued transverse checkpoint already has a 90-degree world yaw.
+    world_angle=angle+(90. if MODE.startswith('align-first') else 0.)+(180. if MODE=='align-first' else 0.)
+    if MODE=='align-first-side':world_angle=180.+np.rad2deg(np.arctan(.08))
+    if MODE=='close-final':world_angle=90.
+    world_rotation=Rotation.from_euler('z',world_angle,degrees=True)
+    normal=world_rotation.apply([1,0,0]);tangent=world_rotation.apply([0,1,0])
     t.initialize();d.qpos[t.LA:t.LA+3]=[0,0,t.ROOT[2]]
     d.qpos[t.LA+3:t.LA+7]=(rotation*START_ROT).as_quat()[[3,0,1,2]];mj.mj_forward(m,d)
     vertices=[]
     for name in ['lh_index_proximal','lh_index_distal','lh_middle_proximal','lh_middle_distal']:
         g=m.geom(name).id;mesh=int(m.geom_dataid[g]);a=int(m.mesh_vertadr[mesh]);n=int(m.mesh_vertnum[mesh])
         vertices.extend(m.mesh_vert[a:a+n]@d.geom_xmat[g].reshape(3,3).T+d.geom_xpos[g])
-    vertices=np.array(vertices);source=RECORD['rows'][-1]['bricks']['neighbor_6'];center=np.array(source['position'])
+    vertices=np.array(vertices);source=RECORD['rows'][-1]['bricks'][TARGET];center=np.array(source['position'])
     pts=Rotation.from_quat(np.array(source['quaternion'])[[1,2,3,0]]).apply(CORNERS)+center
     rn=float((pts@normal).max()-(vertices@normal).min()-.0005)
     ru=float(center@tangent-((vertices@tangent).min()+(vertices@tangent).max())/2)
@@ -60,6 +78,20 @@ def contact_root():
 
 
 ROOT,NORMAL=contact_root()
+
+
+def configure(mode):
+    """Select a retained, checked source and its fixed offline teaching action."""
+    global MODE,SOURCE,TARGET,RECORD,CHECK,STATE,START_TIME,START_POS,START_ROT,ROOT,NORMAL
+    MODE=mode
+    if mode=='close-final':SOURCE=Path('runs/pair-alignment-87/first-red-side');TARGET='neighbor_6'
+    elif mode.startswith('align-first'):SOURCE=Path('runs/pair-alignment-86/transverse');TARGET='neighbor_9'
+    else:SOURCE=Path('runs/wide-staging-85/segment-163-endpoint-fixed');TARGET='neighbor_6'
+    RECORD=json.loads((SOURCE/'result.json').read_text());CHECK=json.loads((SOURCE/'precheck.json').read_text())
+    STATE=np.load(SOURCE/'integration-state.npz',allow_pickle=False);restore()
+    START_TIME=float(d.time);START_POS=d.mocap_pos[t.LM].copy()
+    START_ROT=Rotation.from_quat(d.mocap_quat[t.LM][[1,2,3,0]])
+    ROOT,NORMAL=contact_root()
 
 
 def command(seconds):
@@ -83,7 +115,7 @@ def precheck():
         restore();pos,quat,phase=command(float(seconds));d.qpos[t.LA:t.LA+3]=pos;d.qpos[t.LA+3:t.LA+7]=quat;mj.mj_forward(m,d)
         for c in d.contact:
             pair=[m.geom(int(g)).name for g in c.geom]
-            if any(n.startswith(('lh_','rh_')) for n in pair) and 'neighbor_6' not in pair:
+            if any(n.startswith(('lh_','rh_')) for n in pair) and TARGET not in pair:
                 failures.append(dict(t=float(seconds),phase=phase,pair=pair,distance_m=float(c.dist)))
     ctx=t.routes.context()['left'];ctx['limits']=ctx['intersection']+[.020,-.020];ctx['inset']=.020
     q=CHECK['stages'][-1]['result']['final_joints_sdk'];stages=[]
@@ -100,7 +132,7 @@ def precheck():
 def run(out):
     restore();mj.mj_forward(m,d)
     others={m.body(i).name:i for i in range(m.nbody)
-            if (m.body(i).name=='target' or m.body(i).name.startswith('neighbor_')) and m.body(i).name!='neighbor_6'}
+            if (m.body(i).name=='target' or m.body(i).name.startswith('neighbor_')) and m.body(i).name!=TARGET}
     initial={n:d.xpos[i].copy() for n,i in others.items()};shifts={n:0. for n in others}
     rows=[];bad=[];abort=None;started=time.monotonic()
     with (out/'trace.jsonl').open('x') as stream:
@@ -111,7 +143,7 @@ def run(out):
             contacts={n:[] for n in ['neighbor_6','neighbor_9']}
             for ci,c in enumerate(d.contact):
                 pair=[m.geom(int(g)).name for g in c.geom]
-                if any(n.startswith(('lh_','rh_')) for n in pair) and 'neighbor_6' not in pair:
+                if any(n.startswith(('lh_','rh_')) for n in pair) and TARGET not in pair:
                     bad.append(dict(t=float(d.time),pair=pair,distance_m=float(c.dist)))
                     if c.dist<-.0005:abort='unexpected_hand_contact'
                 for n in contacts:
@@ -166,8 +198,8 @@ def run(out):
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--out',type=Path,required=True)
-    parser.add_argument('--mode',choices=['transverse','diagonal','diagonal-clear'],default='transverse');parser.add_argument('--run',action='store_true')
-    args=parser.parse_args();MODE=args.mode;ROOT,NORMAL=contact_root();args.out.mkdir(parents=True,exist_ok=False)
+    parser.add_argument('--mode',choices=['transverse','diagonal','diagonal-clear','align-first','align-first-front','align-first-side','close-final'],default='transverse');parser.add_argument('--run',action='store_true')
+    args=parser.parse_args();configure(args.mode);args.out.mkdir(parents=True,exist_ok=False)
     result=precheck();(args.out/'precheck.json').write_text(json.dumps(result,allow_nan=False))
     print(json.dumps(dict(passed=result['passed'],geometry_failures=len(result['geometry_failures']),first_failure=result['geometry_failures'][:1],stages=len(result['stages']))),flush=True)
     passed=result['passed']
