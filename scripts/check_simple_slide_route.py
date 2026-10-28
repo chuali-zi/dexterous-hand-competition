@@ -27,7 +27,8 @@ def check_empty_segments(segments, hand_targets, mount, trace):
     left = int(model.jnt_qposadr[model.joint('hand_root_free').id])
     right = int(model.jnt_qposadr[model.joint('right_hand_root_free').id])
     data.qpos[right + 2] += .5
-    target = int(model.jnt_qposadr[model.body('target').jntadr[0]])
+    target_body = trace['candidate'].get('target_body', 'target')
+    target = int(model.jnt_qposadr[model.body(target_body).jntadr[0]])
     for name, value in hand_targets.items():
         data.qpos[model.jnt_qposadr[model.joint(name).id]] = value
     checks = []
@@ -50,7 +51,7 @@ def check_empty_segments(segments, hand_targets, mount, trace):
                            hand_root_minimum=np.min(roots, axis=0).tolist(),
                            hand_root_maximum=np.max(roots, axis=0).tolist(),
                            contacts=collisions[:20], contact_sample_count=len(collisions)))
-    return dict(clear=all(c['clear'] for c in checks), checks=checks,
+    return dict(clear=all(c['clear'] for c in checks), target_body=target_body, checks=checks,
                 scope='Local hand collision only, fixed parked right hand; no full-arm collision claim')
 
 
@@ -69,11 +70,14 @@ def run(trace_path, output, sdk_cache):
     trace = json.loads(trace_path.read_text())
     candidate = trace['candidate']
     withdraw_height = candidate.get('withdraw_height_m', .08)
+    push_sign = candidate.get('push_sign', -1)
+    push_distance = candidate.get('push_distance_m', .12)
+    release_order = candidate.get('release_order', 'retreat_then_lift')
+    if release_order not in ('retreat_then_lift', 'lift_then_retreat'):
+        raise ValueError('Unsupported release order')
+    lift_first = release_order == 'lift_then_retreat'
     def offset_at(seconds):
-        offset, phase = command_offset(seconds)
-        if seconds >= 9:
-            offset[2] = withdraw_height * min(1., (seconds - 9) / 2)
-        return offset, phase
+        return command_offset(seconds, withdraw_height, push_sign, push_distance, lift_first)
     old = json.loads(Path('runs/arm-feasible-74/opposition/asymmetric-contact-candidate.json').read_text())
     limits = np.asarray(json.loads(Path('runs/two-contact-73/reachability/endpoint-results.json').read_text())['sides']['left']['intersection_limits'])
     mount = np.asarray(json.loads(Path('configs/bimanual-contact.json').read_text())['tool_to_hand']['left'])
@@ -85,7 +89,8 @@ def run(trace_path, output, sdk_cache):
     stats = {}
     inverse = lambda target, q: centered_inverse(target, q, forward, limits, stats)
     started = time.monotonic()
-    q = inverse(root @ inv_mount, old['arm_joints_sdk']['left'])
+    contact_seed = candidate.get('contact_joints_sdk', old['arm_joints_sdk']['left'])
+    q = inverse(root @ inv_mount, contact_seed)
     if q is None:
         result = {'continuous': False, 'failure': 'No nearby contact-pose IK from retained left-arm seed'}
     else:
@@ -112,8 +117,9 @@ def run(trace_path, output, sdk_cache):
         if complete:
             all_points.append(dict(seconds=0., phase='staging', joints=list(q)))
             previous_seconds = .5
-            for seconds, phase in [(3., 'descend'), (4., 'approach'), (8., 'push'),
-                                   (9., 'retreat'), (11., 'withdraw')]:
+            release_stages = ([(10., 'withdraw'), (11., 'retreat')] if lift_first else
+                              [(9., 'retreat'), (11., 'withdraw')])
+            for seconds, phase in [(3., 'descend'), (4., 'approach'), (8., 'push')] + release_stages:
                 offset, _ = offset_at(seconds)
                 origin = (forward(q) @ mount)[:3, 3]
                 end = root[:3, 3] + offset
@@ -158,8 +164,11 @@ def run(trace_path, output, sdk_cache):
                        [dict(phase='high_connection', joints=p) for p in bridge],
                 maximum_connection_joint_step_rad=float(np.max(np.abs(goal - previous))) / count)
             result['return_stages'] = []
-            for phase, offset in [('return_above_source', [.020, 0., withdraw_height]),
-                                  ('return_to_staging', [.020, 0., .080])]:
+            staging_offset, _ = offset_at(.5)
+            above_source_offset = staging_offset.copy()
+            above_source_offset[2] = withdraw_height
+            for phase, offset in [('return_above_source', above_source_offset),
+                                  ('return_to_staging', staging_offset)]:
                 path = segment(q, root[:3, 3] + np.array(offset))
                 result['return_stages'].append(dict(phase=phase, **path))
                 if not path['continuous']:
@@ -190,7 +199,12 @@ def run(trace_path, output, sdk_cache):
             result['minimum_complete_route_margin_rad'] = float(min(np.minimum(np.asarray(p) - limits[:, 0], limits[:, 1] - np.asarray(p)).min() for p in full))
             result['maximum_complete_route_joint_step_rad'] = float(np.max(np.abs(np.diff(np.asarray(full), axis=0))))
             result['numerical_empty_travel_pass'] = bool(result['return_continuous'] and result['new_empty_travel_collision']['clear'])
-    result.update(source_trace=str(trace_path), wall_seconds=time.monotonic() - started,
+    result.update(source_trace=str(trace_path), candidate=candidate,
+                  trajectory_parameters=dict(push_sign=push_sign, push_distance_m=push_distance,
+                                             withdraw_height_m=withdraw_height,
+                                             release_order=release_order,
+                                             target_body=candidate.get('target_body', 'target')),
+                  wall_seconds=time.monotonic() - started,
                   scope=__doc__, motion_commanded=False, native_to_staging_checked=False,
                   historical_to_staging_numerically_checked=bool(result.get('numerical_empty_travel_pass')),
                   whole_arm_collision_checked=False, idle_right_raise_is_native_pose=False)

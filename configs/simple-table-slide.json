@@ -1,5 +1,10 @@
 {
-  "scope": "Fixed-scene local table-slide candidate, numerical joint replay only. No native execution, grasp, stacking, destination success or competition score is claimed.",
+  "scope": "Rejected for native use: the -X 120 mm slide exits the visible real tabletop. Retained only as the historical infinite-plane diagnostic; no native execution, stacking or score is claimed.",
+  "native_scene_checks": {
+    "tabletop_and_slide_region_verified": false,
+    "source": "runs/brick-index-depth-45/initial/base_cam/frame.png with retained camera/robot TF; scripts/check_slide_table_support.py",
+    "rejection_reason": "Projected final brick center is about 17.5 mm past the visible left table edge; the full footprint exits earlier."
+  },
   "source": {
     "trace": "runs/simple-transfer-76/slide/center-two-low-withdraw.json",
     "numerical_route": "runs/simple-transfer-76/route/center-two-low-withdraw.json",
@@ -1066,7 +1071,7 @@
     "released_drift_mm": 0.0
   },
   "unverified": [
-    "Finite tabletop bounds and destination region.",
+    "Known table-support failure: final footprint exits the visible left edge. Destination region also remains unverified.",
     "Whole-arm collisions and native right-arm parking.",
     "New entry, pushing and return on the native platform.",
     "Fresh image validation and replay tolerances.",
