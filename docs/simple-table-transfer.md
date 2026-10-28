@@ -452,3 +452,37 @@ python scripts/try_close_staged_pair.py --mode close-final --run --out runs/pair
 ```
 
 两条命令分别使用固定保留来源`runs/pair-alignment-86/transverse/`、`runs/pair-alignment-87/first-red-side/`，第二条不会自动选择前一条的新输出。当前可继续扩展底层的完整末态为`runs/pair-alignment-87/final-close/`。依赖本机保留资产，不能仅克隆源码独立运行。
+
+## 第88轮：清道、送入第三红砖、再靠拢
+
+从第87轮223.002秒末态继续，新增[第三基砖推送脚本](../scripts/try_third_base_transfer.py)。仍使用固定离线示教关键点，先将挡住红砖4的黄砖5向+X移开，再运行居中的三段推送，将红砖4送入分析空区；不重放此前223秒，也不重置任何砖。黄砖阶段要求其余9砖均不被明显移动；红砖阶段在运行前明确允许已经暂存的黄砖通过砖—砖接触继续让位，但要求原两红砖和其余砖全过程位移≤2mm，全部砖最终只由桌面稳定支撑。这沿用此前红砖／蓝砖清道方式，不把黄砖临时停车计入第二层。
+
+两条路线各1161个局部几何样本、52段连续SDK路线通过，最小关节余量分别0.071346／0.020000rad。实际黄砖先从X329.345mm移动到458.653mm，末态Y185.838mm，其他砖无位移、撤手稳定3秒。随后红砖4从X229.298mm移动到418.843mm，末态Y179.365mm、偏航−15.161°；原两红砖全过程位移为0。暂存黄砖最大位移13.938mm，最终在 `(470.560,178.896)mm` 放稳，其余砖不动，两次均无非目标手接触并退出0。这里的通过仅代表清道／送入放稳，红砖此时仍未排齐。
+
+随后扩展[靠拢脚本](../scripts/try_close_staged_pair.py)的`align-third`模式：由红砖4已测末态离线确定接触面，绕Z转90°、沿−Y推45mm，再撤手观察3秒。401个局部几何样本和80段连续SDK路线通过，最小余量0.020570rad。实际第三块沿Y移−36.824mm、沿X移−6.686mm，原两块仍不动；黄砖5本段最多移动0.186mm，其余砖不动。
+
+| 最终红砖 | 中心X/Y（mm） | 偏航 | 与前一块X错位绝对值 | 与前一块Y中心距／投影间隙 |
+|---|---:|---:|---:|---:|
+| 红砖9 | 414.934 / 28.865 | +3.420° | — | — |
+| 红砖6 | 412.430 / 86.620 | −4.746° | 2.504mm | 57.755 / 4.326mm |
+| 红砖4 | 412.156 / 142.542 | −5.765° | 0.273mm | 55.921 / 1.554mm |
+
+最终三块均在原分析空区内，撤手后151个样本覆盖3秒，各仅由桌面承担约0.981N、位置漂移0、角漂移数值零。沿用第86轮距离与偏航要求，对每对相邻砖检查；`local_three_brick_alignment_verified=true`。仍未放入第四块红砖，`full_base_row_verified`、`native_verified`、`official_region_verified`、`full_pyramid_verified`均为false。下一步从此末态清出最后一块红砖2的通道，验证第四块进入和靠拢，不能跳过对现有三块的保护检查。
+
+### 汇总错误与修正
+
+靠拢动作最初退出1：旧接触检查只允许名字`table/neighbor_6/neighbor_9`，将正常的`table/neighbor_4`也拒绝，导致第三块的`allowed_released_contacts=false`。核查末段全部接触对，确认它只接触桌面。修正为当前跟踪的红砖集合，并将轨迹评价提取为可独立调用的函数；原始结果保留为`result.before-contact-name-fix.json`，原轨迹与检查点不变，仅重算汇总。修正后的结果明确记录`original_process_exit_code=1`与`reevaluated_from_saved_trace=true`，不将原进程改称退出0，也没有重跑物理或放宽距离、支撑、漂移、角度标准。
+
+五条历史轨迹通过同一评价函数重算，结论与保留结果一致；向第三块轨迹分别加入手部接触、移除支撑力、增加20mm位置误差时，三砖判据均拒绝。空轨迹不会沿用旧的通过标志。原两砖的评价与第三块条件分开，第三块不通过不再误称原两砖失去排齐。
+
+### 记录与预算
+
+三段新增模拟时间58／58／20秒，累计时间由223.002推进到359.002秒；循环墙钟54.890／51.438／12.750秒，合计119.078秒，不含预检、导入和分析。本轮无Web操作或平台启动，没有新训练。三条轨迹分别2900／2900／1000行，JSON与JSONL一致；保存qpos与末行一致，每个完整状态恢复后的下一步计算差均为0。162项清道／进入指令边界检查、五条历史评价回归、上述四类负例、17项既有SDK路径／双臂路线测试、脚本语法和新增入口检查通过。最终全场图`runs/third-base-88/three-red-review.png`由最终完整检查点生成并目视复核。
+
+```powershell
+python scripts/try_third_base_transfer.py --run --out runs/third-base-88/repeat-yellow
+python scripts/try_third_base_transfer.py --target neighbor_4 --run --out runs/third-base-88/repeat-red
+python scripts/try_close_staged_pair.py --mode align-third --run --out runs/third-base-88/repeat-align
+```
+
+脚本仍依赖固定本机保留来源，后两条不会自动选择新输出；当前三砖末态为`runs/third-base-88/aligned/`。模型质量、桌面范围、右手停放等既有假设未改变；局部手部接触和数值运动学不替代整臂碰撞、正式区域或平台原生验证。
