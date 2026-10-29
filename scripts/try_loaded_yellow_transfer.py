@@ -16,11 +16,31 @@ STATE=np.load(SOURCE/'integration-state.npz',allow_pickle=False)
 CHECK=json.loads(Path('runs/upper-layer-93/cupped-receiver/precheck.json').read_text())
 DURATION=16.
 LEFT_CLEAR=np.array([.080,.080,.050])
+TARGET='neighbor_1'
+CONTINUOUS_SOURCE=False
+
+
+def configure_continuation(source,target):
+    global SOURCE,RECORD,STATE,CHECK,TARGET,CONTINUOUS_SOURCE
+    new_source=Path(source);record=json.loads((new_source/'result.json').read_text());check=json.loads((new_source/'precheck.json').read_text())
+    state=np.load(new_source/'integration-state.npz',allow_pickle=False);s=record['summary']
+    held=[r for r in record['rows'] if r['elapsed_s']>=s['duration_s']-3-1e-8]
+    if (s.get('target')!=target or not s.get('local_acquisition_verified',False) or s['abort'] or not check['passed']
+            or s['held_duration_s']<2.98 or s['held_drift_mm']>2 or s.get('held_angular_drift_degrees',float('inf'))>2
+            or s['held_minimum_bottom_mm']<5 or s['held_minimum_hand_up_force_n']<.8*m.body(target).mass*9.81
+            or max(s['other_bricks_max_shift_mm'].values())>2 or s['checkpoint_next_step_maximum_difference']>1e-10
+            or not held or not all(r['contacts'] and all(any(n.startswith('rh_') for n in c['pair']) for c in r['contacts']) for r in held)):
+        raise ValueError('Source is not a stable right-hand acquisition')
+    if str(state['mujoco_version'])!=mj.__version__ or len(state['state'])!=mj.mj_stateSize(m,int(state['spec'])):raise ValueError('Checkpoint runtime mismatch')
+    candidate=mj.MjData(m);mj.mj_setState(m,candidate,state['state'],int(state['spec']));mj.mj_forward(m,candidate)
+    if not np.allclose(candidate.qpos,record['rows'][-1]['qpos'],rtol=0,atol=1e-12) or not np.allclose(candidate.qvel,record['rows'][-1]['qvel'],rtol=0,atol=1e-12):raise ValueError('State and trace differ')
+    SOURCE=new_source;RECORD=record;STATE=state;CHECK=check;TARGET=target
+    CONTINUOUS_SOURCE=bool(s.get('source_sequence_continuity_verified',False))
 
 
 def restore():
     s=RECORD['summary']
-    if not s['local_loaded_hold_verified'] or s['abort'] or s['checkpoint_next_step_maximum_difference']>1e-10:
+    if not (s.get('local_loaded_hold_verified',False) or s.get('local_acquisition_verified',False)) or s['abort'] or s['checkpoint_next_step_maximum_difference']>1e-10:
         raise ValueError('Loaded source did not pass its unchanged hold')
     if str(STATE['mujoco_version'])!=mj.__version__ or len(STATE['state'])!=mj.mj_stateSize(m,int(STATE['spec'])):
         raise ValueError('Checkpoint runtime mismatch')
@@ -29,7 +49,7 @@ def restore():
 
 def prepare():
     restore();poses={side:(d.mocap_pos[index].copy(),d.mocap_quat[index].copy()) for side,index in [('left',p.t.LM),('right',p.t.RM)]}
-    target=d.xpos[m.body('neighbor_1').id].copy()
+    target=d.xpos[m.body(TARGET).id].copy()
     pair=(d.xpos[m.body('neighbor_9').id]+d.xpos[m.body('neighbor_6').id])/2
     delta=pair-target;delta[2]=.080
     def command(seconds):
@@ -39,14 +59,14 @@ def prepare():
         right=lift+horizontal
         phase='left_clear' if seconds<3 else 'raise_payload' if seconds<7 else 'transfer_over_pair' if seconds<13 else 'hold'
         return {side:(poses[side][0]+offset,poses[side][1]) for side,offset in [('left',left),('right',right)]},right,phase
-    return command,dict(source=str(SOURCE),initial_target_center_m=target.tolist(),red_pair_center_m=pair.tolist(),
+    return command,dict(source=str(SOURCE),target=TARGET,initial_target_center_m=target.tolist(),red_pair_center_m=pair.tolist(),
                         requested_payload_translation_m=delta.tolist(),left_clear_m=LEFT_CLEAR.tolist(),
                         finger_controls_unchanged=True,upper_placement_verified=False,native_verified=False,
-                        whole_arm_collision_checked=False,source_sequence_continuity_verified=False)
+                        whole_arm_collision_checked=False,source_sequence_continuity_verified=CONTINUOUS_SOURCE)
 
 
 def precheck(command):
-    started=time.monotonic();bad=[];restore();target_address=m.jnt_qposadr[m.joint('neighbor_1_free').id]
+    started=time.monotonic();bad=[];restore();target_address=m.jnt_qposadr[m.joint(TARGET+'_free').id]
     for seconds in np.linspace(0,DURATION,321):
         restore();poses,offset,phase=command(seconds)
         for side,address in [('left',p.t.LA),('right',p.t.RA)]:
@@ -54,8 +74,8 @@ def precheck(command):
         d.qpos[target_address:target_address+3]+=offset;mj.mj_forward(m,d)
         for c in d.contact:
             ns=[m.geom(int(i)).name for i in c.geom]
-            allowed='neighbor_1' in ns and any(n.startswith('rh_') for n in ns)
-            relevant='neighbor_1' in ns or any(n.startswith(('rh_','lh_')) for n in ns)
+            allowed=TARGET in ns and any(n.startswith('rh_') for n in ns)
+            relevant=TARGET in ns or any(n.startswith(('rh_','lh_')) for n in ns)
             if relevant and not allowed:bad.append(dict(t=float(seconds),phase=phase,pair=ns,depth_mm=-float(c.dist)*1000))
     restore();stages={};initial={}
     for side,index,seed in [('left',p.t.LM,CHECK['left_stages'][-1]['result']['final_joints_sdk']),('right',p.t.RM,CHECK['right_lift']['final_joints_sdk'])]:
@@ -77,7 +97,7 @@ def precheck(command):
 
 
 def run(command,plan,out):
-    restore();start=float(d.time);body=m.body('neighbor_1').id;target=d.xpos[body].copy()
+    restore();start=float(d.time);body=m.body(TARGET).id;target=d.xpos[body].copy()
     others={m.body(i).name:d.xpos[i].copy() for i in range(m.nbody) if (m.body(i).name=='target' or m.body(i).name.startswith('neighbor_')) and i!=body}
     shifts={n:0. for n in others};rows=[];bad=[];abort=None;started=time.monotonic()
     with (out/'trace.jsonl').open('x') as stream:
@@ -91,12 +111,12 @@ def run(command,plan,out):
             contacts=[]
             for ci,c in enumerate(d.contact):
                 ns=[m.geom(int(i)).name for i in c.geom]
-                relevant='neighbor_1' in ns or any(n.startswith(('rh_','lh_')) for n in ns)
-                allowed='neighbor_1' in ns and any(n.startswith('rh_') for n in ns)
+                relevant=TARGET in ns or any(n.startswith(('rh_','lh_')) for n in ns)
+                allowed=TARGET in ns and any(n.startswith('rh_') for n in ns)
                 if relevant and not allowed and c.dist<-.0005:
                     bad.append(dict(t=float(d.time)-start,pair=ns,depth_mm=-float(c.dist)*1000));abort='unexpected_contact'
-                if 'neighbor_1' in ns:
-                    f=np.zeros(6);mj.mj_contactForce(m,d,ci,f);v=c.frame.reshape(3,3).T@f[:3]*(1 if ns[1]=='neighbor_1' else -1)
+                if TARGET in ns:
+                    f=np.zeros(6);mj.mj_contactForce(m,d,ci,f);v=c.frame.reshape(3,3).T@f[:3]*(1 if ns[1]==TARGET else -1)
                     contacts.append(dict(pair=ns,force_xyz_n=v.tolist()))
             rot=Rotation.from_quat(d.xquat[body][[1,2,3,0]]);bottom=float((rot.apply(p.CORNERS)+d.xpos[body])[:,2].min()-a.g.FLOOR)
             error=float(np.linalg.norm(d.xpos[body]-target-offset))
@@ -109,9 +129,9 @@ def run(command,plan,out):
                 rows.append(row);stream.write(json.dumps(row,allow_nan=False)+'\n')
             if abort:break
     held=[r for r in rows if r['elapsed_s']>=13-1e-8]
-    summary=dict(abort=abort,duration_s=float(d.time)-start,wall_seconds=time.monotonic()-started,unintended_contacts=bad,
+    summary=dict(target=TARGET,abort=abort,duration_s=float(d.time)-start,cumulative_simulation_s=float(d.time),wall_seconds=time.monotonic()-started,unintended_contacts=bad,
                  other_bricks_max_shift_mm={n:v*1000 for n,v in shifts.items()},local_loaded_transfer_verified=False,
-                 upper_placement_verified=False,native_verified=False,whole_arm_collision_checked=False,source_sequence_continuity_verified=False)
+                 upper_placement_verified=False,native_verified=False,whole_arm_collision_checked=False,source_sequence_continuity_verified=CONTINUOUS_SOURCE)
     if held:
         xyz=np.array([r['position_m'] for r in held]);rot=Rotation.from_quat(np.array([r['quaternion_wxyz'] for r in held])[:,[1,2,3,0]])
         drift=float(np.linalg.norm(xyz-xyz[0],axis=1).max());angle=float(np.degrees((rot[0].inv()*rot).magnitude().max()))
@@ -121,7 +141,7 @@ def run(command,plan,out):
                        held_minimum_bottom_mm=min(r['lowest_corner_m'] for r in held)*1000,held_minimum_up_force_n=up,
                        held_only_right_hand_contacts=right_only,final_translation_error_mm=held[-1]['payload_translation_error_m']*1000)
         summary['local_loaded_transfer_verified']=bool(not abort and not bad and summary['held_duration_s']>=2.98 and drift<=.002
-                         and angle<=2 and right_only and up>=.8*m.body('neighbor_1').mass*9.81 and summary['final_translation_error_mm']<=5)
+                         and angle<=2 and right_only and up>=.8*m.body(TARGET).mass*9.81 and summary['final_translation_error_mm']<=5)
     spec=mj.mjtState.mjSTATE_INTEGRATION;state=np.empty(mj.mj_stateSize(m,spec));mj.mj_getState(m,d,state,spec)
     np.savez(out/'integration-state.npz',state=state,spec=int(spec),mujoco_version=mj.__version__)
     restored=mj.MjData(m);mj.mj_setState(m,restored,state,spec);x=np.empty_like(state);y=np.empty_like(state)
@@ -133,7 +153,11 @@ def run(command,plan,out):
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--out',type=Path,required=True);parser.add_argument('--run',action='store_true')
-    args=parser.parse_args();args.out.mkdir(parents=True,exist_ok=False);command,plan=prepare();checked=precheck(command)
+    parser.add_argument('--source',type=Path);parser.add_argument('--target',choices=['neighbor_1','neighbor_5'],default='neighbor_1')
+    args=parser.parse_args()
+    if args.source:configure_continuation(args.source,args.target)
+    elif args.target!='neighbor_1':raise ValueError('A different target requires its actual source')
+    args.out.mkdir(parents=True,exist_ok=False);command,plan=prepare();checked=precheck(command)
     (args.out/'plan.json').write_text(json.dumps(plan,allow_nan=False));(args.out/'precheck.json').write_text(json.dumps(checked,allow_nan=False))
     brief=dict(precheck_passed=checked['passed'],geometry_failure_count=len(checked['geometry_failures']),stage_counts={s:len(v) for s,v in checked['stages'].items()},precheck_wall_seconds=checked['wall_seconds'])
     passed=checked['passed']

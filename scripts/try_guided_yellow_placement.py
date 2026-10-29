@@ -1,7 +1,8 @@
 """Local guided release from the actual loaded-transfer checkpoint.
 
 Left fingers form a north-side guide; the right hand lowers 10 mm, opens and
-withdraws southwest. No object resets, online truth correction or platform.
+withdraws southwest by default. Optional local comparisons change the guide,
+withdrawal direction or opening sequence. No object resets or online truth.
 """
 import argparse,json,time
 from pathlib import Path
@@ -15,6 +16,21 @@ RECORD=json.loads((SOURCE/'result.json').read_text())
 STATE=np.load(SOURCE/'integration-state.npz',allow_pickle=False)
 CHECK=json.loads((SOURCE/'precheck.json').read_text())
 TARGET='neighbor_1';SUPPORTS=['neighbor_9','neighbor_6'];DURATION=22.
+CONTINUOUS_SOURCE=False
+
+
+def configure_continuation(source,target):
+    global SOURCE,RECORD,STATE,CHECK,TARGET,CONTINUOUS_SOURCE
+    new_source=Path(source);record=json.loads((new_source/'result.json').read_text());check=json.loads((new_source/'precheck.json').read_text())
+    state=np.load(new_source/'integration-state.npz',allow_pickle=False);s=record['summary']
+    if (s.get('target')!=target or not s.get('local_loaded_transfer_verified',False) or s['abort'] or s['unintended_contacts'] or not check['passed']
+            or not s['held_only_right_hand_contacts'] or s['held_duration_s']<2.98 or s['held_drift_mm']>2 or s['held_angular_drift_degrees']>2
+            or s['held_minimum_up_force_n']<.8*m.body(target).mass*9.81 or max(s['other_bricks_max_shift_mm'].values())>2
+            or s['checkpoint_next_step_maximum_difference']>1e-10):raise ValueError('Source is not a verified loaded transfer')
+    if str(state['mujoco_version'])!=mj.__version__ or len(state['state'])!=mj.mj_stateSize(m,int(state['spec'])):raise ValueError('Checkpoint runtime mismatch')
+    candidate=mj.MjData(m);mj.mj_setState(m,candidate,state['state'],int(state['spec']));mj.mj_forward(m,candidate)
+    if not np.allclose(candidate.qpos,record['rows'][-1]['qpos'],rtol=0,atol=1e-12) or not np.allclose(candidate.qvel,record['rows'][-1]['qvel'],rtol=0,atol=1e-12):raise ValueError('State and trace differ')
+    SOURCE=new_source;RECORD=record;STATE=state;CHECK=check;TARGET=target;CONTINUOUS_SOURCE=bool(s.get('source_sequence_continuity_verified',False))
 
 
 def restore():
@@ -26,7 +42,11 @@ def restore():
     mj.mj_setState(m,d,STATE['state'],int(STATE['spec']));mj.mj_forward(m,d)
 
 
-def prepare(compensate_landing=False):
+def prepare(compensate_landing=False,footprint_guide=False,south_only_withdrawal=False,open_before_withdrawal=False):
+    global DURATION
+    if compensate_landing and footprint_guide:raise ValueError('Footprint guide does not use prior landing compensation')
+    if open_before_withdrawal and footprint_guide:raise ValueError('Compare release sequencing separately from guide motion')
+    DURATION=25. if footprint_guide else 24. if open_before_withdrawal else 22.
     restore();start={s:(d.mocap_pos[i].copy(),d.mocap_quat[i].copy()) for s,i in [('left',p.t.LM),('right',p.t.RM)]}
     initial_ctrl={m.actuator(i).name:float(d.ctrl[i]) for i in range(m.nu)}
     target=d.xpos[m.body(TARGET).id].copy();quat=d.xquat[m.body(TARGET).id].copy()
@@ -49,7 +69,12 @@ def prepare(compensate_landing=False):
     root+=correction
     intermediate=root.copy();intermediate[1]=start['left'][0][1]
     turn=Slerp([2.,6.],Rotation.from_quat(np.array([start['left'][1],guide_quat])[:,[1,2,3,0]]))
+    guide_delta=float(pair[1]+.027-(corners[:,1].max()+.003)) if footprint_guide else 0.
+    if footprint_guide and not -.030<=guide_delta<=0:raise ValueError('Required inward guide motion is outside this local comparison')
     def command(seconds):
+        elapsed=seconds
+        if footprint_guide:seconds=seconds if seconds<9 else 9. if seconds<12 else seconds-3
+        if open_before_withdrawal:seconds=seconds if seconds<11 else 11. if seconds<13 else seconds-2
         if seconds<2:left=start['left'][0];phase='fold_unused_left_fingers'
         elif seconds<6:
             f=(seconds-2)/4;left=start['left'][0]*(1-f)+intermediate*f;phase='guide_transit'
@@ -65,22 +90,30 @@ def prepare(compensate_landing=False):
         elif seconds<15:
             f=(seconds-13)/2;offset=np.array([-.040-.040*f,-.050-.030*f,-.010]);phase='clear_receiver'
         else:offset=np.array([-.080,-.080,-.010])
+        if south_only_withdrawal:offset[0]=0.
+        if footprint_guide:
+            left=left.copy();left[1]+=guide_delta*np.clip((elapsed-9)/3,0,1)
+            if 9<=elapsed<12:phase='move_guide_to_final_footprint'
         poses=dict(left=(left,turn(np.clip(seconds,2,6)).as_quat()[[3,0,1,2]]),right=(start['right'][0]+offset+correction*np.clip(seconds/3,0,1),start['right'][1]))
         ctrl={n:initial_ctrl[n]+(v-initial_ctrl[n])*np.clip(seconds/2,0,1) for n,v in goals.items()}
         for finger in ['index','middle','ring','pinky']:
             for suffix in ['_mcp_pitch','_dip']:
-                name='rh_'+finger+suffix;ctrl[name]=initial_ctrl[name]*(1-np.clip((seconds-11)/2,0,1))
+                finger_time=elapsed if open_before_withdrawal else seconds
+                name='rh_'+finger+suffix;ctrl[name]=initial_ctrl[name]*(1-np.clip((finger_time-11)/2,0,1))
+        if open_before_withdrawal and 11<=elapsed<13:phase='open_stationary_receiver'
         return poses,ctrl,phase
     return command,dict(source=str(SOURCE),landing_correction_m=correction.tolist(),calibration_source='runs/upper-layer-94/guided-release' if compensate_landing else None,
                         guide_root_m=root.tolist(),guide_plane_y_m=float(corners[:,1].max()+.003+correction[1]),
                         guide_minimum_finger_height_m=.075,pair_center_m=pair.tolist(),initial_target_center_m=target.tolist(),
                         target=TARGET,supports=SUPPORTS,native_verified=False,whole_arm_collision_checked=False,
-                        source_sequence_continuity_verified=False)
+                        footprint_guide=footprint_guide,guide_inward_y_m=guide_delta,final_guide_plane_y_m=float(pair[1]+.027) if footprint_guide else None,
+                        south_only_withdrawal=south_only_withdrawal,open_before_withdrawal=open_before_withdrawal,duration_s=DURATION,hold_start_s=DURATION-3,
+                        source_sequence_continuity_verified=CONTINUOUS_SOURCE)
 
 
 def precheck(command):
     started=time.monotonic();bad=[]
-    for seconds in np.linspace(0,DURATION,441):
+    for seconds in np.linspace(0,DURATION,round(DURATION*20)+1):
         restore();poses,ctrl,phase=command(seconds)
         for side,address in [('left',p.t.LA),('right',p.t.RA)]:
             pos,quat=poses[side];d.qpos[address:address+3]=pos;d.qpos[address+3:address+7]=quat
@@ -98,12 +131,12 @@ def precheck(command):
         initial[side]=dict(position_error_m=float(np.linalg.norm(actual[:3,3]-ctx['root'][:3,3])),angle_error_rad=float(Rotation.from_matrix(ctx['root'][:3,:3].T@actual[:3,:3]).magnitude()))
         stages[side]=[]
         if not bad and initial[side]['position_error_m']<1e-5 and initial[side]['angle_error_rad']<1e-4:
-            for seconds in np.linspace(0,DURATION,89)[1:]:
+            for seconds in np.linspace(0,DURATION,round(DURATION*4)+1)[1:]:
                 pos,quat=command(seconds)[0][side];ctx['root'][:3,:3]=Rotation.from_quat(quat[[1,2,3,0]]).as_matrix()
                 result=p.t.routes.stage(side,ctx,q,'guided_release',(pos-ctx['root'][:3,3]).tolist());stages[side].append(dict(t=float(seconds),result=result))
                 if not result['continuous']:break
                 q=result['final_joints_sdk']
-    return dict(passed=not bad and all(len(v)==88 and all(x['result']['continuous'] for x in v) for v in stages.values()),
+    return dict(passed=not bad and all(len(v)==round(DURATION*4) and all(x['result']['continuous'] for x in v) for v in stages.values()),
                 geometry_failures=bad,stages=stages,initial_seed_errors=initial,wall_seconds=time.monotonic()-started,
                 scope='Hand paths with frozen source payload; actual release is unpredicted',whole_arm_collision_checked=False)
 
@@ -160,10 +193,10 @@ def run(command,plan,out):
                          lowest_corner_m=bottom,contacts=contacts,qpos=d.qpos.tolist(),qvel=d.qvel.tolist())
                 rows.append(row);stream.write(json.dumps(row,allow_nan=False)+'\n')
             if abort:break
-    summary=dict(abort=abort,duration_s=float(d.time)-start,wall_seconds=time.monotonic()-started,unintended_contacts=bad,
+    summary=dict(target=TARGET,abort=abort,duration_s=float(d.time)-start,cumulative_simulation_s=float(d.time),wall_seconds=time.monotonic()-started,unintended_contacts=bad,
                  other_bricks_max_shift_mm={n:v*1000 for n,v in shifts.items()},native_verified=False,whole_arm_collision_checked=False,
-                 full_pyramid_verified=False,official_region_verified=False,source_sequence_continuity_verified=False)
-    evaluate(summary,rows,plan)
+                 full_pyramid_verified=False,official_region_verified=False,source_sequence_continuity_verified=CONTINUOUS_SOURCE)
+    evaluate(summary,rows,plan,hold_start=plan.get('hold_start_s',19.))
     spec=mj.mjtState.mjSTATE_INTEGRATION;state=np.empty(mj.mj_stateSize(m,spec));mj.mj_getState(m,d,state,spec)
     np.savez(out/'integration-state.npz',state=state,spec=int(spec),mujoco_version=mj.__version__)
     other=mj.MjData(m);mj.mj_setState(m,other,state,spec);x=np.empty_like(state);y=np.empty_like(state)
@@ -176,7 +209,13 @@ def run(command,plan,out):
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--out',type=Path,required=True);parser.add_argument('--run',action='store_true')
     parser.add_argument('--compensate-landing',action='store_true',help='Apply the prior measured landing offset through a continuous loaded translation')
-    args=parser.parse_args();args.out.mkdir(parents=True,exist_ok=False);command,plan=prepare(args.compensate_landing);checked=precheck(command)
+    parser.add_argument('--source',type=Path);parser.add_argument('--target',choices=['neighbor_1','neighbor_5'],default='neighbor_1')
+    parser.add_argument('--footprint-guide',action='store_true');parser.add_argument('--south-only-withdrawal',action='store_true')
+    parser.add_argument('--open-before-withdrawal',action='store_true',help='Open at a stationary wrist for two seconds before withdrawing')
+    args=parser.parse_args()
+    if args.source:configure_continuation(args.source,args.target)
+    elif args.target!='neighbor_1':raise ValueError('A different target requires its actual source')
+    args.out.mkdir(parents=True,exist_ok=False);command,plan=prepare(args.compensate_landing,args.footprint_guide,args.south_only_withdrawal,args.open_before_withdrawal);checked=precheck(command)
     (args.out/'plan.json').write_text(json.dumps(plan,allow_nan=False));(args.out/'precheck.json').write_text(json.dumps(checked,allow_nan=False))
     brief=dict(precheck_passed=checked['passed'],geometry_failure_count=len(checked['geometry_failures']),stage_counts={s:len(v) for s,v in checked['stages'].items()},precheck_wall_seconds=checked['wall_seconds'])
     passed=checked['passed']
