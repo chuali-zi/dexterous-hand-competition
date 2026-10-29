@@ -33,8 +33,9 @@ def configure(axis,source):
     return restore,check['stages'][-1]['result']['final_joints_sdk']
 
 
-def prepare(axis,source,restore,tangent_shift_mm=0,diagonal_align=False,target_name=TARGET,goal_xy_m=None,hand_targets=None,vertical_approach=False,approach_height=.070):
+def prepare(axis,source,restore,tangent_shift_mm=0,diagonal_align=False,target_name=TARGET,goal_xy_m=None,hand_targets=None,vertical_approach=False,approach_height=.070,south_wrist_yaw=90):
     if approach_height not in [.030,.050,.070]:raise ValueError('Unsupported local approach height')
+    if south_wrist_yaw not in [0,90,180,270] or (south_wrist_yaw!=90 and axis!='south'):raise ValueError('Alternate wrist orientation applies only to south pushing')
     goal=goal_xy_m or [.3025,.015]
     if diagonal_align and axis!='align-west':raise ValueError('Diagonal correction requires the adapted west face')
     if axis.startswith('align-'):
@@ -53,8 +54,8 @@ def prepare(axis,source,restore,tangent_shift_mm=0,diagonal_align=False,target_n
     corners=Rotation.from_quat(d.xquat[m.body(target_name).id][[1,2,3,0]]).apply(p.CORNERS)+target
     if hand_targets is not None:
         for name,value in hand_targets.items():d.qpos[m.jnt_qposadr[m.joint(name).id]]=value
-    normal=np.array([-1.,0,0]) if axis=='east' else np.array([0.,1.,0]);tangent=np.array([-normal[1],normal[0],0.])
-    quat=(Rotation.from_euler('z',0 if axis=='east' else 90,degrees=True)*Rotation.from_quat(p.t.QUAT[[1,2,3,0]])).as_quat()[[3,0,1,2]]
+    normal=np.array([-1.,0,0]) if axis=='east' else np.array([0.,-1. if axis=='north' else 1.,0]);tangent=np.array([-normal[1],normal[0],0.])
+    quat=(Rotation.from_euler('z',0 if axis=='east' else south_wrist_yaw,degrees=True)*Rotation.from_quat(p.t.QUAT[[1,2,3,0]])).as_quat()[[3,0,1,2]]
     d.qpos[p.t.LA:p.t.LA+3]=[0,0,p.t.ROOT[2]];d.qpos[p.t.LA+3:p.t.LA+7]=quat;mj.mj_forward(m,d)
     vertices=np.concatenate([first.b.a.placement.a.g.mesh_vertices('lh_'+n) for n in ['index_distal','index_proximal','middle_distal','middle_proximal']])
     root=normal*((corners@normal).max()-(vertices@normal).min()-.0005)
@@ -64,7 +65,7 @@ def prepare(axis,source,restore,tangent_shift_mm=0,diagonal_align=False,target_n
     # The retained blue push moved 61.269 mm for 80 mm hand travel. Use it as
     # an explicitly recorded offline teaching estimate, not a dynamics model.
     lost_travel=.080-.06126927207210336 if axis=='east' else 0.
-    distance=goal[0]-target[0]+lost_travel if axis=='east' else target[1]-goal[1]
+    distance=goal[0]-target[0]+lost_travel if axis=='east' else goal[1]-target[1] if axis=='north' else target[1]-goal[1]
     if not .001<distance<.150:raise ValueError('Move outside this trial range')
     approach=0. if vertical_approach else .020
     above=root+approach*normal+[0,0,approach_height];turn=Slerp([0.,1.],Rotation.from_quat(np.array([startq,quat])[:,[1,2,3,0]]))
@@ -83,7 +84,7 @@ def prepare(axis,source,restore,tangent_shift_mm=0,diagonal_align=False,target_n
     return command,dict(source=str(source),target=target_name,axis=axis,initial_target_center_m=target.tolist(),component=0 if axis=='east' else 1,
                         destination_axis_m=goal[0] if axis=='east' else goal[1],goal_xy_m=[goal[0],float(target[1]) if axis=='east' else goal[1]],
                         contact_root_m=root.tolist(),distance_m=distance,tangent_shift_mm=tangent_shift_mm,offline_lost_travel_estimate_m=lost_travel,
-                        duration_s=23.,hold_start_s=20.,approach_offset_m=approach,approach_height_m=approach_height,whole_arm_collision_checked=False,native_verified=False,official_region_verified=False)
+                        duration_s=23.,hold_start_s=20.,approach_offset_m=approach,approach_height_m=approach_height,south_wrist_yaw_degrees=south_wrist_yaw if axis=='south' else None,whole_arm_collision_checked=False,native_verified=False,official_region_verified=False)
 
 
 def evaluate_pair(out,plan):
