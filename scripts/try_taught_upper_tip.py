@@ -56,7 +56,7 @@ def prepare(hold=0.):
     return command, report
 
 
-def precheck(command):
+def precheck(command, seed=None):
     started = time.monotonic(); failures = []
     count = round(DURATION*4)
     for seconds in np.linspace(0, DURATION, round(DURATION*20)+1):
@@ -68,7 +68,7 @@ def precheck(command):
             if any(n.startswith(('lh_', 'rh_')) for n in names) and TARGET not in names:
                 failures.append(dict(t=float(seconds), phase=phase, pair=names, distance_m=float(c.dist)))
     ctx = p.t.routes.context()['left']; ctx['limits'] = ctx['intersection'] + [.020, -.020]; ctx['inset'] = .020
-    q = json.loads(Path('runs/fourth-base-89/aligned-low/precheck.json').read_text())['stages'][-1]['result']['final_joints_sdk']
+    q = seed if seed is not None else json.loads(Path('runs/fourth-base-89/aligned-low/precheck.json').read_text())['stages'][-1]['result']['final_joints_sdk']
     stages = []
     # Confirm the retained seed matches this source, before claiming continuity.
     g.restore(); actual = np.asarray(p.t.routes.sdk.forward_kinematics('left', q)) @ ctx['mount']
