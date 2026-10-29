@@ -1,4 +1,4 @@
-"""Continue the retained aligned pair: park yellow 5, then transfer red 4.
+"""Extend the retained base: park yellow 5/3, then transfer red 4/2.
 
 Local retained MuJoCo/SDK assets required. Fixed teaching only; no platform
 calls or live object-pose control. Temporary staging is not a full base row.
@@ -17,19 +17,26 @@ CORNERS=pair.CORNERS
 
 
 def configure(target):
-    global TARGET,SOURCE,RECORD,CHECK,STATE,START,START_POS,START_ROT,ROOT,DISTANCES,HEIGHT
+    global TARGET,SOURCE,RECORD,CHECK,STATE,START,START_POS,START_ROT,ROOT,DISTANCES,HEIGHT,PLACED,OBSTACLE
     TARGET=target
-    SOURCE=Path('runs/pair-alignment-87/final-close' if target=='neighbor_5' else 'runs/third-base-88/yellow')
+    sources={
+        'neighbor_5':('runs/pair-alignment-87/final-close','local_pair_spacing_verified'),
+        'neighbor_4':('runs/third-base-88/yellow','target_staging_verified'),
+        'neighbor_3':('runs/third-base-88/aligned','local_three_brick_alignment_verified'),
+        'neighbor_2':('runs/fourth-base-89/yellow','target_staging_verified')}
+    source,flag=sources[target];SOURCE=Path(source)
+    PLACED=['neighbor_9','neighbor_6']+(['neighbor_4'] if target in ['neighbor_3','neighbor_2'] else [])
+    OBSTACLE={'neighbor_4':'neighbor_5','neighbor_2':'neighbor_3'}.get(target)
     RECORD=json.loads((SOURCE/'result.json').read_text());CHECK=json.loads((SOURCE/'precheck.json').read_text())
     STATE=np.load(SOURCE/'integration-state.npz',allow_pickle=False)
-    s=RECORD['summary'];flag='local_pair_spacing_verified' if target=='neighbor_5' else 'target_staging_verified'
+    s=RECORD['summary']
     if not s.get(flag) or s.get('checkpoint_next_step_maximum_difference',float('inf'))>1e-10:
         raise ValueError('Required source outcome or checkpoint is unverified')
     restore();START=float(d.time);START_POS=d.mocap_pos[t.LM].copy();START_ROT=Rotation.from_quat(d.mocap_quat[t.LM][[1,2,3,0]])
     ROOT=t.ROOT+(m.body(target).pos-m.body('neighbor_9').pos)*[1,1,0]
-    DISTANCES=(.080,.080,.030) if target=='neighbor_5' else (.080,.080,.080)
-    HEIGHT=.080 if target=='neighbor_5' else .050
-    if target=='neighbor_4':ROOT[1]-=.010
+    DISTANCES=(.080,.080,.030) if OBSTACLE is None else (.080,.080,.080)
+    HEIGHT=.080 if OBSTACLE is None else .050
+    if OBSTACLE is not None:ROOT[1]-=.010
 
 
 def restore():
@@ -113,12 +120,13 @@ def run(out):
         summary.update(bricks=metrics,held_duration_s=held[-1]['t']-held[0]['t'],target_displacement_mm=((np.array(metrics[TARGET]['final_position'])-initial[TARGET])*1000).tolist())
         # Like the preceding red/blue transfer, the staged obstacle may settle
         # farther aside through brick contact; the placed reds stay protected.
-        protected={n:v for n,v in shifts.items() if not (TARGET=='neighbor_4' and n=='neighbor_5')}
+        protected={n:v for n,v in shifts.items() if n!=OBSTACLE}
         summary['placed_pair_preserved']=max(shifts[n] for n in ['neighbor_9','neighbor_6'])<=.002
+        summary['placed_base_preserved']=max(shifts[n] for n in PLACED)<=.002
         summary['target_staging_verified']=bool(not abort and not bad and max(protected.values())<=.002 and summary['held_duration_s']>=2.98
             and all(v['table_only'] and v['minimum_table_support_n']>=.8*m.body(n).mass*9.81 and v['drift_mm']<=2 and v['angle_drift_degrees']<=2 for n,v in metrics.items())
-            and summary['target_displacement_mm'][0]>100 and all(metrics[n]['inside_analysis_rectangle'] for n in ['neighbor_9','neighbor_6'])
-            and (TARGET=='neighbor_5' or metrics[TARGET]['inside_analysis_rectangle']))
+            and summary['target_displacement_mm'][0]>100 and all(metrics[n]['inside_analysis_rectangle'] for n in PLACED)
+            and (OBSTACLE is None or metrics[TARGET]['inside_analysis_rectangle']))
     spec=mj.mjtState.mjSTATE_INTEGRATION;state=np.empty(mj.mj_stateSize(m,spec));mj.mj_getState(m,d,state,spec)
     np.savez(out/'integration-state.npz',state=state,spec=int(spec),mujoco_version=mj.__version__)
     restored=mj.MjData(m);mj.mj_setState(m,restored,state,spec);pos,quat,_=command(float(d.time))
@@ -131,7 +139,7 @@ def run(out):
 
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--target',choices=['neighbor_5','neighbor_4'],default='neighbor_5')
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--target',choices=['neighbor_5','neighbor_4','neighbor_3','neighbor_2'],default='neighbor_5')
     parser.add_argument('--out',type=Path,required=True);parser.add_argument('--run',action='store_true');args=parser.parse_args()
     configure(args.target);args.out.mkdir(parents=True,exist_ok=False);checked=precheck()
     (args.out/'precheck.json').write_text(json.dumps(checked,allow_nan=False))

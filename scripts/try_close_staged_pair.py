@@ -34,6 +34,9 @@ def restore():
     if MODE=='align-third':
         usable=(summary.get('target')=='neighbor_4' and summary.get('target_staging_verified',False)
                 and summary.get('placed_pair_preserved',False) and summary.get('abort') is None)
+    if MODE=='align-fourth':
+        usable=(summary.get('target')=='neighbor_2' and summary.get('target_staging_verified',False)
+                and summary.get('placed_base_preserved',False) and summary.get('abort') is None)
     if not usable or summary.get('checkpoint_next_step_maximum_difference',float('inf'))>1e-10:
         raise ValueError('Source staging or continuation equivalence is unverified')
     if str(STATE['mujoco_version'])!=mj.__version__ or len(STATE['state'])!=mj.mj_stateSize(m,int(STATE['spec'])):
@@ -48,6 +51,7 @@ START_ROT=Rotation.from_quat(d.mocap_quat[t.LM][[1,2,3,0]])
 
 
 def parameters():
+    if MODE=='align-fourth':return 90.,.048
     if MODE=='align-third':return 90.,.045
     if MODE=='close-final':return 0.,.010
     if MODE.startswith('align-first'):
@@ -88,7 +92,8 @@ def configure(mode):
     """Select a retained, checked source and its fixed offline teaching action."""
     global MODE,SOURCE,TARGET,RECORD,CHECK,STATE,START_TIME,START_POS,START_ROT,ROOT,NORMAL
     MODE=mode
-    if mode=='align-third':SOURCE=Path('runs/third-base-88/red');TARGET='neighbor_4'
+    if mode=='align-fourth':SOURCE=Path('runs/fourth-base-89/red');TARGET='neighbor_2'
+    elif mode=='align-third':SOURCE=Path('runs/third-base-88/red');TARGET='neighbor_4'
     elif mode=='close-final':SOURCE=Path('runs/pair-alignment-87/first-red-side');TARGET='neighbor_6'
     elif mode.startswith('align-first'):SOURCE=Path('runs/pair-alignment-86/transverse');TARGET='neighbor_9'
     else:SOURCE=Path('runs/wide-staging-85/segment-163-endpoint-fixed');TARGET='neighbor_6'
@@ -101,10 +106,11 @@ def configure(mode):
 
 def command(seconds):
     elapsed=max(0.,min(seconds-START_TIME,20.));angle,distance=parameters()
+    approach_height=.070 if MODE=='align-fourth' else .100
     if elapsed<3:pos=START_POS+[0,0,.050*elapsed/3];yaw=0.;phase='rise'
     elif elapsed<7:
-        f=(elapsed-3)/4;pos=(START_POS+[0,0,.050])*(1-f)+(ROOT+.020*NORMAL+[0,0,.100])*f;yaw=angle*f;phase='turn'
-    elif elapsed<10:pos=ROOT+.020*NORMAL+[0,0,.100*(10-elapsed)/3];yaw=angle;phase='descend'
+        f=(elapsed-3)/4;pos=(START_POS+[0,0,.050])*(1-f)+(ROOT+.020*NORMAL+[0,0,approach_height])*f;yaw=angle*f;phase='turn'
+    elif elapsed<10:pos=ROOT+.020*NORMAL+[0,0,approach_height*(10-elapsed)/3];yaw=angle;phase='descend'
     elif elapsed<11:pos=ROOT+.020*(11-elapsed)*NORMAL;yaw=angle;phase='approach'
     elif elapsed<14:pos=ROOT-distance*(elapsed-11)/3*NORMAL;yaw=angle;phase='push'
     elif elapsed<15:pos=ROOT+(-distance+.020*(elapsed-14))*NORMAL;yaw=angle;phase='retreat'
@@ -134,11 +140,19 @@ def precheck():
                 contact_root_m=ROOT.tolist(),geometry_failures=failures,stages=stages,whole_arm_collision_checked=False)
 
 
+def tracked_bricks():
+    names=['neighbor_6','neighbor_9']
+    if MODE in ['align-third','align-fourth']:names+=['neighbor_4']
+    if MODE=='align-fourth':names+=['neighbor_2']
+    return names
+
+
 def evaluate(summary,rows):
     """Evaluate saved contacts and poses without running physics again."""
-    tracked=['neighbor_6','neighbor_9']+(['neighbor_4'] if MODE=='align-third' else [])
+    tracked=tracked_bricks()
     summary['local_pair_spacing_verified']=False
-    if MODE=='align-third':summary['local_three_brick_alignment_verified']=False
+    if MODE in ['align-third','align-fourth']:summary['local_three_brick_alignment_verified']=False
+    if MODE=='align-fourth':summary['local_four_brick_alignment_verified']=False
     held=[r for r in rows if r['t']>=START_TIME+17-1e-8]
     if held:
         metrics={}
@@ -160,7 +174,7 @@ def evaluate(summary,rows):
             and abs(dx)<=.005 and .050<=dy<=.060 and -.001<=gap<=.010
             and all(v['inside_analysis_rectangle'] and v['allowed_released_contacts'] and v['table_support_min_n']>=.8*m.body(n).mass*9.81
                     and v['drift_mm']<=2 and v['angle_drift_degrees']<=2 and abs(v['final_yaw_degrees'])<=10 for n,v in metrics.items() if n in ['neighbor_9','neighbor_6']))
-        if MODE=='align-third':
+        if MODE in ['align-third','align-fourth']:
             third=metrics['neighbor_4'];dx3=third['final_position'][0]-second['final_position'][0]
             dy3=third['final_position'][1]-second['final_position'][1]
             gap3=third['footprint_minimum_m'][1]-second['footprint_maximum_m'][1]
@@ -168,6 +182,15 @@ def evaluate(summary,rows):
             summary['local_three_brick_alignment_verified']=bool(summary['local_pair_spacing_verified'] and abs(dx3)<=.005 and .050<=dy3<=.060 and -.001<=gap3<=.010
                 and third['inside_analysis_rectangle'] and third['allowed_released_contacts'] and third['table_support_min_n']>=.8*m.body('neighbor_4').mass*9.81
                 and third['drift_mm']<=2 and third['angle_drift_degrees']<=2 and abs(third['final_yaw_degrees'])<=10)
+        if MODE=='align-fourth':
+            fourth=metrics['neighbor_2'];dx4=fourth['final_position'][0]-third['final_position'][0]
+            dy4=fourth['final_position'][1]-third['final_position'][1]
+            gap4=fourth['footprint_minimum_m'][1]-third['footprint_maximum_m'][1]
+            span=max(v['final_position'][0] for v in metrics.values())-min(v['final_position'][0] for v in metrics.values())
+            summary.update(fourth_x_offset_mm=dx4*1000,fourth_y_center_spacing_mm=dy4*1000,fourth_y_projection_gap_mm=gap4*1000,base_x_span_mm=span*1000)
+            summary['local_four_brick_alignment_verified']=bool(summary['local_three_brick_alignment_verified'] and abs(dx4)<=.005 and .050<=dy4<=.060 and -.001<=gap4<=.010 and span<=.005
+                and fourth['inside_analysis_rectangle'] and fourth['allowed_released_contacts'] and fourth['table_support_min_n']>=.8*m.body('neighbor_2').mass*9.81
+                and fourth['drift_mm']<=2 and fourth['angle_drift_degrees']<=2 and abs(fourth['final_yaw_degrees'])<=10)
 
 
 def run(out):
@@ -175,7 +198,7 @@ def run(out):
     others={m.body(i).name:i for i in range(m.nbody)
             if (m.body(i).name=='target' or m.body(i).name.startswith('neighbor_')) and m.body(i).name!=TARGET}
     initial={n:d.xpos[i].copy() for n,i in others.items()};shifts={n:0. for n in others}
-    tracked=['neighbor_6','neighbor_9']+(['neighbor_4'] if MODE=='align-third' else [])
+    tracked=tracked_bricks()
     rows=[];bad=[];abort=None;started=time.monotonic()
     with (out/'trace.jsonl').open('x') as stream:
         for step in range(round(20/m.opt.timestep)):
@@ -216,12 +239,13 @@ def run(out):
     mj.mj_setState(m,d,state,spec)
     (out/'result.json').write_text(json.dumps(dict(summary=summary,rows=rows),allow_nan=False));print(json.dumps(summary,indent=2))
     verified=summary.get('local_three_brick_alignment_verified',False) if MODE=='align-third' else summary['local_pair_spacing_verified']
+    if MODE=='align-fourth':verified=summary.get('local_four_brick_alignment_verified',False)
     return verified and summary['checkpoint_next_step_maximum_difference']<=1e-10
 
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--out',type=Path,required=True)
-    parser.add_argument('--mode',choices=['transverse','diagonal','diagonal-clear','align-first','align-first-front','align-first-side','close-final','align-third'],default='transverse');parser.add_argument('--run',action='store_true')
+    parser.add_argument('--mode',choices=['transverse','diagonal','diagonal-clear','align-first','align-first-front','align-first-side','close-final','align-third','align-fourth'],default='transverse');parser.add_argument('--run',action='store_true')
     args=parser.parse_args();configure(args.mode);args.out.mkdir(parents=True,exist_ok=False)
     result=precheck();(args.out/'precheck.json').write_text(json.dumps(result,allow_nan=False))
     print(json.dumps(dict(passed=result['passed'],geometry_failures=len(result['geometry_failures']),first_failure=result['geometry_failures'][:1],stages=len(result['stages']))),flush=True)
