@@ -36,11 +36,11 @@ def configure(axis,source):
     return restore,seed
 
 
-def prepare(axis,source,restore,approach_height=.070,adapt_lateral_face=False):
+def prepare(axis,source,restore,approach_height=.070,adapt_lateral_face=False,target_name=TARGET,goal_xy_m=None):
     restore();start=d.mocap_pos[p.t.LM].copy();startq=d.mocap_quat[p.t.LM].copy()
-    target=d.xpos[m.body(TARGET).id].copy();corners=Rotation.from_quat(d.xquat[m.body(TARGET).id][[1,2,3,0]]).apply(p.CORNERS)+target
+    target=d.xpos[m.body(target_name).id].copy();corners=Rotation.from_quat(d.xquat[m.body(target_name).id][[1,2,3,0]]).apply(p.CORNERS)+target
     normal=np.array([1.,0.,0.]) if axis=='west' else np.array([0.,1.,0.]);tangent=np.array([-normal[1],normal[0],0.])
-    component=0 if axis=='west' else 1;destination=.300 if axis=='west' else -.040;distance=float(target[component]-destination)
+    component=0 if axis=='west' else 1;destination=(goal_xy_m or [.300,-.040])[component];distance=float(target[component]-destination)
     if not .001<distance<.150:raise ValueError('Requested move outside this local trial')
     # Keep the south-facing wrist for the lateral push: either quarter-turn
     # route reaches joint 2's lower bound before the high approach endpoint.
@@ -86,18 +86,20 @@ def prepare(axis,source,restore,approach_height=.070,adapt_lateral_face=False):
         else:pos=root+(-distance+.020)*normal+[0,0,.050];q=quat;phase='released_hold'
         return pos,q,phase
     restore()
-    return command,dict(source=str(source),axis=axis,target=TARGET,initial_target_center_m=target.tolist(),destination_axis_m=destination,
+    plan=dict(source=str(source),axis=axis,target=target_name,initial_target_center_m=target.tolist(),destination_axis_m=destination,
                         component=component,distance_m=distance,contact_root_m=root.tolist(),duration_s=DURATION,hold_start_s=HOLD,
                         approach_height_m=approach_height,lateral_face_adaptation=adaptation,local_tolerance_mm=5,whole_arm_collision_checked=False,official_region_verified=False)
+    if goal_xy_m is not None:plan['goal_xy_m']=list(goal_xy_m)
+    return command,plan
 
 
-def precheck(command,restore,seed):
+def precheck(command,restore,seed,target=TARGET):
     started=time.monotonic();bad=[]
     for seconds in np.linspace(0,DURATION,461):
         restore();pos,q,phase=command(seconds);d.qpos[p.t.LA:p.t.LA+3]=pos;d.qpos[p.t.LA+3:p.t.LA+7]=q;mj.mj_forward(m,d)
         for c in d.contact:
             ns=[m.geom(int(i)).name for i in c.geom]
-            if any(n.startswith(('lh_','rh_')) for n in ns) and not (TARGET in ns and any(n.startswith('lh_') for n in ns)):
+            if any(n.startswith(('lh_','rh_')) for n in ns) and not (target in ns and any(n.startswith('lh_') for n in ns)):
                 bad.append(dict(t=float(seconds),phase=phase,pair=ns,depth_mm=-float(c.dist)*1000))
     restore();ctx=p.t.routes.context()['left'];ctx['limits']=ctx['intersection']+[.02,-.02];ctx['inset']=.02
     h=np.asarray(p.t.routes.sdk.forward_kinematics('left',seed))@ctx['mount'];pe=float(np.linalg.norm(h[:3,3]-d.mocap_pos[p.t.LM]))
@@ -114,8 +116,9 @@ def precheck(command,restore,seed):
 
 
 def run(command,plan,restore,out):
+    target=plan.get('target',TARGET)
     restore();start=float(d.time);names=[m.body(i).name for i in range(m.nbody) if m.body(i).name=='target' or m.body(i).name.startswith('neighbor_')]
-    anchors={n:d.xpos[m.body(n).id].copy() for n in names};shifts={n:0. for n in names if n!=TARGET};body=m.body(TARGET).id
+    anchors={n:d.xpos[m.body(n).id].copy() for n in names};shifts={n:0. for n in names if n!=target};body=m.body(target).id
     rows=[];bad=[];abort=None;started=time.monotonic()
     with (out/'trace.jsonl').open('x') as stream:
         for step in range(round(DURATION/m.opt.timestep)):
@@ -127,11 +130,11 @@ def run(command,plan,restore,out):
             contacts=[]
             for ci,c in enumerate(d.contact):
                 ns=[m.geom(int(i)).name for i in c.geom];hand=any(n.startswith(('lh_','rh_')) for n in ns)
-                intended=TARGET in ns and (any(n.startswith('lh_') for n in ns) or 'table' in ns)
-                if (hand or TARGET in ns) and not intended and c.dist<-.0005:
+                intended=target in ns and (any(n.startswith('lh_') for n in ns) or 'table' in ns)
+                if (hand or target in ns) and not intended and c.dist<-.0005:
                     bad.append(dict(t=float(d.time)-start,pair=ns,depth_mm=-float(c.dist)*1000));abort='unexpected_contact'
-                if TARGET in ns:
-                    force=np.zeros(6);mj.mj_contactForce(m,d,ci,force);vector=c.frame.reshape(3,3).T@force[:3]*(1 if ns[1]==TARGET else -1)
+                if target in ns:
+                    force=np.zeros(6);mj.mj_contactForce(m,d,ci,force);vector=c.frame.reshape(3,3).T@force[:3]*(1 if ns[1]==target else -1)
                     contacts.append(dict(pair=ns,force_xyz_n=vector.tolist()))
             corners=Rotation.from_quat(d.xquat[body][[1,2,3,0]]).apply(p.CORNERS)+d.xpos[body]
             if corners[:,2].min()<b.a.placement.a.g.FLOOR-.010:abort='payload_below_table'
@@ -140,7 +143,7 @@ def run(command,plan,restore,out):
                 row=dict(elapsed_s=float(d.time)-start,phase=phase,position_m=d.xpos[body].tolist(),quaternion_wxyz=d.xquat[body].tolist(),contacts=contacts,
                          qpos=d.qpos.tolist(),qvel=d.qvel.tolist());rows.append(row);stream.write(json.dumps(row,allow_nan=False)+'\n')
             if abort:break
-    summary=dict(axis=plan['axis'],source=plan['source'],abort=abort,duration_s=float(d.time)-start,cumulative_simulation_s=float(d.time),wall_seconds=time.monotonic()-started,
+    summary=dict(target=target,axis=plan['axis'],source=plan['source'],abort=abort,duration_s=float(d.time)-start,cumulative_simulation_s=float(d.time),wall_seconds=time.monotonic()-started,
                  unintended_contacts=bad,other_bricks_max_shift_mm={n:v*1000 for n,v in shifts.items()},local_red_position_verified=False,
                  native_verified=False,official_region_verified=False,whole_arm_collision_checked=False,full_pyramid_verified=False)
     held=[r for r in rows if r['elapsed_s']>=HOLD-1e-8]
@@ -155,10 +158,10 @@ def run(command,plan,restore,out):
         summary.update(held_duration_s=held[-1]['elapsed_s']-held[0]['elapsed_s'],held_drift_mm=drift*1000,held_angular_drift_degrees=angle,
                        held_table_only=table,minimum_table_support_n=force,final_face_tilt_degrees=face,final_yaw_mod90_degrees=yaw,
                        final_position_m=positions[-1].tolist(),axis_error_mm=error*1000,cross_axis_shift_mm=cross*1000)
-        goal_error=float(np.linalg.norm(positions[-1,:2]-[.300,-.040]))
+        goal_error=float(np.linalg.norm(positions[-1,:2]-plan.get('goal_xy_m',[.300,-.040])))
         summary['candidate_slot_xy_error_mm']=goal_error*1000
-        position_ok=abs(error)<=.005 and abs(cross)<=.005 if plan['axis']=='south' else goal_error<=.005
-        summary['local_red_position_verified']=bool(not abort and not bad and summary['held_duration_s']>=2.98 and table and force>=.8*m.body(TARGET).mass*9.81
+        position_ok=abs(error)<=.005 and abs(cross)<=.005 if plan['axis']=='south' and 'goal_xy_m' not in plan else goal_error<=.005
+        summary['local_red_position_verified']=bool(not abort and not bad and summary['held_duration_s']>=2.98 and table and force>=.8*m.body(target).mass*9.81
                                                    and drift<=.002 and angle<=2 and face<=2 and abs(yaw)<=10 and position_ok)
     spec=mj.mjtState.mjSTATE_INTEGRATION;state=np.empty(mj.mj_stateSize(m,spec));mj.mj_getState(m,d,state,spec)
     np.savez(out/'integration-state.npz',state=state,spec=int(spec),mujoco_version=mj.__version__)
