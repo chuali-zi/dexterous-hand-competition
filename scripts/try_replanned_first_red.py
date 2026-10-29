@@ -36,9 +36,12 @@ def configure(axis,source):
     return restore,seed
 
 
-def prepare(axis,source,restore,approach_height=.070,adapt_lateral_face=False,target_name=TARGET,goal_xy_m=None):
+def prepare(axis,source,restore,approach_height=.070,adapt_lateral_face=False,target_name=TARGET,goal_xy_m=None,contact_fingers=('index','middle'),hand_targets=None,vertical_approach=False):
+    if not contact_fingers or any(n not in ['index','middle','ring','pinky'] for n in contact_fingers):raise ValueError('Unsupported contact fingers')
     restore();start=d.mocap_pos[p.t.LM].copy();startq=d.mocap_quat[p.t.LM].copy()
     target=d.xpos[m.body(target_name).id].copy();corners=Rotation.from_quat(d.xquat[m.body(target_name).id][[1,2,3,0]]).apply(p.CORNERS)+target
+    if hand_targets is not None:
+        for name,value in hand_targets.items():d.qpos[m.jnt_qposadr[m.joint(name).id]]=value
     normal=np.array([1.,0.,0.]) if axis=='west' else np.array([0.,1.,0.]);tangent=np.array([-normal[1],normal[0],0.])
     component=0 if axis=='west' else 1;destination=(goal_xy_m or [.300,-.040])[component];distance=float(target[component]-destination)
     if not .001<distance<.150:raise ValueError('Requested move outside this local trial')
@@ -46,15 +49,18 @@ def prepare(axis,source,restore,approach_height=.070,adapt_lateral_face=False,ta
     # route reaches joint 2's lower bound before the high approach endpoint.
     quat=(Rotation.from_euler('z',90,degrees=True)*Rotation.from_quat(p.t.QUAT[[1,2,3,0]])).as_quat()[[3,0,1,2]]
     d.qpos[p.t.LA:p.t.LA+3]=[0,0,p.t.ROOT[2]];d.qpos[p.t.LA+3:p.t.LA+7]=quat;mj.mj_forward(m,d)
-    vertices=np.concatenate([b.a.placement.a.g.mesh_vertices('lh_'+n) for n in ['index_distal','index_proximal','middle_distal','middle_proximal']])
+    contact_links=[finger+suffix for finger in contact_fingers for suffix in ['_distal','_proximal']]
+    vertices=np.concatenate([b.a.placement.a.g.mesh_vertices('lh_'+n) for n in contact_links])
     root=normal*((corners@normal).max()-(vertices@normal).min()-.0005)
     root+=tangent*(target@tangent-((vertices@tangent).min()+(vertices@tangent).max())/2);root[2]=p.t.ROOT[2]
     adaptation=None;approach_offset=.020
     if adapt_lateral_face:
         if axis!='west':raise ValueError('Contact-face adaptation only applies to the lateral move')
         restore();reference=Rotation.from_quat(startq[[1,2,3,0]])
+        if hand_targets is not None:
+            for name,value in hand_targets.items():d.qpos[m.jnt_qposadr[m.joint(name).id]]=value
         d.qpos[p.t.LA:p.t.LA+3]=0;d.qpos[p.t.LA+3:p.t.LA+7]=[1,0,0,0];mj.mj_forward(m,d)
-        local=np.concatenate([b.a.placement.a.g.mesh_vertices('lh_'+n) for n in ['index_distal','index_proximal','middle_distal','middle_proximal']])
+        local=np.concatenate([b.a.placement.a.g.mesh_vertices('lh_'+n) for n in contact_links])
         seed=np.array(json.loads((source/'precheck.json').read_text())['stages'][-1]['result']['final_joints_sdk'])
         bounds=p.t.routes.context()['left']['intersection']+[.02,-.02]
         goal=np.array([corners[:,0].max()-.0005,target[1],b.a.placement.a.g.FLOOR+.005])
@@ -72,6 +78,7 @@ def prepare(axis,source,restore,approach_height=.070,adapt_lateral_face=False,ta
                         orientation_change_degrees=float(np.degrees(change)),contact_joints_sdk=fit.x.tolist(),
                         scope='Contact geometry candidate, not force or stability verification')
     if approach_height not in [.030,.050,.070]:raise ValueError('Unsupported local approach height')
+    if vertical_approach:approach_offset=0.
     above=root+approach_offset*normal+[0,0,approach_height]
     turn=Slerp([0.,1.],Rotation.from_quat(np.array([startq,quat])[:,[1,2,3,0]]))
     def command(seconds):
@@ -88,7 +95,7 @@ def prepare(axis,source,restore,approach_height=.070,adapt_lateral_face=False,ta
     restore()
     plan=dict(source=str(source),axis=axis,target=target_name,initial_target_center_m=target.tolist(),destination_axis_m=destination,
                         component=component,distance_m=distance,contact_root_m=root.tolist(),duration_s=DURATION,hold_start_s=HOLD,
-                        approach_height_m=approach_height,lateral_face_adaptation=adaptation,local_tolerance_mm=5,whole_arm_collision_checked=False,official_region_verified=False)
+                        approach_height_m=approach_height,approach_offset_m=approach_offset,lateral_face_adaptation=adaptation,contact_fingers=list(contact_fingers),local_tolerance_mm=5,whole_arm_collision_checked=False,official_region_verified=False)
     if goal_xy_m is not None:plan['goal_xy_m']=list(goal_xy_m)
     return command,plan
 

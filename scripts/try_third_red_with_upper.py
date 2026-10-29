@@ -44,12 +44,11 @@ def prepare(axis,source,restore,vertical_approach=False,tangent_shift_mm=0,appro
     return command,fingers,plan
 
 
-def evaluate(out,plan):
-    record=json.loads((out/'result.json').read_text());s=record['summary'];rows=record['rows']
-    reference=np.load(REFERENCE/'integration-state.npz',allow_pickle=False);ref=mj.MjData(m)
+def structure_status(rows,reference_path=REFERENCE,extra_bases=()):
+    reference=np.load(reference_path/'integration-state.npz',allow_pickle=False);ref=mj.MjData(m)
     mj.mj_setState(m,ref,reference['state'],int(reference['spec']));mj.mj_forward(m,ref)
     protected={}
-    for name in [*BASES,UPPER]:
+    for name in [*BASES,UPPER,*extra_bases]:
         adr=m.jnt_qposadr[m.joint(name+'_free').id];xyz=np.array([row['qpos'][adr:adr+3] for row in rows])
         rotations=Rotation.from_quat(np.array([row['qpos'][adr+3:adr+7] for row in rows])[:,[1,2,3,0]])
         initial=Rotation.from_quat(ref.xquat[m.body(name).id][[1,2,3,0]])
@@ -57,6 +56,12 @@ def evaluate(out,plan):
                              maximum_angular_shift_degrees=float(np.degrees((initial.inv()*rotations).magnitude().max())))
     only=all(row['protected_payload_contacts'] and all(all(n in [*BASES,UPPER] for n in c['pair']) for c in row['protected_payload_contacts']) for row in rows)
     forces={n:min(sum(c['force_xyz_n'][2] for c in row['protected_payload_contacts'] if n in c['pair']) for row in rows) for n in BASES}
+    return protected,only,forces
+
+
+def evaluate(out,plan):
+    record=json.loads((out/'result.json').read_text());s=record['summary'];rows=record['rows']
+    protected,only,forces=structure_status(rows)
     s.update(protected_structure_metrics=protected,upper_only_base_contacts=only,upper_minimum_support_force_n=forces,
              protected_structure_verified=bool(not s['abort'] and not s['unintended_contacts'] and only and min(forces.values())>=.1
                                                and all(v['maximum_shift_mm']<=2 and v['maximum_angular_shift_degrees']<=2 for v in protected.values())),
