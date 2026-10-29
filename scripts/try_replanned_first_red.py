@@ -93,10 +93,13 @@ def prepare(axis,source,restore,approach_height=.070,adapt_lateral_face=False,ta
     return command,plan
 
 
-def precheck(command,restore,seed,target=TARGET):
+def precheck(command,restore,seed,target=TARGET,finger_command=None):
     started=time.monotonic();bad=[]
     for seconds in np.linspace(0,DURATION,461):
-        restore();pos,q,phase=command(seconds);d.qpos[p.t.LA:p.t.LA+3]=pos;d.qpos[p.t.LA+3:p.t.LA+7]=q;mj.mj_forward(m,d)
+        restore();pos,q,phase=command(seconds);d.qpos[p.t.LA:p.t.LA+3]=pos;d.qpos[p.t.LA+3:p.t.LA+7]=q
+        if finger_command is not None:
+            for name,value in finger_command(seconds).items():d.qpos[m.jnt_qposadr[m.joint(name).id]]=value
+        mj.mj_forward(m,d)
         for c in d.contact:
             ns=[m.geom(int(i)).name for i in c.geom]
             if any(n.startswith(('lh_','rh_')) for n in ns) and not (target in ns and any(n.startswith('lh_') for n in ns)):
@@ -115,7 +118,7 @@ def precheck(command,restore,seed,target=TARGET):
                 initial_seed_error_m=pe,initial_seed_angle_rad=ae,wall_seconds=time.monotonic()-started,whole_arm_collision_checked=False,native_verified=False)
 
 
-def run(command,plan,restore,out):
+def run(command,plan,restore,out,finger_command=None,protected_payload=None):
     target=plan.get('target',TARGET)
     restore();start=float(d.time);names=[m.body(i).name for i in range(m.nbody) if m.body(i).name=='target' or m.body(i).name.startswith('neighbor_')]
     anchors={n:d.xpos[m.body(n).id].copy() for n in names};shifts={n:0. for n in names if n!=target};body=m.body(target).id
@@ -123,11 +126,13 @@ def run(command,plan,restore,out):
     with (out/'trace.jsonl').open('x') as stream:
         for step in range(round(DURATION/m.opt.timestep)):
             pos,q,phase=command(float(d.time)-start);d.mocap_pos[p.t.LM]=pos;d.mocap_quat[p.t.LM]=q
+            if finger_command is not None:
+                for name,value in finger_command(float(d.time)-start).items():d.ctrl[m.actuator(name).id]=value
             mj.mj_step(m,d);mj.mj_forward(m,d)
             for n in shifts:
                 shifts[n]=max(shifts[n],float(np.linalg.norm(d.xpos[m.body(n).id]-anchors[n])))
                 if shifts[n]>.002:abort='other_brick_movement'
-            contacts=[]
+            contacts=[];protected_contacts=[]
             for ci,c in enumerate(d.contact):
                 ns=[m.geom(int(i)).name for i in c.geom];hand=any(n.startswith(('lh_','rh_')) for n in ns)
                 intended=target in ns and (any(n.startswith('lh_') for n in ns) or 'table' in ns)
@@ -136,12 +141,17 @@ def run(command,plan,restore,out):
                 if target in ns:
                     force=np.zeros(6);mj.mj_contactForce(m,d,ci,force);vector=c.frame.reshape(3,3).T@force[:3]*(1 if ns[1]==target else -1)
                     contacts.append(dict(pair=ns,force_xyz_n=vector.tolist()))
+                if protected_payload is not None and protected_payload in ns:
+                    force=np.zeros(6);mj.mj_contactForce(m,d,ci,force);vector=c.frame.reshape(3,3).T@force[:3]*(1 if ns[1]==protected_payload else -1)
+                    protected_contacts.append(dict(pair=ns,force_xyz_n=vector.tolist()))
             corners=Rotation.from_quat(d.xquat[body][[1,2,3,0]]).apply(p.CORNERS)+d.xpos[body]
             if corners[:,2].min()<b.a.placement.a.g.FLOOR-.010:abort='payload_below_table'
             if not np.isfinite(d.qpos).all():raise RuntimeError('Nonfinite state')
             if step%10==9 or abort:
                 row=dict(elapsed_s=float(d.time)-start,phase=phase,position_m=d.xpos[body].tolist(),quaternion_wxyz=d.xquat[body].tolist(),contacts=contacts,
-                         qpos=d.qpos.tolist(),qvel=d.qvel.tolist());rows.append(row);stream.write(json.dumps(row,allow_nan=False)+'\n')
+                         qpos=d.qpos.tolist(),qvel=d.qvel.tolist())
+                if protected_payload is not None:row['protected_payload_contacts']=protected_contacts
+                rows.append(row);stream.write(json.dumps(row,allow_nan=False)+'\n')
             if abort:break
     summary=dict(target=target,axis=plan['axis'],source=plan['source'],abort=abort,duration_s=float(d.time)-start,cumulative_simulation_s=float(d.time),wall_seconds=time.monotonic()-started,
                  unintended_contacts=bad,other_bricks_max_shift_mm={n:v*1000 for n,v in shifts.items()},local_red_position_verified=False,

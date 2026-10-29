@@ -33,13 +33,15 @@ def configure(axis,source):
     return restore,check['stages'][-1]['result']['final_joints_sdk']
 
 
-def prepare(axis,source,restore,tangent_shift_mm=0,diagonal_align=False):
+def prepare(axis,source,restore,tangent_shift_mm=0,diagonal_align=False,target_name=TARGET,goal_xy_m=None,hand_targets=None,vertical_approach=False,approach_height=.070):
+    if approach_height not in [.030,.050,.070]:raise ValueError('Unsupported local approach height')
+    goal=goal_xy_m or [.3025,.015]
     if diagonal_align and axis!='align-west':raise ValueError('Diagonal correction requires the adapted west face')
     if axis.startswith('align-'):
         if tangent_shift_mm:raise ValueError('Alignment uses a centered contact face')
-        command,plan=first.prepare(axis.removeprefix('align-'),source,restore,adapt_lateral_face=axis=='align-west',target_name=TARGET,goal_xy_m=[.3025,.015])
+        command,plan=first.prepare(axis.removeprefix('align-'),source,restore,approach_height=approach_height,adapt_lateral_face=axis=='align-west',target_name=target_name,goal_xy_m=goal)
         if diagonal_align:
-            dy=.015-plan['initial_target_center_m'][1]
+            dy=goal[1]-plan['initial_target_center_m'][1]
             if abs(dy)>.020:raise ValueError('Diagonal correction exceeds the short local range')
             original=command
             def command(seconds):
@@ -47,8 +49,10 @@ def prepare(axis,source,restore,tangent_shift_mm=0,diagonal_align=False):
                 return pos,q,phase
             plan['diagonal_y_displacement_m']=dy
         return command,plan
-    restore();start=d.mocap_pos[p.t.LM].copy();startq=d.mocap_quat[p.t.LM].copy();target=d.xpos[m.body(TARGET).id].copy()
-    corners=Rotation.from_quat(d.xquat[m.body(TARGET).id][[1,2,3,0]]).apply(p.CORNERS)+target
+    restore();start=d.mocap_pos[p.t.LM].copy();startq=d.mocap_quat[p.t.LM].copy();target=d.xpos[m.body(target_name).id].copy()
+    corners=Rotation.from_quat(d.xquat[m.body(target_name).id][[1,2,3,0]]).apply(p.CORNERS)+target
+    if hand_targets is not None:
+        for name,value in hand_targets.items():d.qpos[m.jnt_qposadr[m.joint(name).id]]=value
     normal=np.array([-1.,0,0]) if axis=='east' else np.array([0.,1.,0]);tangent=np.array([-normal[1],normal[0],0.])
     quat=(Rotation.from_euler('z',0 if axis=='east' else 90,degrees=True)*Rotation.from_quat(p.t.QUAT[[1,2,3,0]])).as_quat()[[3,0,1,2]]
     d.qpos[p.t.LA:p.t.LA+3]=[0,0,p.t.ROOT[2]];d.qpos[p.t.LA+3:p.t.LA+7]=quat;mj.mj_forward(m,d)
@@ -60,25 +64,26 @@ def prepare(axis,source,restore,tangent_shift_mm=0,diagonal_align=False):
     # The retained blue push moved 61.269 mm for 80 mm hand travel. Use it as
     # an explicitly recorded offline teaching estimate, not a dynamics model.
     lost_travel=.080-.06126927207210336 if axis=='east' else 0.
-    distance=.3025-target[0]+lost_travel if axis=='east' else target[1]-.015
+    distance=goal[0]-target[0]+lost_travel if axis=='east' else target[1]-goal[1]
     if not .001<distance<.150:raise ValueError('Move outside this trial range')
-    above=root+.020*normal+[0,0,.070];turn=Slerp([0.,1.],Rotation.from_quat(np.array([startq,quat])[:,[1,2,3,0]]))
+    approach=0. if vertical_approach else .020
+    above=root+approach*normal+[0,0,approach_height];turn=Slerp([0.,1.],Rotation.from_quat(np.array([startq,quat])[:,[1,2,3,0]]))
     def command(seconds):
         if seconds<2:pos=start+[0,0,.030*seconds/2];q=startq;phase='rise'
         elif seconds<6:
             f=(seconds-2)/4;pos=(start+[0,0,.030])*(1-f)+above*f;q=turn(f).as_quat()[[3,0,1,2]];phase='transfer_above'
-        elif seconds<9:pos=root+.020*normal+[0,0,.070*(9-seconds)/3];q=quat;phase='descend'
-        elif seconds<10:pos=root+.020*(10-seconds)*normal;q=quat;phase='approach'
+        elif seconds<9:pos=root+approach*normal+[0,0,approach_height*(9-seconds)/3];q=quat;phase='descend'
+        elif seconds<10:pos=root+approach*(10-seconds)*normal;q=quat;phase='approach'
         elif seconds<16:pos=root-distance*(seconds-10)/6*normal;q=quat;phase='push_red'
         elif seconds<18:pos=root-distance*normal+[0,0,.050*(seconds-16)/2];q=quat;phase='lift_clear'
         elif seconds<20:pos=root+(-distance+.020*(seconds-18)/2)*normal+[0,0,.050];q=quat;phase='retreat'
         else:pos=root+(-distance+.020)*normal+[0,0,.050];q=quat;phase='released_hold'
         return pos,q,phase
     restore()
-    return command,dict(source=str(source),target=TARGET,axis=axis,initial_target_center_m=target.tolist(),component=0 if axis=='east' else 1,
-                        destination_axis_m=.3025 if axis=='east' else .015,goal_xy_m=[.3025,float(target[1]) if axis=='east' else .015],
+    return command,dict(source=str(source),target=target_name,axis=axis,initial_target_center_m=target.tolist(),component=0 if axis=='east' else 1,
+                        destination_axis_m=goal[0] if axis=='east' else goal[1],goal_xy_m=[goal[0],float(target[1]) if axis=='east' else goal[1]],
                         contact_root_m=root.tolist(),distance_m=distance,tangent_shift_mm=tangent_shift_mm,offline_lost_travel_estimate_m=lost_travel,
-                        duration_s=23.,hold_start_s=20.,whole_arm_collision_checked=False,native_verified=False,official_region_verified=False)
+                        duration_s=23.,hold_start_s=20.,approach_offset_m=approach,approach_height_m=approach_height,whole_arm_collision_checked=False,native_verified=False,official_region_verified=False)
 
 
 def evaluate_pair(out,plan):
