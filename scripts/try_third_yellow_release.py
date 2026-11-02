@@ -41,6 +41,24 @@ def prepare(aim_xy,open_receiver=False):
     return command,plan
 
 
+def prepare_flatten_right():
+    g.restore();center=g.d.xpos[g.m.body(g.TARGET).id].copy()
+    starts={side:(g.d.mocap_pos[i].copy(),g.d.mocap_quat[i].copy()) for side,i in [('left',g.p.t.LM),('right',g.p.t.RM)]}
+    controls={g.m.actuator(i).name:float(g.d.ctrl[i]) for i in range(g.m.nu)}
+    cube=Rotation.from_quat(g.d.xquat[g.m.body(g.TARGET).id][[1,2,3,0]])
+    candidates=Rotation.create_group('O');delta=candidates[int(np.argmin((candidates*cube.inv()).magnitude()))]*cube.inv()
+    pair=np.mean([g.d.xpos[g.m.body(n).id] for n in g.SUPPORTS],axis=0);g.DURATION=10.
+    def command(t):
+        turn=Rotation.from_rotvec(delta.as_rotvec()*np.clip((t-3)/4,0,1))
+        left=(starts['left'][0]+np.array([.08,.08,.08])*np.clip(t/3,0,1),starts['left'][1])
+        pos,quat=starts['right'];right=(turn.apply(pos-center)+center,(turn*Rotation.from_quat(quat[[1,2,3,0]])).as_quat()[[3,0,1,2]])
+        return dict(left=left,right=right),controls,'withdraw_left_support' if t<3 else 'flatten_right_hold' if t<7 else 'flat_hold'
+    return command,dict(source=str(g.SOURCE),target=g.TARGET,supports=g.SUPPORTS,pair_center_m=pair.tolist(),mode='flatten-right',
+        rotation_vector_rad=delta.as_rotvec().tolist(),rotation_degrees=float(np.degrees(delta.magnitude())),pivot_m=center.tolist(),
+        left_withdrawal_m=[.08,.08,.08],duration_s=10.,hold_start_s=7.,finger_controls_unchanged=True,
+        source_sequence_continuity_verified=True,online_object_feedback=False,native_verified=False,whole_arm_collision_checked=False)
+
+
 def prepare_narrow_lower(lowering=.040):
     if not np.isfinite(lowering) or not 0<=lowering<=.060:raise ValueError('Lowering must be between zero and 60 mm')
     g.restore();starts={side:(g.d.mocap_pos[i].copy(),g.d.mocap_quat[i].copy()) for side,i in [('left',g.p.t.LM),('right',g.p.t.RM)]}
@@ -73,13 +91,16 @@ def evaluate(out):
     summary['local_released_bridge_verified'] &= summary['protected_structure_verified']
     summary['local_third_yellow_aligned']=bool(summary.pop('local_first_yellow_aligned',summary.get('local_third_yellow_aligned',False)) and summary['protected_structure_verified'] and np.linalg.norm(offset)<=.005)
     plan=json.loads((out/'plan.json').read_text())
-    if plan['mode']=='common-yaw':
+    if plan['mode'] in ('common-yaw','flatten-right'):
         held=[row for row in rows if row['elapsed_s']>=plan['hold_start_s']-1e-8]
         only=bool(held and all(row['contacts'] and all(any(n.startswith(('lh_','rh_')) for n in c['pair']) for c in row['contacts']) for row in held))
         up=min((sum(c['force_xyz_n'][2] for c in row['contacts']) for row in held),default=0.)
         summary.update(held_only_hand_contacts=only,held_minimum_up_force_n=up,
             local_shared_reorientation_verified=bool(summary['protected_structure_verified'] and only and up>=.8*g.m.body(g.TARGET).mass*9.81
                 and summary.get('held_duration_s',0)>=2.98 and summary.get('held_drift_mm',float('inf'))<=2 and summary.get('held_angular_drift_degrees',float('inf'))<=2))
+        summary['held_only_right_hand_contacts']=bool(held and all(row['contacts'] and all(any(n.startswith('rh_') for n in c['pair']) for c in row['contacts']) for row in held))
+        summary['local_third_yellow_flat_hold_verified']=bool(summary['local_shared_reorientation_verified'] and summary.get('final_cube_face_tilt_degrees',float('inf'))<=2
+            and abs(summary.get('final_cube_yaw_mod90_degrees',float('inf')))<=10)
     record['summary']=summary;(out/'result.json').write_text(json.dumps(record,allow_nan=False));return summary
 
 
@@ -88,14 +109,14 @@ if __name__=='__main__':
     parser.add_argument('--source',type=Path,default=Path('runs/third-placement-112/transfer'))
     parser.add_argument('--out',type=Path,required=True);parser.add_argument('--run',action='store_true')
     parser.add_argument('--lower-mm',type=float,default=40.)
-    parser.add_argument('--aim-mm',type=float,nargs=2,default=[0.,0.]);modes=parser.add_mutually_exclusive_group();modes.add_argument('--open-receiver',action='store_true');modes.add_argument('--yaw-degrees',type=float);modes.add_argument('--narrow-lower',action='store_true');args=parser.parse_args()
+    parser.add_argument('--aim-mm',type=float,nargs=2,default=[0.,0.]);modes=parser.add_mutually_exclusive_group();modes.add_argument('--open-receiver',action='store_true');modes.add_argument('--yaw-degrees',type=float);modes.add_argument('--narrow-lower',action='store_true');modes.add_argument('--flatten-right',action='store_true');args=parser.parse_args()
     r.configure(args.source,target=feed.TARGET)
-    command,plan=prepare_yaw(args.yaw_degrees) if args.yaw_degrees is not None else prepare_narrow_lower(args.lower_mm/1000) if args.narrow_lower else prepare(np.array(args.aim_mm)/1000,args.open_receiver)
+    command,plan=prepare_flatten_right() if args.flatten_right else prepare_yaw(args.yaw_degrees) if args.yaw_degrees is not None else prepare_narrow_lower(args.lower_mm/1000) if args.narrow_lower else prepare(np.array(args.aim_mm)/1000,args.open_receiver)
     plan.update(second_upper_reference=str(feed.SECOND_REFERENCE))
     args.out.mkdir(parents=True,exist_ok=False);check=g.precheck(command)
     (args.out/'plan.json').write_text(json.dumps(plan,allow_nan=False));(args.out/'precheck.json').write_text(json.dumps(check,allow_nan=False))
     passed=check['passed'];brief=dict(precheck_passed=passed,geometry_failure_count=len(check['geometry_failures']),stage_counts={s:len(v) for s,v in check['stages'].items()},precheck_wall_seconds=check['wall_seconds'])
     if passed and args.run:
         g.run(command,plan,args.out,protected_payload='neighbor_5',additional_protected_payloads=(feed.SECOND,*feed.BASES))
-        brief['dynamics']=evaluate(args.out);passed=brief['dynamics']['local_shared_reorientation_verified' if args.yaw_degrees is not None else 'local_third_yellow_aligned']
+        brief['dynamics']=evaluate(args.out);passed=brief['dynamics']['local_third_yellow_flat_hold_verified' if args.flatten_right else 'local_shared_reorientation_verified' if args.yaw_degrees is not None else 'local_third_yellow_aligned']
     print(json.dumps(brief,indent=2));raise SystemExit(0 if passed else 1)
