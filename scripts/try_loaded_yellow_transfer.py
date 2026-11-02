@@ -18,10 +18,12 @@ DURATION=16.
 LEFT_CLEAR=np.array([.080,.080,.050])
 TARGET='neighbor_1'
 CONTINUOUS_SOURCE=False
+SHARED_SUPPORT=False
+SUPPORTS=('neighbor_9','neighbor_6')
 
 
-def configure_continuation(source,target):
-    global SOURCE,RECORD,STATE,CHECK,TARGET,CONTINUOUS_SOURCE
+def configure_continuation(source,target,shared_support=False,supports=('neighbor_9','neighbor_6')):
+    global SOURCE,RECORD,STATE,CHECK,TARGET,CONTINUOUS_SOURCE,SHARED_SUPPORT,SUPPORTS
     new_source=Path(source);record=json.loads((new_source/'result.json').read_text());check=json.loads((new_source/'precheck.json').read_text())
     state=np.load(new_source/'integration-state.npz',allow_pickle=False);s=record['summary']
     held=[r for r in record['rows'] if r['elapsed_s']>=s['duration_s']-3-1e-8]
@@ -29,12 +31,17 @@ def configure_continuation(source,target):
             or s['held_duration_s']<2.98 or s['held_drift_mm']>2 or s.get('held_angular_drift_degrees',float('inf'))>2
             or s['held_minimum_bottom_mm']<5 or s['held_minimum_hand_up_force_n']<.8*m.body(target).mass*9.81
             or max(s['other_bricks_max_shift_mm'].values())>2 or s['checkpoint_next_step_maximum_difference']>1e-10
-            or not held or not all(r['contacts'] and all(any(n.startswith('rh_') for n in c['pair']) for c in r['contacts']) for r in held)):
-        raise ValueError('Source is not a stable right-hand acquisition')
+            or not held or not all(r['contacts'] and all(any(n.startswith(('lh_','rh_') if shared_support else ('rh_',)) for n in c['pair']) for c in r['contacts']) for r in held)):
+        raise ValueError('Source is not a stable acquisition with the requested hand support')
+    if shared_support and (not s.get('protected_structure_verified',False) or not s.get('source_sequence_continuity_verified',False)):
+        raise ValueError('Shared transport requires a continuous acquisition preserving the structure')
+    if len(supports)!=2 or len(set(supports))!=2 or target in supports:raise ValueError('Expected two distinct support bricks')
+    for name in supports:m.body(name)
     if str(state['mujoco_version'])!=mj.__version__ or len(state['state'])!=mj.mj_stateSize(m,int(state['spec'])):raise ValueError('Checkpoint runtime mismatch')
     candidate=mj.MjData(m);mj.mj_setState(m,candidate,state['state'],int(state['spec']));mj.mj_forward(m,candidate)
     if not np.allclose(candidate.qpos,record['rows'][-1]['qpos'],rtol=0,atol=1e-12) or not np.allclose(candidate.qvel,record['rows'][-1]['qvel'],rtol=0,atol=1e-12):raise ValueError('State and trace differ')
     SOURCE=new_source;RECORD=record;STATE=state;CHECK=check;TARGET=target
+    SHARED_SUPPORT=shared_support;SUPPORTS=tuple(supports)
     CONTINUOUS_SOURCE=bool(s.get('source_sequence_continuity_verified',False))
 
 
@@ -47,20 +54,23 @@ def restore():
     mj.mj_setState(m,d,STATE['state'],int(STATE['spec']));mj.mj_forward(m,d)
 
 
-def prepare():
+def prepare(lift_height=.080):
+    if not np.isfinite(lift_height) or lift_height<.080:raise ValueError('Loaded transport requires at least 80 mm lift')
     restore();poses={side:(d.mocap_pos[index].copy(),d.mocap_quat[index].copy()) for side,index in [('left',p.t.LM),('right',p.t.RM)]}
     target=d.xpos[m.body(TARGET).id].copy()
-    pair=(d.xpos[m.body('neighbor_9').id]+d.xpos[m.body('neighbor_6').id])/2
-    delta=pair-target;delta[2]=.080
+    pair=sum(d.xpos[m.body(name).id] for name in SUPPORTS)/2
+    delta=pair-target;delta[2]=lift_height
     def command(seconds):
         left=LEFT_CLEAR*np.clip(seconds/3,0,1)
-        lift=np.array([0.,0.,.080*np.clip((seconds-3)/4,0,1)])
+        lift=np.array([0.,0.,lift_height*np.clip((seconds-3)/4,0,1)])
         horizontal=np.r_[delta[:2],0.]*np.clip((seconds-7)/6,0,1)
         right=lift+horizontal
-        phase='left_clear' if seconds<3 else 'raise_payload' if seconds<7 else 'transfer_over_pair' if seconds<13 else 'hold'
+        if SHARED_SUPPORT:left=right.copy()
+        phase=('shared_hold' if SHARED_SUPPORT else 'left_clear') if seconds<3 else 'raise_payload' if seconds<7 else 'transfer_over_pair' if seconds<13 else 'hold'
         return {side:(poses[side][0]+offset,poses[side][1]) for side,offset in [('left',left),('right',right)]},right,phase
     return command,dict(source=str(SOURCE),target=TARGET,initial_target_center_m=target.tolist(),red_pair_center_m=pair.tolist(),
-                        requested_payload_translation_m=delta.tolist(),left_clear_m=LEFT_CLEAR.tolist(),
+                        requested_payload_translation_m=delta.tolist(),left_clear_m=([0.,0.,0.] if SHARED_SUPPORT else LEFT_CLEAR.tolist()),
+                        shared_support=SHARED_SUPPORT,supports=list(SUPPORTS),
                         finger_controls_unchanged=True,upper_placement_verified=False,native_verified=False,
                         whole_arm_collision_checked=False,source_sequence_continuity_verified=CONTINUOUS_SOURCE)
 
@@ -74,7 +84,7 @@ def precheck(command):
         d.qpos[target_address:target_address+3]+=offset;mj.mj_forward(m,d)
         for c in d.contact:
             ns=[m.geom(int(i)).name for i in c.geom]
-            allowed=TARGET in ns and any(n.startswith('rh_') for n in ns)
+            allowed=TARGET in ns and any(n.startswith(('lh_','rh_') if SHARED_SUPPORT else ('rh_',)) for n in ns)
             relevant=TARGET in ns or any(n.startswith(('rh_','lh_')) for n in ns)
             if relevant and not allowed:bad.append(dict(t=float(seconds),phase=phase,pair=ns,depth_mm=-float(c.dist)*1000))
     restore();stages={};initial={}
@@ -86,17 +96,17 @@ def precheck(command):
                            angle_error_rad=float(Rotation.from_matrix(ctx['root'][:3,:3].T@actual[:3,:3]).magnitude()))
         stages[side]=[];q=seed
         if not bad and initial[side]['position_error_m']<1e-5 and initial[side]['angle_error_rad']<1e-4:
-            for seconds in ([3] if side=='left' else [7,13]):
+            for seconds in ([3] if side=='left' and not SHARED_SUPPORT else [7,13]):
                 pos,_=command(seconds)[0][side]
                 result=p.t.routes.stage(side,ctx,q,'loaded_transfer',(pos-ctx['root'][:3,3]).tolist());stages[side].append(result)
                 if not result['continuous']:break
                 q=result['final_joints_sdk']
-    return dict(passed=not bad and len(stages['left'])==1 and len(stages['right'])==2 and all(x['continuous'] for ss in stages.values() for x in ss),
+    return dict(passed=not bad and len(stages['left'])==(2 if SHARED_SUPPORT else 1) and len(stages['right'])==2 and all(x['continuous'] for ss in stages.values() for x in ss),
                 geometry_failures=bad,stages=stages,initial_seed_errors=initial,wall_seconds=time.monotonic()-started,
                 frozen_payload_geometry_only=True,whole_arm_collision_checked=False)
 
 
-def run(command,plan,out):
+def run(command,plan,out,protected_payload=None):
     restore();start=float(d.time);body=m.body(TARGET).id;target=d.xpos[body].copy()
     others={m.body(i).name:d.xpos[i].copy() for i in range(m.nbody) if (m.body(i).name=='target' or m.body(i).name.startswith('neighbor_')) and i!=body}
     shifts={n:0. for n in others};rows=[];bad=[];abort=None;started=time.monotonic()
@@ -108,16 +118,19 @@ def run(command,plan,out):
             for n,position in others.items():
                 shifts[n]=max(shifts[n],float(np.linalg.norm(d.xpos[m.body(n).id]-position)))
                 if shifts[n]>.002:abort='other_brick_moved'
-            contacts=[]
+            contacts=[];protected_contacts=[]
             for ci,c in enumerate(d.contact):
                 ns=[m.geom(int(i)).name for i in c.geom]
                 relevant=TARGET in ns or any(n.startswith(('rh_','lh_')) for n in ns)
-                allowed=TARGET in ns and any(n.startswith('rh_') for n in ns)
+                allowed=TARGET in ns and any(n.startswith(('lh_','rh_') if SHARED_SUPPORT else ('rh_',)) for n in ns)
                 if relevant and not allowed and c.dist<-.0005:
                     bad.append(dict(t=float(d.time)-start,pair=ns,depth_mm=-float(c.dist)*1000));abort='unexpected_contact'
                 if TARGET in ns:
                     f=np.zeros(6);mj.mj_contactForce(m,d,ci,f);v=c.frame.reshape(3,3).T@f[:3]*(1 if ns[1]==TARGET else -1)
                     contacts.append(dict(pair=ns,force_xyz_n=v.tolist()))
+                if protected_payload is not None and protected_payload in ns:
+                    f=np.zeros(6);mj.mj_contactForce(m,d,ci,f);v=c.frame.reshape(3,3).T@f[:3]*(1 if ns[1]==protected_payload else -1)
+                    protected_contacts.append(dict(pair=ns,force_xyz_n=v.tolist()))
             rot=Rotation.from_quat(d.xquat[body][[1,2,3,0]]);bottom=float((rot.apply(p.CORNERS)+d.xpos[body])[:,2].min()-a.g.FLOOR)
             error=float(np.linalg.norm(d.xpos[body]-target-offset))
             if error>.020:abort='payload_slipped'
@@ -126,22 +139,25 @@ def run(command,plan,out):
             if step%10==9 or abort:
                 row=dict(elapsed_s=float(d.time)-start,phase=phase,position_m=d.xpos[body].tolist(),quaternion_wxyz=d.xquat[body].tolist(),
                          lowest_corner_m=bottom,payload_translation_error_m=error,contacts=contacts,qpos=d.qpos.tolist(),qvel=d.qvel.tolist())
+                if protected_payload is not None:row['protected_payload_contacts']=protected_contacts
                 rows.append(row);stream.write(json.dumps(row,allow_nan=False)+'\n')
             if abort:break
     held=[r for r in rows if r['elapsed_s']>=13-1e-8]
     summary=dict(target=TARGET,abort=abort,duration_s=float(d.time)-start,cumulative_simulation_s=float(d.time),wall_seconds=time.monotonic()-started,unintended_contacts=bad,
                  other_bricks_max_shift_mm={n:v*1000 for n,v in shifts.items()},local_loaded_transfer_verified=False,
+                 shared_support=SHARED_SUPPORT,supports=list(SUPPORTS),
                  upper_placement_verified=False,native_verified=False,whole_arm_collision_checked=False,source_sequence_continuity_verified=CONTINUOUS_SOURCE)
     if held:
         xyz=np.array([r['position_m'] for r in held]);rot=Rotation.from_quat(np.array([r['quaternion_wxyz'] for r in held])[:,[1,2,3,0]])
         drift=float(np.linalg.norm(xyz-xyz[0],axis=1).max());angle=float(np.degrees((rot[0].inv()*rot).magnitude().max()))
         right_only=all(r['contacts'] and all(any(n.startswith('rh_') for n in c['pair']) for c in r['contacts']) for r in held)
+        hands_only=all(r['contacts'] and all(any(n.startswith(('lh_','rh_')) for n in c['pair']) for c in r['contacts']) for r in held)
         up=min(sum(c['force_xyz_n'][2] for c in r['contacts']) for r in held)
         summary.update(held_duration_s=held[-1]['elapsed_s']-held[0]['elapsed_s'],held_drift_mm=drift*1000,held_angular_drift_degrees=angle,
                        held_minimum_bottom_mm=min(r['lowest_corner_m'] for r in held)*1000,held_minimum_up_force_n=up,
-                       held_only_right_hand_contacts=right_only,final_translation_error_mm=held[-1]['payload_translation_error_m']*1000)
+                       held_only_right_hand_contacts=right_only,held_only_hand_contacts=hands_only,final_translation_error_mm=held[-1]['payload_translation_error_m']*1000)
         summary['local_loaded_transfer_verified']=bool(not abort and not bad and summary['held_duration_s']>=2.98 and drift<=.002
-                         and angle<=2 and right_only and up>=.8*m.body(TARGET).mass*9.81 and summary['final_translation_error_mm']<=5)
+                         and angle<=2 and (hands_only if SHARED_SUPPORT else right_only) and up>=.8*m.body(TARGET).mass*9.81 and summary['final_translation_error_mm']<=5)
     spec=mj.mjtState.mjSTATE_INTEGRATION;state=np.empty(mj.mj_stateSize(m,spec));mj.mj_getState(m,d,state,spec)
     np.savez(out/'integration-state.npz',state=state,spec=int(spec),mujoco_version=mj.__version__)
     restored=mj.MjData(m);mj.mj_setState(m,restored,state,spec);x=np.empty_like(state);y=np.empty_like(state)
