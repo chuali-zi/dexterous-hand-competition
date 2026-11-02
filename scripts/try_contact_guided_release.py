@@ -16,11 +16,15 @@ g = release.g
 GUIDES = ('neighbor_5', 'neighbor_3')
 
 
-def assess(out, held_payload=None):
+def assess(out, held_payload=None, placed_payload=None):
     record = json.loads((out / 'result.json').read_text())
     plan = json.loads((out / 'plan.json').read_text())
     check = json.loads((out / 'precheck.json').read_text())
     summary = record['summary']
+    if placed_payload is not None and (held_payload is not None or placed_payload not in ('neighbor_0', 'neighbor_7')
+                                      or summary['target'] != placed_payload
+                                      or tuple(plan.get('supports', ())) not in (('neighbor_5', 'neighbor_1'), ('neighbor_1', 'neighbor_3'))):
+        raise ValueError('Placed blue requires its adjacent yellow support pair and hands withdrawn')
     if held_payload is not None and (held_payload not in ('neighbor_0', 'neighbor_7') or summary['target'] != held_payload):
         raise ValueError('Only the explicitly active blue payload may remain in hand')
     held = [row for row in record['rows'] if row['elapsed_s'] >= plan['hold_start_s'] - 1e-8]
@@ -29,6 +33,9 @@ def assess(out, held_payload=None):
                   diagnostic_only=True, native_verified=False, full_pyramid_verified=False,
                   whole_arm_collision_checked=False,
                   scope='Final three-second local structure after transient neighboring-brick contact; original strict result preserved')
+    if placed_payload is not None:
+        report.update(local_eight_brick_final_structure_verified=False, placed_blue=placed_payload,
+                      scope='Final local four-red/three-yellow/one-blue structure with all hands clear; not official scoring')
     if len(held) < 2:
         report['reason'] = 'No complete final hold'
         return report
@@ -43,6 +50,8 @@ def assess(out, held_payload=None):
     pairs = {'neighbor_5': ('neighbor_9', 'neighbor_6'),
              'neighbor_1': ('neighbor_6', 'neighbor_4'),
              'neighbor_3': ('neighbor_4', 'neighbor_2')}
+    if placed_payload is not None:
+        pairs[placed_payload] = tuple(plan['supports'])
     metrics = {}
     for name, supports in pairs.items():
         address = g.m.jnt_qposadr[g.m.joint(name + '_free').id]
@@ -57,12 +66,15 @@ def assess(out, held_payload=None):
         centers = np.array([np.mean([row['qpos'][a:a + 3] for a in addresses], axis=0) for row in held])
         contacts = [row['contacts'] if name == summary['target'] else row['protected_payload_contacts']
                     if name == 'neighbor_5' else row['additional_protected_payload_contacts'][name] for row in held]
-        only = all(cs and all(all(n in (name, *supports) for n in c['pair']) for c in cs) for cs in contacts)
+        permitted = (name, *supports)
+        if placed_payload is not None and name in pairs[placed_payload]:
+            permitted += (placed_payload,)
+        only = all(cs and all(all(n in permitted for n in c['pair']) for c in cs) for cs in contacts)
         forces = {n: min(sum(c['force_xyz_n'][2] for c in cs if n in c['pair']) for cs in contacts) for n in supports}
         drift = float(np.linalg.norm(xyz - xyz[0], axis=1).max() * 1000)
         angular = float(np.degrees((rotations[0].inv() * rotations).magnitude().max()))
         error = float(np.linalg.norm((xyz - centers)[:, :2], axis=1).max() * 1000)
-        height_error = float(np.max(np.abs(xyz[:, 2] - (g.a.g.FLOOR + .075))) * 1000)
+        height_error = float(np.max(np.abs(xyz[:, 2] - (g.a.g.FLOOR + (.125 if name == placed_payload else .075)))) * 1000)
         metrics[name] = dict(drift_mm=drift, angular_drift_degrees=angular,
             maximum_actual_pair_center_error_mm=error, maximum_face_tilt_degrees=float(face.max()),
             maximum_abs_yaw_degrees=float(np.abs(yaw).max()), maximum_height_error_mm=height_error,
@@ -101,10 +113,13 @@ def assess(out, held_payload=None):
         report.update(permitted_held_payload=held_payload, held_payload_hand_contacts=held_payload_contacts,
                       scope='Seven placed bricks remain supported and clear of hands; explicitly named blue payload may be held separately')
     report['local_seven_brick_final_structure_verified'] = bool(
-        complete and structure['passed'] and all(v['passed'] for v in metrics.values())
+        complete and structure['passed'] and all(v['passed'] for n, v in metrics.items() if n != placed_payload)
         and not hand_contacts and checkpoint_ok and bounds_ok and check['passed']
         and not summary['abort'] and not summary['unintended_contacts']
         and summary['source_sequence_continuity_verified'])
+    if placed_payload is not None:
+        report['local_eight_brick_final_structure_verified'] = bool(
+            report['local_seven_brick_final_structure_verified'] and metrics[placed_payload]['passed'])
     return report
 
 

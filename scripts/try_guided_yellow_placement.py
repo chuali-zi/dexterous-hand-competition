@@ -171,7 +171,8 @@ def validate_contact_diagnostic(allowed, protected, shift_limit):
         raise ValueError('A larger diagnostic bound requires named contact neighbors')
 
 
-def run(command,plan,out,protected_payload=None,additional_protected_payloads=(),allowed_payload_contacts=(),allowed_payload_shift_m=.002):
+def run(command,plan,out,protected_payload=None,additional_protected_payloads=(),allowed_payload_contacts=(),allowed_payload_shift_m=.002,payload_floor_m=.040):
+    if not np.isfinite(payload_floor_m) or payload_floor_m<.040:raise ValueError('Payload floor cannot be below 40 mm')
     validate_contact_diagnostic(allowed_payload_contacts, (protected_payload,*additional_protected_payloads), allowed_payload_shift_m)
     restore();start=float(d.time);body=m.body(TARGET).id
     initial={m.body(i).name:d.xpos[i].copy() for i in range(m.nbody) if (m.body(i).name=='target' or m.body(i).name.startswith('neighbor_')) and i!=body}
@@ -204,7 +205,7 @@ def run(command,plan,out,protected_payload=None,additional_protected_payloads=()
                         f=np.zeros(6);mj.mj_contactForce(m,d,ci,f);v=c.frame.reshape(3,3).T@f[:3]*(1 if ns[1]==name else -1)
                         extra_protected[name].append(dict(pair=ns,force_xyz_n=v.tolist()))
             rot=Rotation.from_quat(d.xquat[body][[1,2,3,0]]);bottom=float((rot.apply(p.CORNERS)+d.xpos[body])[:,2].min()-a.g.FLOOR)
-            if bottom<.040:abort='payload_below_base_top'
+            if bottom<payload_floor_m:abort='payload_below_base_top'
             if np.linalg.norm(d.xpos[body][:2]-plan['pair_center_m'][:2])>.060:abort='payload_outside_pair'
             if not np.isfinite(d.qpos).all():raise RuntimeError('Nonfinite state')
             if step%10==9 or abort:
@@ -221,6 +222,7 @@ def run(command,plan,out,protected_payload=None,additional_protected_payloads=()
         summary.update(allowed_transient_payload_contacts=list(allowed_payload_contacts),
                        transient_neighbor_shift_limit_mm=allowed_payload_shift_m*1000,
                        diagnostic_only=True)
+    if payload_floor_m!=.040:summary['payload_floor_m']=payload_floor_m
     evaluate(summary,rows,plan,hold_start=plan.get('hold_start_s',19.))
     spec=mj.mjtState.mjSTATE_INTEGRATION;state=np.empty(mj.mj_stateSize(m,spec));mj.mj_getState(m,d,state,spec)
     np.savez(out/'integration-state.npz',state=state,spec=int(spec),mujoco_version=mj.__version__)
