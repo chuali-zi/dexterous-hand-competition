@@ -61,7 +61,8 @@ def prepare(axis,source,restore,approach_height=.070,adapt_lateral_face=False,ta
             for name,value in hand_targets.items():d.qpos[m.jnt_qposadr[m.joint(name).id]]=value
         d.qpos[p.t.LA:p.t.LA+3]=0;d.qpos[p.t.LA+3:p.t.LA+7]=[1,0,0,0];mj.mj_forward(m,d)
         local=np.concatenate([b.a.placement.a.g.mesh_vertices('lh_'+n) for n in contact_links])
-        seed=np.array(json.loads((source/'precheck.json').read_text())['stages'][-1]['result']['final_joints_sdk'])
+        stages=json.loads((source/'precheck.json').read_text())['stages']
+        seed=np.array((stages['left'] if isinstance(stages,dict) else stages)[-1]['result']['final_joints_sdk'])
         bounds=p.t.routes.context()['left']['intersection']+[.02,-.02]
         goal=np.array([corners[:,0].max()-.0005,target[1],b.a.placement.a.g.FLOOR+.005])
         def metrics(q):

@@ -16,14 +16,16 @@ g = release.g
 GUIDES = ('neighbor_5', 'neighbor_3')
 
 
-def assess(out):
+def assess(out, held_payload=None):
     record = json.loads((out / 'result.json').read_text())
     plan = json.loads((out / 'plan.json').read_text())
     check = json.loads((out / 'precheck.json').read_text())
     summary = record['summary']
+    if held_payload is not None and (held_payload not in ('neighbor_0', 'neighbor_7') or summary['target'] != held_payload):
+        raise ValueError('Only the explicitly active blue payload may remain in hand')
     held = [row for row in record['rows'] if row['elapsed_s'] >= plan['hold_start_s'] - 1e-8]
     report = dict(local_seven_brick_final_structure_verified=False,
-                  strict_release_verified=summary['local_released_bridge_verified'],
+                  strict_release_verified=summary.get('local_released_bridge_verified', False),
                   diagnostic_only=True, native_verified=False, full_pyramid_verified=False,
                   whole_arm_collision_checked=False,
                   scope='Final three-second local structure after transient neighboring-brick contact; original strict result preserved')
@@ -53,7 +55,7 @@ def assess(out):
         yaw = (np.degrees(np.arctan2(axes[:, 1], axes[:, 0])) + 45) % 90 - 45
         addresses = [g.m.jnt_qposadr[g.m.joint(n + '_free').id] for n in supports]
         centers = np.array([np.mean([row['qpos'][a:a + 3] for a in addresses], axis=0) for row in held])
-        contacts = [row['contacts'] if name == 'neighbor_1' else row['protected_payload_contacts']
+        contacts = [row['contacts'] if name == summary['target'] else row['protected_payload_contacts']
                     if name == 'neighbor_5' else row['additional_protected_payload_contacts'][name] for row in held]
         only = all(cs and all(all(n in (name, *supports) for n in c['pair']) for c in cs) for cs in contacts)
         forces = {n: min(sum(c['force_xyz_n'][2] for c in cs if n in c['pair']) for cs in contacts) for n in supports}
@@ -68,6 +70,7 @@ def assess(out):
             passed=bool(only and min(forces.values()) >= .1 and sum(forces.values()) >= .8 * g.m.body(name).mass * 9.81
                         and drift <= 2 and angular <= 2 and error <= 5 and face.max() <= 2 and np.abs(yaw).max() <= 10 and height_error <= 5))
     hand_contacts = []
+    held_payload_contacts = []
     probe = g.mj.MjData(g.m)
     for row in held:
         probe.qpos[:] = row['qpos']
@@ -76,7 +79,11 @@ def assess(out):
         for contact in probe.contact:
             names = [g.m.geom(int(i)).name for i in contact.geom]
             if any(n.startswith(('lh_', 'rh_')) for n in names):
-                hand_contacts.append(dict(t=row['elapsed_s'], pair=names))
+                entry = dict(t=row['elapsed_s'], pair=names)
+                if held_payload is not None and held_payload in names:
+                    held_payload_contacts.append(entry)
+                else:
+                    hand_contacts.append(entry)
     state = np.load(out / 'integration-state.npz', allow_pickle=False)
     restored = g.mj.MjData(g.m)
     version_ok = str(state['mujoco_version']) == g.mj.__version__
@@ -90,6 +97,9 @@ def assess(out):
                   final_hand_contacts=hand_contacts, checkpoint_verified=checkpoint_ok,
                   transient_neighbor_bounds_respected=bounds_ok,
                   maximum_neighbor_shift_mm=summary['other_bricks_max_shift_mm'])
+    if held_payload is not None:
+        report.update(permitted_held_payload=held_payload, held_payload_hand_contacts=held_payload_contacts,
+                      scope='Seven placed bricks remain supported and clear of hands; explicitly named blue payload may be held separately')
     report['local_seven_brick_final_structure_verified'] = bool(
         complete and structure['passed'] and all(v['passed'] for v in metrics.values())
         and not hand_contacts and checkpoint_ok and bounds_ok and check['passed']

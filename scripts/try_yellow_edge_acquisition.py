@@ -45,7 +45,7 @@ RECENTER_WIDE_FACE=False
 def forward(q):return np.asarray(p.t.routes.sdk.forward_kinematics('right',q.tolist()))@CTX['right']['mount']
 
 
-def configure_continuation(source,target,southern_receiver=False):
+def configure_continuation(source,target,southern_receiver=False,edge_blue_receiver=False):
     """Use an actual released checkpoint without resetting either hand."""
     global SOURCE,STATE,RECORD,CHECK,TARGET,CONTINUOUS_SOURCE,INITIAL_CONTROLS,RIGHT_Q,WAYPOINTS,PUSH_DISTANCE
     new_source=Path(source);new_record=json.loads((new_source/'result.json').read_text());new_check=json.loads((new_source/'precheck.json').read_text())
@@ -70,6 +70,11 @@ def configure_continuation(source,target,southern_receiver=False):
     center=candidate.xpos[m.body(target).id].copy()
     low_y,high_y=(.200,.240) if target=='neighbor_3' and coupled else (.130,.170)
     in_region=.210<=center[0]<=.250 and low_y<=center[1]<=high_y
+    if edge_blue_receiver:
+        if (southern_receiver or target not in ('neighbor_0','neighbor_7')
+                or not all(summary.get(k,False) for k in ('local_blue_table_feed_verified','local_seven_brick_final_structure_verified','local_receiver_return_verified','source_sequence_continuity_verified'))):
+            raise ValueError('Blue edge entry requires verified seven-brick feed and receiver return')
+        in_region=.135<=center[0]<=.160 and .130<=center[1]<=.170
     if southern_receiver and (target not in ['neighbor_1','neighbor_3'] or not summary.get('current_structure',{}).get('passed',False)):
         raise ValueError('Explicit southern receiver requires a verified current structure')
     if target=='neighbor_3' or southern_receiver:
@@ -169,7 +174,8 @@ def four_finger_face(fingers=None):
                      scope='Actual existing finger meshes; static alignment does not prove stable pushing')
 
 
-def prepare():
+def prepare(approach_offset=.020):
+    if approach_offset not in (0., .020):raise ValueError('Edge approach offset must be zero or 20 mm')
     restore(geometry=True);start=d.mocap_pos[p.t.LM].copy();startq=d.mocap_quat[p.t.LM].copy()
     target=d.xpos[m.body(TARGET).id].copy();tq=d.xquat[m.body(TARGET).id].copy()
     pts=Rotation.from_quat(tq[[1,2,3,0]]).apply(p.CORNERS)+target
@@ -209,9 +215,9 @@ def prepare():
             right=catch[:3,3]+[0,0,height];rightq=rq
         if seconds<9:left=start;phase='right_outside_entry'
         elif seconds<12:
-            f=(seconds-9)/3;left=start*(1-f)+(root+[.020,0,.070])*f;phase='left_transit'
-        elif seconds<15:left=root+[.020,0,.070*(15-seconds)/3];phase='left_descend'
-        elif seconds<16:left=root+[.020*(16-seconds),0,0];phase='left_approach'
+            f=(seconds-9)/3;left=start*(1-f)+(root+[approach_offset,0,.070])*f;phase='left_transit'
+        elif seconds<15:left=root+[approach_offset,0,.070*(15-seconds)/3];phase='left_descend'
+        elif seconds<16:left=root+[approach_offset*(16-seconds),0,0];phase='left_approach'
         elif seconds<22:left=root+[-PUSH_DISTANCE*(seconds-16)/6,0,0];phase='edge_push'
         elif CUP_BEFORE_LIFT and seconds<23:left=root+[-PUSH_DISTANCE,0,0];phase='curl_receiving_fingers'
         elif CUP_BEFORE_LIFT and seconds<25:left=root+[-PUSH_DISTANCE,0,.020*(seconds-23)/2];phase='common_lift'
@@ -221,7 +227,7 @@ def prepare():
             left=left.copy();left[1]+=wide_y_offset*np.clip(seconds-20,0,1)
         leftq=turn(np.clip(seconds,9,12)).as_quat()[[3,0,1,2]]
         return dict(left=(left,leftq),right=(right,rightq)),phase
-    return command,dict(source=str(SOURCE),target=TARGET,initial_target_center_m=target.tolist(),left_contact_root_m=root.tolist(),push_distance_m=PUSH_DISTANCE,
+    return command,dict(source=str(SOURCE),target=TARGET,initial_target_center_m=target.tolist(),left_contact_root_m=root.tolist(),push_distance_m=PUSH_DISTANCE,approach_offset_m=approach_offset,
                         right_joint_waypoints=[q.tolist() for q in WAYPOINTS],pusher_corridor_shift_y_m=corridor_shift,
                         delayed_pinky_schedule='20-21 seconds: open the pinky after clearing adjacent red' if DELAYED_PINKY else None,
                         late_wide_face_y_offset_m=wide_y_offset,
