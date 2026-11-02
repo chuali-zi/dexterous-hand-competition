@@ -13,17 +13,21 @@ import try_fourth_red_with_upper as fourth
 REFERENCE=Path('runs/fourth-red-105/final-south')
 
 
-def configure(source,end_pair=False,released=False):
+def configure(source,end_pair=False,released=False,target='neighbor_3'):
+    if target not in ('neighbor_3','neighbor_1') or (target=='neighbor_1' and (end_pair or released)):
+        raise ValueError('Third yellow requires a shared middle-pair placement source')
     record=json.loads((source/'result.json').read_text());s=record['summary'];check=json.loads((source/'precheck.json').read_text())
     source_ok=s.get('local_released_bridge_verified',False) if released else (s.get('local_loaded_transfer_verified',False) or s.get('local_shared_reorientation_verified',False))
+    if target=='neighbor_1' and not released:
+        source_ok=source_ok or s.get('local_shared_transport_hold_verified',False)
     contact_ok=s.get('held_only_base_contacts',False) if released else s.get('held_only_hand_contacts',False)
     if released and (not end_pair or json.loads((source/'plan.json').read_text())['supports']!=['neighbor_4','neighbor_2']):raise ValueError('Alignment requires the verified end-pair release')
     if released and (s['final_cube_face_tilt_degrees']>2 or s['final_bottom_mm']<45):raise ValueError('Alignment requires a near-flat released brick')
-    if (s.get('target')!='neighbor_3' or not source_ok
+    if (s.get('target')!=target or not source_ok
             or not s.get('protected_structure_verified',False) or not s.get('source_sequence_continuity_verified',False)
             or s['abort'] or s['unintended_contacts'] or not check['passed'] or not contact_ok
             or s['held_duration_s']<2.98 or s['held_drift_mm']>2 or s['held_angular_drift_degrees']>2
-            or s['held_minimum_up_force_n']<.8*g.m.body('neighbor_3').mass*9.81 or max(s['other_bricks_max_shift_mm'].values())>2
+            or s['held_minimum_up_force_n']<.8*g.m.body(target).mass*9.81 or max(s['other_bricks_max_shift_mm'].values())>2
             or s['checkpoint_next_step_maximum_difference']>1e-10):raise ValueError('Source is not a verified protected shared hold')
     state=np.load(source/'integration-state.npz',allow_pickle=False)
     if str(state['mujoco_version'])!=g.mj.__version__ or len(state['state'])!=g.mj.mj_stateSize(g.m,int(state['spec'])):raise ValueError('Checkpoint runtime mismatch')
@@ -31,7 +35,7 @@ def configure(source,end_pair=False,released=False):
     np.testing.assert_allclose(candidate.qpos,record['rows'][-1]['qpos'],rtol=0,atol=1e-12)
     np.testing.assert_allclose(candidate.qvel,record['rows'][-1]['qvel'],rtol=0,atol=1e-12)
     def restore():g.mj.mj_setState(g.m,g.d,state['state'],int(state['spec']));g.mj.mj_forward(g.m,g.d)
-    g.SOURCE=source;g.RECORD=record;g.STATE=state;g.CHECK=check;g.TARGET='neighbor_3';g.SUPPORTS=['neighbor_4','neighbor_2'] if end_pair else ['neighbor_6','neighbor_4'];g.CONTINUOUS_SOURCE=True
+    g.SOURCE=source;g.RECORD=record;g.STATE=state;g.CHECK=check;g.TARGET=target;g.SUPPORTS=['neighbor_4','neighbor_2'] if end_pair else ['neighbor_6','neighbor_4'];g.CONTINUOUS_SOURCE=True
     g.restore=restore
 
 

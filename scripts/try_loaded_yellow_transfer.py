@@ -106,7 +106,7 @@ def precheck(command):
                 frozen_payload_geometry_only=True,whole_arm_collision_checked=False)
 
 
-def run(command,plan,out,protected_payload=None):
+def run(command,plan,out,protected_payload=None,additional_protected_payloads=()):
     restore();start=float(d.time);body=m.body(TARGET).id;target=d.xpos[body].copy()
     others={m.body(i).name:d.xpos[i].copy() for i in range(m.nbody) if (m.body(i).name=='target' or m.body(i).name.startswith('neighbor_')) and i!=body}
     shifts={n:0. for n in others};rows=[];bad=[];abort=None;started=time.monotonic()
@@ -118,7 +118,7 @@ def run(command,plan,out,protected_payload=None):
             for n,position in others.items():
                 shifts[n]=max(shifts[n],float(np.linalg.norm(d.xpos[m.body(n).id]-position)))
                 if shifts[n]>.002:abort='other_brick_moved'
-            contacts=[];protected_contacts=[]
+            contacts=[];protected_contacts=[];extra_protected={n:[] for n in additional_protected_payloads}
             for ci,c in enumerate(d.contact):
                 ns=[m.geom(int(i)).name for i in c.geom]
                 relevant=TARGET in ns or any(n.startswith(('rh_','lh_')) for n in ns)
@@ -131,6 +131,10 @@ def run(command,plan,out,protected_payload=None):
                 if protected_payload is not None and protected_payload in ns:
                     f=np.zeros(6);mj.mj_contactForce(m,d,ci,f);v=c.frame.reshape(3,3).T@f[:3]*(1 if ns[1]==protected_payload else -1)
                     protected_contacts.append(dict(pair=ns,force_xyz_n=v.tolist()))
+                for name in additional_protected_payloads:
+                    if name in ns:
+                        f=np.zeros(6);mj.mj_contactForce(m,d,ci,f);v=c.frame.reshape(3,3).T@f[:3]*(1 if ns[1]==name else -1)
+                        extra_protected[name].append(dict(pair=ns,force_xyz_n=v.tolist()))
             rot=Rotation.from_quat(d.xquat[body][[1,2,3,0]]);bottom=float((rot.apply(p.CORNERS)+d.xpos[body])[:,2].min()-a.g.FLOOR)
             error=float(np.linalg.norm(d.xpos[body]-target-offset))
             if error>.020:abort='payload_slipped'
@@ -140,6 +144,7 @@ def run(command,plan,out,protected_payload=None):
                 row=dict(elapsed_s=float(d.time)-start,phase=phase,position_m=d.xpos[body].tolist(),quaternion_wxyz=d.xquat[body].tolist(),
                          lowest_corner_m=bottom,payload_translation_error_m=error,contacts=contacts,qpos=d.qpos.tolist(),qvel=d.qvel.tolist())
                 if protected_payload is not None:row['protected_payload_contacts']=protected_contacts
+                if additional_protected_payloads:row['additional_protected_payload_contacts']=extra_protected
                 rows.append(row);stream.write(json.dumps(row,allow_nan=False)+'\n')
             if abort:break
     held=[r for r in rows if r['elapsed_s']>=13-1e-8]

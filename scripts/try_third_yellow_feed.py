@@ -65,7 +65,7 @@ def prepare(mode='south-stage',north_yaw=90,north_goal=.240,single_finger=False)
     return command,fingers,plan
 
 
-def current_structure(rows,reference):
+def current_structure(rows,reference,allow_third_yellow_contact=False):
     # Fixed local construction target, fitted once to the retained six-brick
     # checkpoint. These are engineering bounds, not an official score checker.
     names=[*BASES,'neighbor_5',SECOND]
@@ -85,17 +85,19 @@ def current_structure(rows,reference):
                         maximum_abs_yaw_degrees=float(np.abs(yaw).max()),segment_angular_drift_degrees=float(np.degrees((rotations[0].inv()*rotations).magnitude().max())))
         if n in BASES:
             cs=[r.get('additional_protected_payload_contacts',{}).get(n,[]) for r in rows]
-            base_contacts_ok &= all(c and all(all(x in allowed for x in entry['pair']) for entry in c) for c in cs)
+            permitted=allowed|({TARGET} if allow_third_yellow_contact and n in ('neighbor_6','neighbor_4') else set())
+            base_contacts_ok &= all(c and all(all(x in permitted for x in entry['pair']) for entry in c) for c in cs)
             base_forces[n]=min(sum(c['force_xyz_n'][2] for c in contacts if 'table' in c['pair']) for contacts in cs)
     valid=bool(base_contacts_ok and all(base_forces[n]>=.8*g.m.body(n).mass*9.81 for n in BASES)
                and all(v['maximum_horizontal_error_mm']<=15 and v['maximum_vertical_error_mm']<=5
                        and v['maximum_face_tilt_degrees']<=2 and v['maximum_abs_yaw_degrees']<=10 and v['segment_angular_drift_degrees']<=2 for v in metrics.values()))
     return dict(passed=valid,metrics=metrics,base_minimum_table_support_n=base_forces,base_contacts_valid=bool(base_contacts_ok),
                 fixed_xy_translation_m=translation.tolist(),target_reference=str(SECOND_REFERENCE),horizontal_limit_mm=15,vertical_limit_mm=5,
+                third_yellow_contact_allowed_on_middle_pair=allow_third_yellow_contact,
                 scope='Current six-brick local geometry and recorded table support; not official scoring or full pyramid verification')
 
 
-def evaluate(out):
+def evaluate(out,allow_third_yellow_contact=False):
     record=json.loads((out/'result.json').read_text());s=record['summary'];rows=record['rows']
     metrics,only,forces=release.fourth.third.structure_status(rows,release.REFERENCE,extra_bases=SUPPORTS)
     reference=np.load(SECOND_REFERENCE/'integration-state.npz',allow_pickle=False);ref=g.mj.MjData(g.m)
@@ -112,7 +114,7 @@ def evaluate(out):
     legacy_safe=bool(not s['abort'] and not s['unintended_contacts'] and only and min(forces.values())>=.1
               and all(v['maximum_shift_mm']<=2 and v['maximum_angular_shift_degrees']<=2 for v in metrics.values())
               and second_shift<=.002 and second_angle<=2 and second_only and min(second_forces.values())>=.1 and np.linalg.norm(offset)<=.005)
-    structure=current_structure(rows,ref)
+    structure=current_structure(rows,ref,allow_third_yellow_contact)
     first_centers=[]
     for n in ('neighbor_9','neighbor_6'):
         address=g.m.jnt_qposadr[g.m.joint(n+'_free').id];first_centers.append(np.array(rows[-1]['qpos'][address:address+3]))

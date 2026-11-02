@@ -161,7 +161,7 @@ def evaluate(summary,rows,plan,hold_start=19.):
     summary['local_first_yellow_aligned']=bool(summary['local_released_bridge_verified'] and np.linalg.norm(offset)<=.005 and flatness<=2 and abs(yaw)<=10)
 
 
-def run(command,plan,out,protected_payload=None):
+def run(command,plan,out,protected_payload=None,additional_protected_payloads=()):
     restore();start=float(d.time);body=m.body(TARGET).id
     initial={m.body(i).name:d.xpos[i].copy() for i in range(m.nbody) if (m.body(i).name=='target' or m.body(i).name.startswith('neighbor_')) and i!=body}
     shifts={n:0. for n in initial};rows=[];bad=[];abort=None;started=time.monotonic()
@@ -174,7 +174,7 @@ def run(command,plan,out,protected_payload=None):
             for n,position in initial.items():
                 shifts[n]=max(shifts[n],float(np.linalg.norm(d.xpos[m.body(n).id]-position)))
                 if shifts[n]>.002:abort='other_brick_moved'
-            contacts=[];protected_contacts=[]
+            contacts=[];protected_contacts=[];extra_protected={n:[] for n in additional_protected_payloads}
             for ci,c in enumerate(d.contact):
                 ns=[m.geom(int(i)).name for i in c.geom]
                 hand=any(n.startswith(('lh_','rh_')) for n in ns)
@@ -187,6 +187,10 @@ def run(command,plan,out,protected_payload=None):
                 if protected_payload is not None and protected_payload in ns:
                     f=np.zeros(6);mj.mj_contactForce(m,d,ci,f);v=c.frame.reshape(3,3).T@f[:3]*(1 if ns[1]==protected_payload else -1)
                     protected_contacts.append(dict(pair=ns,force_xyz_n=v.tolist()))
+                for name in additional_protected_payloads:
+                    if name in ns:
+                        f=np.zeros(6);mj.mj_contactForce(m,d,ci,f);v=c.frame.reshape(3,3).T@f[:3]*(1 if ns[1]==name else -1)
+                        extra_protected[name].append(dict(pair=ns,force_xyz_n=v.tolist()))
             rot=Rotation.from_quat(d.xquat[body][[1,2,3,0]]);bottom=float((rot.apply(p.CORNERS)+d.xpos[body])[:,2].min()-a.g.FLOOR)
             if bottom<.040:abort='payload_below_base_top'
             if np.linalg.norm(d.xpos[body][:2]-plan['pair_center_m'][:2])>.060:abort='payload_outside_pair'
@@ -195,6 +199,7 @@ def run(command,plan,out,protected_payload=None):
                 row=dict(elapsed_s=float(d.time)-start,phase=phase,position_m=d.xpos[body].tolist(),quaternion_wxyz=d.xquat[body].tolist(),
                          lowest_corner_m=bottom,contacts=contacts,qpos=d.qpos.tolist(),qvel=d.qvel.tolist())
                 if protected_payload is not None:row['protected_payload_contacts']=protected_contacts
+                if additional_protected_payloads:row['additional_protected_payload_contacts']=extra_protected
                 rows.append(row);stream.write(json.dumps(row,allow_nan=False)+'\n')
             if abort:break
     summary=dict(target=TARGET,abort=abort,duration_s=float(d.time)-start,cumulative_simulation_s=float(d.time),wall_seconds=time.monotonic()-started,unintended_contacts=bad,
