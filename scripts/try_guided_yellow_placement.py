@@ -161,7 +161,18 @@ def evaluate(summary,rows,plan,hold_start=19.):
     summary['local_first_yellow_aligned']=bool(summary['local_released_bridge_verified'] and np.linalg.norm(offset)<=.005 and flatness<=2 and abs(yaw)<=10)
 
 
-def run(command,plan,out,protected_payload=None,additional_protected_payloads=()):
+def validate_contact_diagnostic(allowed, protected, shift_limit):
+    """Bound a transient-contact diagnostic; final placement criteria stay strict."""
+    if not np.isfinite(shift_limit) or not .002<=shift_limit<=.005:
+        raise ValueError('Transient-contact diagnostic shift must be 2 to 5 mm')
+    if any(n not in protected or not n.startswith('neighbor_') or n==TARGET or n in SUPPORTS for n in allowed):
+        raise ValueError('Only explicitly monitored neighboring payloads may guide release')
+    if shift_limit!=.002 and not allowed:
+        raise ValueError('A larger diagnostic bound requires named contact neighbors')
+
+
+def run(command,plan,out,protected_payload=None,additional_protected_payloads=(),allowed_payload_contacts=(),allowed_payload_shift_m=.002):
+    validate_contact_diagnostic(allowed_payload_contacts, (protected_payload,*additional_protected_payloads), allowed_payload_shift_m)
     restore();start=float(d.time);body=m.body(TARGET).id
     initial={m.body(i).name:d.xpos[i].copy() for i in range(m.nbody) if (m.body(i).name=='target' or m.body(i).name.startswith('neighbor_')) and i!=body}
     shifts={n:0. for n in initial};rows=[];bad=[];abort=None;started=time.monotonic()
@@ -173,12 +184,13 @@ def run(command,plan,out,protected_payload=None,additional_protected_payloads=()
             mj.mj_step(m,d);mj.mj_forward(m,d)
             for n,position in initial.items():
                 shifts[n]=max(shifts[n],float(np.linalg.norm(d.xpos[m.body(n).id]-position)))
-                if shifts[n]>.002:abort='other_brick_moved'
+                limit=allowed_payload_shift_m if n in allowed_payload_contacts else .002
+                if shifts[n]>limit:abort='other_brick_moved'
             contacts=[];protected_contacts=[];extra_protected={n:[] for n in additional_protected_payloads}
             for ci,c in enumerate(d.contact):
                 ns=[m.geom(int(i)).name for i in c.geom]
                 hand=any(n.startswith(('lh_','rh_')) for n in ns)
-                intended=TARGET in ns and (hand or any(n in SUPPORTS for n in ns))
+                intended=TARGET in ns and (hand or any(n in SUPPORTS or n in allowed_payload_contacts for n in ns))
                 if (hand or TARGET in ns) and not intended and c.dist<-.0005:
                     bad.append(dict(t=float(d.time)-start,pair=ns,depth_mm=-float(c.dist)*1000));abort='unexpected_contact'
                 if TARGET in ns:
@@ -205,6 +217,10 @@ def run(command,plan,out,protected_payload=None,additional_protected_payloads=()
     summary=dict(target=TARGET,abort=abort,duration_s=float(d.time)-start,cumulative_simulation_s=float(d.time),wall_seconds=time.monotonic()-started,unintended_contacts=bad,
                  other_bricks_max_shift_mm={n:v*1000 for n,v in shifts.items()},native_verified=False,whole_arm_collision_checked=False,
                  full_pyramid_verified=False,official_region_verified=False,source_sequence_continuity_verified=CONTINUOUS_SOURCE)
+    if allowed_payload_contacts:
+        summary.update(allowed_transient_payload_contacts=list(allowed_payload_contacts),
+                       transient_neighbor_shift_limit_mm=allowed_payload_shift_m*1000,
+                       diagnostic_only=True)
     evaluate(summary,rows,plan,hold_start=plan.get('hold_start_s',19.))
     spec=mj.mjtState.mjSTATE_INTEGRATION;state=np.empty(mj.mj_stateSize(m,spec));mj.mj_getState(m,d,state,spec)
     np.savez(out/'integration-state.npz',state=state,spec=int(spec),mujoco_version=mj.__version__)
