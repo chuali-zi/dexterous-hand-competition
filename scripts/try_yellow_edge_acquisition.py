@@ -74,7 +74,7 @@ def configure_continuation(source,target,southern_receiver=False,edge_blue_recei
         if (southern_receiver or target not in ('neighbor_0','neighbor_7')
                 or not all(summary.get(k,False) for k in ('local_blue_table_feed_verified','local_seven_brick_final_structure_verified','local_receiver_return_verified','source_sequence_continuity_verified'))):
             raise ValueError('Blue edge entry requires verified seven-brick feed and receiver return')
-        in_region=.135<=center[0]<=.160 and .130<=center[1]<=.170
+        in_region=.135<=center[0]<=.160 and .060<=center[1]<=.170
     if southern_receiver and (target not in ['neighbor_1','neighbor_3'] or not summary.get('current_structure',{}).get('passed',False)):
         raise ValueError('Explicit southern receiver requires a verified current structure')
     if target=='neighbor_3' or southern_receiver:

@@ -22,7 +22,7 @@ SHARED_SUPPORT=False
 SUPPORTS=('neighbor_9','neighbor_6')
 
 
-def configure_continuation(source,target,shared_support=False,supports=('neighbor_9','neighbor_6')):
+def configure_continuation(source,target,shared_support=False,supports=('neighbor_9','neighbor_6'),seven_brick_support=False):
     global SOURCE,RECORD,STATE,CHECK,TARGET,CONTINUOUS_SOURCE,SHARED_SUPPORT,SUPPORTS
     new_source=Path(source);record=json.loads((new_source/'result.json').read_text());check=json.loads((new_source/'precheck.json').read_text())
     state=np.load(new_source/'integration-state.npz',allow_pickle=False);s=record['summary']
@@ -33,7 +33,11 @@ def configure_continuation(source,target,shared_support=False,supports=('neighbo
             or max(s['other_bricks_max_shift_mm'].values())>2 or s['checkpoint_next_step_maximum_difference']>1e-10
             or not held or not all(r['contacts'] and all(any(n.startswith(('lh_','rh_') if shared_support else ('rh_',)) for n in c['pair']) for c in r['contacts']) for r in held)):
         raise ValueError('Source is not a stable acquisition with the requested hand support')
-    if shared_support and (not s.get('protected_structure_verified',False) or not s.get('source_sequence_continuity_verified',False)):
+    if seven_brick_support and (target not in ('neighbor_0','neighbor_7') or not shared_support
+            or tuple(supports) not in (('neighbor_5','neighbor_1'),('neighbor_1','neighbor_3'))):
+        raise ValueError('Seven-brick transport requires a blue payload and an adjacent yellow support pair')
+    protected=s.get('local_seven_brick_final_structure_verified',False) if seven_brick_support else s.get('protected_structure_verified',False)
+    if shared_support and (not protected or not s.get('source_sequence_continuity_verified',False)):
         raise ValueError('Shared transport requires a continuous acquisition preserving the structure')
     if len(supports)!=2 or len(set(supports))!=2 or target in supports:raise ValueError('Expected two distinct support bricks')
     for name in supports:m.body(name)
@@ -106,7 +110,8 @@ def precheck(command):
                 frozen_payload_geometry_only=True,whole_arm_collision_checked=False)
 
 
-def run(command,plan,out,protected_payload=None,additional_protected_payloads=()):
+def run(command,plan,out,protected_payload=None,additional_protected_payloads=(),transport_clearance=.055):
+    if not np.isfinite(transport_clearance) or transport_clearance<.055:raise ValueError('Transport clearance cannot be below 55 mm')
     restore();start=float(d.time);body=m.body(TARGET).id;target=d.xpos[body].copy()
     others={m.body(i).name:d.xpos[i].copy() for i in range(m.nbody) if (m.body(i).name=='target' or m.body(i).name.startswith('neighbor_')) and i!=body}
     shifts={n:0. for n in others};rows=[];bad=[];abort=None;started=time.monotonic()
@@ -138,7 +143,7 @@ def run(command,plan,out,protected_payload=None,additional_protected_payloads=()
             rot=Rotation.from_quat(d.xquat[body][[1,2,3,0]]);bottom=float((rot.apply(p.CORNERS)+d.xpos[body])[:,2].min()-a.g.FLOOR)
             error=float(np.linalg.norm(d.xpos[body]-target-offset))
             if error>.020:abort='payload_slipped'
-            if bottom<(.055 if phase in ['transfer_over_pair','hold'] else .005):abort='payload_clearance_lost'
+            if bottom<(transport_clearance if phase in ['transfer_over_pair','hold'] else .005):abort='payload_clearance_lost'
             if not np.isfinite(d.qpos).all():raise RuntimeError('Nonfinite state')
             if step%10==9 or abort:
                 row=dict(elapsed_s=float(d.time)-start,phase=phase,position_m=d.xpos[body].tolist(),quaternion_wxyz=d.xquat[body].tolist(),
@@ -152,6 +157,7 @@ def run(command,plan,out,protected_payload=None,additional_protected_payloads=()
                  other_bricks_max_shift_mm={n:v*1000 for n,v in shifts.items()},local_loaded_transfer_verified=False,
                  shared_support=SHARED_SUPPORT,supports=list(SUPPORTS),
                  upper_placement_verified=False,native_verified=False,whole_arm_collision_checked=False,source_sequence_continuity_verified=CONTINUOUS_SOURCE)
+    if transport_clearance!=.055:summary['minimum_transport_clearance_m']=transport_clearance
     if held:
         xyz=np.array([r['position_m'] for r in held]);rot=Rotation.from_quat(np.array([r['quaternion_wxyz'] for r in held])[:,[1,2,3,0]])
         drift=float(np.linalg.norm(xyz-xyz[0],axis=1).max());angle=float(np.degrees((rot[0].inv()*rot).magnitude().max()))

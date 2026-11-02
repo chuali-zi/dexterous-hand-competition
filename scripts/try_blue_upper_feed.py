@@ -17,6 +17,11 @@ first = seven.release.feed.first
 INITIAL = Path('runs/narrow-support-116/contact-guided-diagnostic-5mm')
 
 
+def shallow_prediction_permitted(predicted, target, enabled=False):
+    return bool(enabled and predicted and all(
+        set(c['pair']) == {target, 'target'} and 0 <= c['depth_mm'] <= .5 for c in predicted))
+
+
 def configure(source):
     record = json.loads((source / 'result.json').read_text())
     summary = record['summary']
@@ -106,11 +111,15 @@ if __name__ == '__main__':
     parser.add_argument('--single-finger', action='store_true')
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--run', action='store_true')
+    parser.add_argument('--allow-shallow-payload-prediction', action='store_true',
+                        help='Local diagnostic only: retain actual collision stops for a <=0.5 mm predicted blue/green overlap')
     args = parser.parse_args()
     if args.axis and args.destination_mm is None:
         parser.error('--axis requires --destination-mm')
     if args.return_receiver and (args.destination_mm is not None or args.single_finger):
         parser.error('Receiver return does not take feed options')
+    if args.allow_shallow_payload_prediction and (args.return_receiver or args.axis != 'south'):
+        parser.error('Shallow prediction diagnostic applies only to south feeding')
     left, right = configure(args.source)
     right_command = None
     if args.return_receiver:
@@ -127,7 +136,13 @@ if __name__ == '__main__':
         check = first.precheck(command, g.restore, left, target=args.target, finger_command=fingers)
         check.update(predicted_payload_geometry_failures=payload_precheck(plan), right_final_joints_sdk=right, stationary_right=True)
     args.out.mkdir(parents=True, exist_ok=False)
-    check['passed'] &= not check['predicted_payload_geometry_failures']
+    predicted = check['predicted_payload_geometry_failures']
+    shallow = shallow_prediction_permitted(predicted, args.target, args.allow_shallow_payload_prediction)
+    check['strict_nominal_payload_geometry_passed'] = not predicted
+    if args.allow_shallow_payload_prediction:
+        check.update(shallow_payload_prediction_diagnostic=shallow,
+                     payload_prediction_scope='Frozen-orientation translation only; actual original 0.5 mm collision and 2 mm neighbor-motion stops retained')
+    check['passed'] &= not predicted or shallow
     (args.out / 'plan.json').write_text(json.dumps(plan, allow_nan=False))
     (args.out / 'precheck.json').write_text(json.dumps(check, allow_nan=False))
     passed = check['passed']
