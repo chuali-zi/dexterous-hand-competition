@@ -13,6 +13,7 @@ g=release.g;first=release.fourth.first
 SOURCE=Path('runs/settled-release-109/short-push')
 TARGET='neighbor_1';SECOND='neighbor_3';SUPPORTS=('neighbor_4','neighbor_2')
 SECOND_REFERENCE=SOURCE
+BASES=('neighbor_9','neighbor_6','neighbor_4','neighbor_2')
 
 
 def configure(source):
@@ -64,6 +65,36 @@ def prepare(mode='south-stage',north_yaw=90,north_goal=.240,single_finger=False)
     return command,fingers,plan
 
 
+def current_structure(rows,reference):
+    # Fixed local construction target, fitted once to the retained six-brick
+    # checkpoint. These are engineering bounds, not an official score checker.
+    names=[*BASES,'neighbor_5',SECOND]
+    ideal=np.array([[0,0,.025],[0,.05,.025],[0,.10,.025],[0,.15,.025],[0,.025,.075],[0,.125,.075]])
+    translation=np.mean(np.array([reference.xpos[g.m.body(n).id,:2] for n in names])-ideal[:,:2],axis=0)
+    ideal[:,:2]+=translation;ideal[:,2]+=g.a.g.FLOOR
+    metrics={};base_forces={};allowed=set([*names,'table']);base_contacts_ok=True
+    for i,n in enumerate(names):
+        adr=g.m.jnt_qposadr[g.m.joint(n+'_free').id];xyz=np.array([r['qpos'][adr:adr+3] for r in rows])
+        rotations=Rotation.from_quat(np.array([r['qpos'][adr+3:adr+7] for r in rows])[:,[1,2,3,0]])
+        matrices=rotations.as_matrix();face=np.degrees(np.arccos(np.clip(np.max(np.abs(matrices[:,2,:]),axis=1),0,1)))
+        # A cube may rest on any face; Euler-Z is not its top-face heading.
+        axes=np.take_along_axis(matrices,np.argmax(np.abs(matrices[:,0,:]),axis=1)[:,None,None],axis=2)[:,:,0]
+        yaw=(np.degrees(np.arctan2(axes[:,1],axes[:,0]))+45)%90-45
+        metrics[n]=dict(maximum_horizontal_error_mm=float(np.linalg.norm(xyz[:,:2]-ideal[i,:2],axis=1).max()*1000),
+                        maximum_vertical_error_mm=float(np.abs(xyz[:,2]-ideal[i,2]).max()*1000),maximum_face_tilt_degrees=float(face.max()),
+                        maximum_abs_yaw_degrees=float(np.abs(yaw).max()),segment_angular_drift_degrees=float(np.degrees((rotations[0].inv()*rotations).magnitude().max())))
+        if n in BASES:
+            cs=[r.get('additional_protected_payload_contacts',{}).get(n,[]) for r in rows]
+            base_contacts_ok &= all(c and all(all(x in allowed for x in entry['pair']) for entry in c) for c in cs)
+            base_forces[n]=min(sum(c['force_xyz_n'][2] for c in contacts if 'table' in c['pair']) for contacts in cs)
+    valid=bool(base_contacts_ok and all(base_forces[n]>=.8*g.m.body(n).mass*9.81 for n in BASES)
+               and all(v['maximum_horizontal_error_mm']<=15 and v['maximum_vertical_error_mm']<=5
+                       and v['maximum_face_tilt_degrees']<=2 and v['maximum_abs_yaw_degrees']<=10 and v['segment_angular_drift_degrees']<=2 for v in metrics.values()))
+    return dict(passed=valid,metrics=metrics,base_minimum_table_support_n=base_forces,base_contacts_valid=bool(base_contacts_ok),
+                fixed_xy_translation_m=translation.tolist(),target_reference=str(SECOND_REFERENCE),horizontal_limit_mm=15,vertical_limit_mm=5,
+                scope='Current six-brick local geometry and recorded table support; not official scoring or full pyramid verification')
+
+
 def evaluate(out):
     record=json.loads((out/'result.json').read_text());s=record['summary'];rows=record['rows']
     metrics,only,forces=release.fourth.third.structure_status(rows,release.REFERENCE,extra_bases=SUPPORTS)
@@ -78,14 +109,27 @@ def evaluate(out):
     second_forces={n:min(sum(c['force_xyz_n'][2] for c in cs if n in c['pair']) for cs in contacts) for n in SUPPORTS}
     centers=[np.array(rows[-1]['qpos'])[g.m.jnt_qposadr[g.m.joint(n+'_free').id]:g.m.jnt_qposadr[g.m.joint(n+'_free').id]+3] for n in SUPPORTS]
     offset=xyz[-1,:2]-np.mean(centers,axis=0)[:2]
-    safe=bool(not s['abort'] and not s['unintended_contacts'] and only and min(forces.values())>=.1
+    legacy_safe=bool(not s['abort'] and not s['unintended_contacts'] and only and min(forces.values())>=.1
               and all(v['maximum_shift_mm']<=2 and v['maximum_angular_shift_degrees']<=2 for v in metrics.values())
               and second_shift<=.002 and second_angle<=2 and second_only and min(second_forces.values())>=.1 and np.linalg.norm(offset)<=.005)
+    structure=current_structure(rows,ref)
+    first_centers=[]
+    for n in ('neighbor_9','neighbor_6'):
+        address=g.m.jnt_qposadr[g.m.joint(n+'_free').id];first_centers.append(np.array(rows[-1]['qpos'][address:address+3]))
+    address=g.m.jnt_qposadr[g.m.joint('neighbor_5_free').id]
+    first_offset=np.array(rows[-1]['qpos'][address:address+3])[:2]-np.mean(first_centers,axis=0)[:2]
+    safe=bool(not s['abort'] and not s['unintended_contacts'] and structure['passed'] and only and min(forces.values())>=.1
+              and second_only and min(second_forces.values())>=.1 and np.linalg.norm(offset)<=.005 and np.linalg.norm(first_offset)<=.005
+              and max(s['other_bricks_max_shift_mm'].values())<=2 and s['checkpoint_next_step_maximum_difference']<=1e-10)
+    position_pass=bool(s.pop('local_red_position_verified',s.get('candidate_feed_position_verified',False)))
     s.update(source_sequence_continuity_verified=True,protected_structure_verified=safe,protected_structure_metrics=metrics,
              upper_only_base_contacts=only,upper_minimum_support_force_n=forces,second_upper_maximum_shift_mm=second_shift*1000,
              second_upper_maximum_angular_shift_degrees=second_angle,second_upper_only_base_contacts=second_only,
              second_upper_minimum_support_force_n=second_forces,second_upper_actual_center_error_mm=float(np.linalg.norm(offset)*1000),
-             local_third_yellow_feed_verified=bool(s.pop('local_red_position_verified') and safe))
+             current_structure=structure,legacy_cumulative_protection_passed=legacy_safe,
+             cumulative_displacement_warning=bool(second_shift>.002 or any(v['maximum_shift_mm']>2 for v in metrics.values())),
+             first_upper_actual_center_error_mm=float(np.linalg.norm(first_offset)*1000),
+             candidate_feed_position_verified=position_pass,local_third_yellow_feed_verified=bool(position_pass and safe))
     (out/'result.json').write_text(json.dumps(record,allow_nan=False));return s
 
 
@@ -114,6 +158,6 @@ if __name__=='__main__':
     (args.out/'plan.json').write_text(json.dumps(plan,allow_nan=False));(args.out/'precheck.json').write_text(json.dumps(check,allow_nan=False))
     passed=check['passed'];brief=dict(precheck_passed=passed,geometry_failure_count=len(check['geometry_failures']),payload_geometry_failure_count=len(check['predicted_payload_geometry_failures']),stage_count=len(check['stages']),precheck_wall_seconds=check['wall_seconds'])
     if passed and args.run:
-        first.run(command,plan,g.restore,args.out,finger_command=fingers,protected_payload='neighbor_5',additional_protected_payloads=(SECOND,))
+        first.run(command,plan,g.restore,args.out,finger_command=fingers,protected_payload='neighbor_5',additional_protected_payloads=(SECOND,*BASES))
         brief['dynamics']=evaluate(args.out);passed=brief['dynamics']['local_third_yellow_feed_verified']
     print(json.dumps(brief,indent=2));raise SystemExit(0 if passed else 1)

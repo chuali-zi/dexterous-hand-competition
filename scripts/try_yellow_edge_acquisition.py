@@ -45,7 +45,7 @@ RECENTER_WIDE_FACE=False
 def forward(q):return np.asarray(p.t.routes.sdk.forward_kinematics('right',q.tolist()))@CTX['right']['mount']
 
 
-def configure_continuation(source,target):
+def configure_continuation(source,target,southern_receiver=False):
     """Use an actual released checkpoint without resetting either hand."""
     global SOURCE,STATE,RECORD,CHECK,TARGET,CONTINUOUS_SOURCE,INITIAL_CONTROLS,RIGHT_Q,WAYPOINTS,PUSH_DISTANCE
     new_source=Path(source);new_record=json.loads((new_source/'result.json').read_text());new_check=json.loads((new_source/'precheck.json').read_text())
@@ -70,7 +70,9 @@ def configure_continuation(source,target):
     center=candidate.xpos[m.body(target).id].copy()
     low_y,high_y=(.200,.240) if target=='neighbor_3' and coupled else (.130,.170)
     in_region=.210<=center[0]<=.250 and low_y<=center[1]<=high_y
-    if target=='neighbor_3':
+    if southern_receiver and (target not in ['neighbor_1','neighbor_3'] or not summary.get('current_structure',{}).get('passed',False)):
+        raise ValueError('Explicit southern receiver requires a verified current structure')
+    if target=='neighbor_3' or southern_receiver:
         if not summary.get('protected_structure_verified',False) or not summary.get('source_sequence_continuity_verified',False):raise ValueError('Next yellow requires the protected continuous structure')
         in_region=in_region or (.140<=center[0]<=.200 and .060<=center[1]<=.120)
     if not in_region:raise ValueError('Source lies outside the local receiver search region')
@@ -265,7 +267,7 @@ def precheck(command):
                 wall_seconds=time.monotonic()-started,whole_arm_collision_checked=False)
 
 
-def run(command,out,protected_payload=None):
+def run(command,out,protected_payload=None,additional_protected_payloads=()):
     restore();start=float(d.time);names=[m.body(i).name for i in range(m.nbody) if m.body(i).name=='target' or m.body(i).name.startswith('neighbor_')]
     initial={n:d.xpos[m.body(n).id].copy() for n in names};shifts={n:0. for n in names if n!=TARGET}
     rows=[];bad=[];abort=None;started=time.monotonic()
@@ -278,7 +280,7 @@ def run(command,out,protected_payload=None):
             for n in shifts:
                 shifts[n]=max(shifts[n],float(np.linalg.norm(d.xpos[m.body(n).id]-initial[n])))
                 if shifts[n]>.002:abort='other_brick_moved'
-            contacts=[];protected_contacts=[]
+            contacts=[];protected_contacts=[];extra_protected={n:[] for n in additional_protected_payloads}
             for ci,c in enumerate(d.contact):
                 ns=[m.geom(int(i)).name for i in c.geom]
                 if any(n.startswith(('lh_','rh_')) for n in ns) and TARGET not in ns and c.dist<-.0005:
@@ -291,6 +293,10 @@ def run(command,out,protected_payload=None):
                     force=np.zeros(6);mj.mj_contactForce(m,d,ci,force)
                     vector=c.frame.reshape(3,3).T@force[:3]*(1 if ns[1]==protected_payload else -1)
                     protected_contacts.append(dict(pair=ns,force_xyz_n=vector.tolist()))
+                for n in additional_protected_payloads:
+                    if n in ns:
+                        force=np.zeros(6);mj.mj_contactForce(m,d,ci,force);vector=c.frame.reshape(3,3).T@force[:3]*(1 if ns[1]==n else -1)
+                        extra_protected[n].append(dict(pair=ns,force_xyz_n=vector.tolist()))
             body=m.body(TARGET).id;rot=Rotation.from_quat(d.xquat[body][[1,2,3,0]])
             bottom=float((rot.apply(p.CORNERS)+d.xpos[body])[:,2].min()-g.FLOOR)
             if bottom<-.020:abort='target_corner_below_limit'
@@ -299,6 +305,7 @@ def run(command,out,protected_payload=None):
                 row=dict(elapsed_s=float(d.time)-start,phase=phase,position_m=d.xpos[body].tolist(),quaternion_wxyz=d.xquat[body].tolist(),
                          lowest_corner_m=bottom,contacts=contacts,qpos=d.qpos.tolist(),qvel=d.qvel.tolist())
                 if protected_payload is not None:row['protected_payload_contacts']=protected_contacts
+                if additional_protected_payloads:row['additional_protected_payload_contacts']=extra_protected
                 rows.append(row);stream.write(json.dumps(row,allow_nan=False)+'\n')
             if abort:break
     held=[r for r in rows if r['elapsed_s']>=DURATION-3-1e-8]
