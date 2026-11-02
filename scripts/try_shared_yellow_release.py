@@ -35,20 +35,22 @@ def configure(source,end_pair=False,released=False):
     g.restore=restore
 
 
-def prepare_alignment(fraction=1.):
+def prepare_alignment(fraction=1.,push_seconds=3.):
     if not 0<fraction<=1:raise ValueError('Alignment fraction must be in (0, 1]')
+    if not np.isfinite(push_seconds) or not .5<=push_seconds<=3:raise ValueError('Push time must be between 0.5 and 3 seconds')
     import align_released_yellow as align
     align.TARGET=g.TARGET;align.SUPPORTS=g.SUPPORTS
     left,plan=align.prepare('y',g.SOURCE,g.restore);g.restore();g.DURATION=align.DURATION
     right=(g.d.mocap_pos[g.p.t.RM].copy(),g.d.mocap_quat[g.p.t.RM].copy())
     controls={g.m.actuator(i).name:float(g.d.ctrl[i]) for i in range(g.m.nu)}
     def command(t):
+        if push_seconds!=3. and 5<=t<8:t=5.+3.*np.clip((t-5)/push_seconds,0,1)
         pos,quat,phase=left(t)
         pos=pos+np.array(plan['normal'])*plan['distance_m']*(1-fraction)*np.clip((t-5)/3,0,1)
         return dict(left=(pos,quat),right=right),controls,phase
     plan.update(target=g.TARGET,supports=g.SUPPORTS,mode='align-y',duration_s=g.DURATION,hold_start_s=11.,
                 protected_reference=str(REFERENCE),structure_reference=str(REFERENCE),source_sequence_continuity_verified=True,
-                alignment_fraction=fraction,executed_push_distance_m=plan['distance_m']*fraction)
+                alignment_fraction=fraction,executed_push_distance_m=plan['distance_m']*fraction,push_seconds=push_seconds)
     return command,plan
 
 
@@ -75,25 +77,28 @@ def prepare(turn_fraction=1.):
                         source_sequence_continuity_verified=True,native_verified=False,whole_arm_collision_checked=False,online_object_feedback=False)
 
 
-def prepare_withdrawal(aim_xy):
+def prepare_withdrawal(aim_xy,settle_seconds=0.):
+    if not np.isfinite(settle_seconds) or not 0<=settle_seconds<=3:raise ValueError('Settling time must be between zero and three seconds')
     aim=np.r_[np.asarray(aim_xy,dtype=float),0.]
     if not np.isfinite(aim).all() or np.linalg.norm(aim)>.050:raise ValueError('Release aim must be finite and within 50 mm')
     g.restore();m,d=g.m,g.d
     starts={side:(d.mocap_pos[i].copy(),d.mocap_quat[i].copy()) for side,i in [('left',g.p.t.LM),('right',g.p.t.RM)]}
-    controls={m.actuator(i).name:float(d.ctrl[i]) for i in range(m.nu)};g.DURATION=13.
+    controls={m.actuator(i).name:float(d.ctrl[i]) for i in range(m.nu)};g.DURATION=13.+settle_seconds
     pair=np.mean([d.xpos[m.body(n).id] for n in g.SUPPORTS],axis=0)
     translation=aim+np.r_[pair[:2]-d.xpos[m.body(g.TARGET).id][:2],0.]
     def command(t):
+        elapsed=t;t=t if t<3 else max(3.,t-settle_seconds)
         shift=translation*np.clip(t/3,0,1)
         left=shift+np.array([.03,0,.03])*np.clip((t-3)/4,0,1)
         right=shift+np.array([-.08,-.08,.05])*np.clip((t-7)/3,0,1)
         poses={side:(starts[side][0]+offset,starts[side][1]) for side,offset in [('left',left),('right',right)]}
         phase='align_release' if t<3 else 'withdraw_left_support' if t<7 else 'withdraw_right_receiver' if t<10 else 'released_hold'
+        if 3<=elapsed<3+settle_seconds:phase='settle_loaded_hands'
         return poses,controls,phase
     return command,dict(source=str(g.SOURCE),target=g.TARGET,supports=g.SUPPORTS,pair_center_m=pair.tolist(),
                         initial_target_center_m=d.xpos[m.body(g.TARGET).id].tolist(),mode='withdraw-release',aim_xy_m=aim[:2].tolist(),
                         common_translation_m=translation.tolist(),
-                        left_withdrawal_m=[.03,0,.03],right_withdrawal_m=[-.08,-.08,.05],duration_s=g.DURATION,hold_start_s=10.,
+                        left_withdrawal_m=[.03,0,.03],right_withdrawal_m=[-.08,-.08,.05],duration_s=g.DURATION,hold_start_s=10.+settle_seconds,settle_seconds=settle_seconds,
                         structure_reference=str(REFERENCE),finger_controls_unchanged=True,source_sequence_continuity_verified=True,
                         native_verified=False,whole_arm_collision_checked=False,online_object_feedback=False)
 
@@ -130,9 +135,11 @@ if __name__=='__main__':
     modes=parser.add_mutually_exclusive_group();modes.add_argument('--withdraw-release',action='store_true');modes.add_argument('--align-y',action='store_true')
     parser.add_argument('--aim-mm',type=float,nargs=2,default=[0.,0.])
     parser.add_argument('--align-fraction',type=float,default=1.)
+    parser.add_argument('--settle-seconds',type=float,default=0.)
+    parser.add_argument('--push-seconds',type=float,default=3.)
     parser.add_argument('--end-pair',action='store_true',help='Place this yellow on red 4/2 before filling the middle gap');args=parser.parse_args()
     configure(args.source,args.end_pair,args.align_y)
-    command,plan=prepare_alignment(args.align_fraction) if args.align_y else prepare_withdrawal(np.array(args.aim_mm)/1000) if args.withdraw_release else prepare(args.turn_fraction)
+    command,plan=prepare_alignment(args.align_fraction,args.push_seconds) if args.align_y else prepare_withdrawal(np.array(args.aim_mm)/1000,args.settle_seconds) if args.withdraw_release else prepare(args.turn_fraction)
     args.out.mkdir(parents=True,exist_ok=False);check=g.precheck(command)
     (args.out/'plan.json').write_text(json.dumps(plan,allow_nan=False));(args.out/'precheck.json').write_text(json.dumps(check,allow_nan=False))
     passed=check['passed'];brief=dict(precheck_passed=passed,geometry_failure_count=len(check['geometry_failures']),stage_counts={s:len(v) for s,v in check['stages'].items()},precheck_wall_seconds=check['wall_seconds'])

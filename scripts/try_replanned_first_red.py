@@ -125,7 +125,7 @@ def precheck(command,restore,seed,target=TARGET,finger_command=None,additional_t
                 initial_seed_error_m=pe,initial_seed_angle_rad=ae,wall_seconds=time.monotonic()-started,whole_arm_collision_checked=False,native_verified=False)
 
 
-def run(command,plan,restore,out,finger_command=None,protected_payload=None,right_command=None,additional_targets=()):
+def run(command,plan,restore,out,finger_command=None,protected_payload=None,right_command=None,additional_targets=(),additional_protected_payloads=()):
     target=plan.get('target',TARGET)
     moved=[target,*additional_targets]
     restore();start=float(d.time);names=[m.body(i).name for i in range(m.nbody) if m.body(i).name=='target' or m.body(i).name.startswith('neighbor_')]
@@ -144,6 +144,7 @@ def run(command,plan,restore,out,finger_command=None,protected_payload=None,righ
                 if shifts[n]>.002:abort='other_brick_movement'
             for n in planned_shifts:planned_shifts[n]=max(planned_shifts[n],float(np.linalg.norm(d.xpos[m.body(n).id]-anchors[n])))
             contacts=[];protected_contacts=[]
+            extra_protected={n:[] for n in additional_protected_payloads}
             secondary_contacts={n:[] for n in additional_targets}
             for ci,c in enumerate(d.contact):
                 ns=[m.geom(int(i)).name for i in c.geom];hand=any(n.startswith(('lh_','rh_')) for n in ns)
@@ -160,6 +161,10 @@ def run(command,plan,restore,out,finger_command=None,protected_payload=None,righ
                 if protected_payload is not None and protected_payload in ns:
                     force=np.zeros(6);mj.mj_contactForce(m,d,ci,force);vector=c.frame.reshape(3,3).T@force[:3]*(1 if ns[1]==protected_payload else -1)
                     protected_contacts.append(dict(pair=ns,force_xyz_n=vector.tolist()))
+                for n in additional_protected_payloads:
+                    if n in ns:
+                        force=np.zeros(6);mj.mj_contactForce(m,d,ci,force);vector=c.frame.reshape(3,3).T@force[:3]*(1 if ns[1]==n else -1)
+                        extra_protected[n].append(dict(pair=ns,force_xyz_n=vector.tolist()))
             corners=Rotation.from_quat(d.xquat[body][[1,2,3,0]]).apply(p.CORNERS)+d.xpos[body]
             if corners[:,2].min()<b.a.placement.a.g.FLOOR-.010:abort='payload_below_table'
             for n in additional_targets:
@@ -170,6 +175,7 @@ def run(command,plan,restore,out,finger_command=None,protected_payload=None,righ
                 row=dict(elapsed_s=float(d.time)-start,phase=phase,position_m=d.xpos[body].tolist(),quaternion_wxyz=d.xquat[body].tolist(),contacts=contacts,
                          qpos=d.qpos.tolist(),qvel=d.qvel.tolist())
                 if protected_payload is not None:row['protected_payload_contacts']=protected_contacts
+                if additional_protected_payloads:row['additional_protected_payload_contacts']=extra_protected
                 if additional_targets:row['secondary_contacts']=secondary_contacts
                 rows.append(row);stream.write(json.dumps(row,allow_nan=False)+'\n')
             if abort:break
