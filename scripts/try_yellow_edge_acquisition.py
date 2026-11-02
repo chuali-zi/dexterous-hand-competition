@@ -37,6 +37,7 @@ FACE_REPORT=None
 FACE_TARGETS={}
 FACE_FINGERS=['index','middle']
 CUP_BEFORE_LIFT=False
+CUP_START=22.
 DELAYED_PINKY=False
 RECENTER_WIDE_FACE=False
 
@@ -49,10 +50,13 @@ def configure_continuation(source,target):
     global SOURCE,STATE,RECORD,CHECK,TARGET,CONTINUOUS_SOURCE,INITIAL_CONTROLS,RIGHT_Q,WAYPOINTS,PUSH_DISTANCE
     new_source=Path(source);new_record=json.loads((new_source/'result.json').read_text());new_check=json.loads((new_source/'precheck.json').read_text())
     new_state=np.load(new_source/'integration-state.npz',allow_pickle=False);summary=new_record['summary']
-    if (summary.get('target')!=target or summary['abort'] or summary['unintended_contacts'] or not new_check['passed']
-            or summary['held_duration_s']<2.98 or not summary['held_table_only'] or summary['held_drift_mm']>2
-            or summary['held_angular_drift_degrees']>2 or summary['final_face_tilt_degrees']>2
-            or summary['minimum_table_support_n']<.8*m.body(target).mass*9.81
+    coupled=(target=='neighbor_3' and summary.get('target')=='target' and summary.get('local_coupled_feed_released',False)
+             and summary.get('protected_structure_verified',False) and set(summary.get('released_supply_targets',{}))=={'target','neighbor_3'})
+    released=summary['released_supply_targets'][target] if coupled else summary
+    if ((summary.get('target')!=target and not coupled) or summary['abort'] or summary['unintended_contacts'] or not new_check['passed']
+            or released['held_duration_s']<2.98 or not released['held_table_only'] or released['held_drift_mm']>2
+            or released['held_angular_drift_degrees']>2 or released['final_face_tilt_degrees']>2
+            or released['minimum_table_support_n']<.8*m.body(target).mass*9.81
             or max(summary['other_bricks_max_shift_mm'].values())>2 or summary['checkpoint_next_step_maximum_difference']>1e-10):
         raise ValueError('Continuous pickup source is not safely released')
     if str(new_state['mujoco_version'])!=mj.__version__ or len(new_state['state'])!=mj.mj_stateSize(m,int(new_state['spec'])):raise ValueError('Checkpoint runtime mismatch')
@@ -64,7 +68,12 @@ def configure_continuation(source,target):
     initial_controls={m.actuator(i).name:float(candidate.ctrl[i]) for i in range(m.nu)}
     if any(abs(v)>1e-9 for n,v in initial_controls.items() if n.startswith('rh_')):raise ValueError('Right source fingers are not open')
     center=candidate.xpos[m.body(target).id].copy()
-    if not (.210<=center[0]<=.250 and .130<=center[1]<=.170):raise ValueError('Source lies outside the checked receiver corridor')
+    low_y,high_y=(.200,.240) if target=='neighbor_3' and coupled else (.130,.170)
+    in_region=.210<=center[0]<=.250 and low_y<=center[1]<=high_y
+    if target=='neighbor_3':
+        if not summary.get('protected_structure_verified',False) or not summary.get('source_sequence_continuity_verified',False):raise ValueError('Next yellow requires the protected continuous structure')
+        in_region=in_region or (.140<=center[0]<=.200 and .060<=center[1]<=.120)
+    if not in_region:raise ValueError('Source lies outside the local receiver search region')
     reference=json.loads(Path('runs/upper-layer-93/cupped-receiver/plan.json').read_text())['initial_target_center_m']
     goal=forward(REFERENCE_RIGHT_Q);goal[1,3]+=center[1]-reference[1];bounds=CTX['right']['intersection']+[.02,-.02]
     def residual(q):
@@ -72,7 +81,8 @@ def configure_continuation(source,target):
         return np.r_[(h[:3,3]-goal[:3,3])/1e-5,Rotation.from_matrix(goal[:3,:3].T@h[:3,:3]).as_rotvec()/1e-4,(q-REFERENCE_RIGHT_Q)*.01]
     solved=least_squares(residual,np.clip(REFERENCE_RIGHT_Q,bounds[:,0]+1e-8,bounds[:,1]-1e-8),bounds=(bounds[:,0],bounds[:,1]),max_nfev=500)
     error=residual(solved.x)
-    if np.linalg.norm(error[:3])*1e-5>=1e-5 or np.linalg.norm(error[3:6])*1e-4>=1e-4:raise ValueError('Receiver endpoint failed FK checks')
+    if np.linalg.norm(error[:3])*1e-5>=1e-5 or np.linalg.norm(error[3:6])*1e-4>=1e-4:
+        raise ValueError(f'Receiver endpoint failed FK checks: position={np.linalg.norm(error[:3])*1e-5:.9g} m, angle={np.linalg.norm(error[3:6])*1e-4:.9g} rad')
     SOURCE=new_source;TARGET=target;RECORD=new_record;CHECK=new_check;STATE=new_state;INITIAL_CONTROLS=initial_controls
     RIGHT_Q=solved.x;outside=RIGHT_Q.copy();outside[0]=-.5
     WAYPOINTS=[np.zeros(7),np.array([-.5,0,0,0,0,0,0]),outside,RIGHT_Q]
@@ -83,7 +93,7 @@ def configure_continuation(source,target):
 def finger_commands(seconds):
     result={}
     if CUP_BEFORE_LIFT:
-        value=float(.3*np.clip(seconds-22,0,1))
+        value=float(.3*np.clip(seconds-CUP_START,0,1))
         result={'rh_'+f+suffix:value for f in ['index','middle','ring','pinky'] for suffix in ['_mcp_pitch','_dip']}
     if CONTINUOUS_SOURCE:
         result.update({n:INITIAL_CONTROLS[n]+(v-INITIAL_CONTROLS[n])*float(np.clip(seconds/2,0,1)) for n,v in FACE_TARGETS.items()})
@@ -215,7 +225,8 @@ def prepare():
                         late_wide_face_y_offset_m=wide_y_offset,
                         support_reference_error_m=support_error,candidate_optimizer_converged=False,
                         finger_face_adjustment=FACE_REPORT,
-                        cup_before_lift=CUP_BEFORE_LIFT,right_curl_schedule='22-23 seconds: MCP/DIP 0 to 0.3 rad; clock only' if CUP_BEFORE_LIFT else None,
+                        cup_before_lift=CUP_BEFORE_LIFT,right_curl_start_s=CUP_START,
+                        right_curl_schedule=f'{CUP_START:g}-{CUP_START+1:g} seconds: MCP/DIP 0 to 0.3 rad; clock only' if CUP_BEFORE_LIFT else None,
                         initial_right_override=None if CONTINUOUS_SOURCE else 'SDK joint zero; not the preceding artificial high parking pose',
                         source_sequence_continuity_verified=CONTINUOUS_SOURCE,native_verified=False,whole_arm_collision_checked=False)
 
@@ -254,7 +265,7 @@ def precheck(command):
                 wall_seconds=time.monotonic()-started,whole_arm_collision_checked=False)
 
 
-def run(command,out):
+def run(command,out,protected_payload=None):
     restore();start=float(d.time);names=[m.body(i).name for i in range(m.nbody) if m.body(i).name=='target' or m.body(i).name.startswith('neighbor_')]
     initial={n:d.xpos[m.body(n).id].copy() for n in names};shifts={n:0. for n in names if n!=TARGET}
     rows=[];bad=[];abort=None;started=time.monotonic()
@@ -267,7 +278,7 @@ def run(command,out):
             for n in shifts:
                 shifts[n]=max(shifts[n],float(np.linalg.norm(d.xpos[m.body(n).id]-initial[n])))
                 if shifts[n]>.002:abort='other_brick_moved'
-            contacts=[]
+            contacts=[];protected_contacts=[]
             for ci,c in enumerate(d.contact):
                 ns=[m.geom(int(i)).name for i in c.geom]
                 if any(n.startswith(('lh_','rh_')) for n in ns) and TARGET not in ns and c.dist<-.0005:
@@ -276,6 +287,10 @@ def run(command,out):
                     force=np.zeros(6);mj.mj_contactForce(m,d,ci,force)
                     vector=c.frame.reshape(3,3).T@force[:3]*(1 if ns[1]==TARGET else -1)
                     contacts.append(dict(pair=ns,force_xyz_n=vector.tolist()))
+                if protected_payload is not None and protected_payload in ns:
+                    force=np.zeros(6);mj.mj_contactForce(m,d,ci,force)
+                    vector=c.frame.reshape(3,3).T@force[:3]*(1 if ns[1]==protected_payload else -1)
+                    protected_contacts.append(dict(pair=ns,force_xyz_n=vector.tolist()))
             body=m.body(TARGET).id;rot=Rotation.from_quat(d.xquat[body][[1,2,3,0]])
             bottom=float((rot.apply(p.CORNERS)+d.xpos[body])[:,2].min()-g.FLOOR)
             if bottom<-.020:abort='target_corner_below_limit'
@@ -283,6 +298,7 @@ def run(command,out):
             if step%10==9 or abort:
                 row=dict(elapsed_s=float(d.time)-start,phase=phase,position_m=d.xpos[body].tolist(),quaternion_wxyz=d.xquat[body].tolist(),
                          lowest_corner_m=bottom,contacts=contacts,qpos=d.qpos.tolist(),qvel=d.qvel.tolist())
+                if protected_payload is not None:row['protected_payload_contacts']=protected_contacts
                 rows.append(row);stream.write(json.dumps(row,allow_nan=False)+'\n')
             if abort:break
     held=[r for r in rows if r['elapsed_s']>=DURATION-3-1e-8]
@@ -319,7 +335,7 @@ if __name__=='__main__':
     group.add_argument('--four-finger-face',action='store_true',help='Open four fingers and align their leading extents')
     group.add_argument('--three-finger-face',action='store_true',help='Use index/middle/ring while retaining the folded pinky')
     parser.add_argument('--source',type=Path,help='Continue a released feed state without resetting either hand')
-    parser.add_argument('--target',choices=['neighbor_1','neighbor_5'],default='neighbor_1')
+    parser.add_argument('--target',choices=['neighbor_1','neighbor_3','neighbor_5'],default='neighbor_1')
     parser.add_argument('--settle-seconds',type=int,choices=[0,3],default=0,help='Additional fixed settling before the final three-second hold')
     parser.add_argument('--deploy-pinky-after-clearance',action='store_true',help='Open the retained folded pinky at 20-21 seconds, after the narrow corridor')
     parser.add_argument('--recenter-wide-face',action='store_true',help='Match the earlier four-finger face center during the same 20-21 second transition')

@@ -9,14 +9,17 @@ import numpy as np
 import try_third_red_with_upper as structure
 first=structure.first;m,d,mj,p=structure.m,structure.d,structure.mj,structure.p
 TARGET='neighbor_3';REFERENCE=Path('runs/third-red-103/final-south')
+EXTRA_BASES=('neighbor_4',)
 
 
 def configure(source):
     record=json.loads((source/'result.json').read_text());s=record['summary'];checked=json.loads((source/'precheck.json').read_text())
     initial=source.resolve()==REFERENCE.resolve() and s.get('local_three_red_with_upper_verified',False)
-    continuing=(s.get('target')==TARGET and s.get('protected_structure_verified',False) and s.get('held_duration_s',0)>=2.98
-                and s.get('held_table_only',False) and s.get('held_drift_mm',1e6)<=2 and s.get('held_angular_drift_degrees',1e6)<=2
-                and s.get('final_face_tilt_degrees',1e6)<=2 and s.get('minimum_table_support_n',0)>=.8*m.body(TARGET).mass*9.81)
+    coupled=(s.get('target')=='target' and s.get('local_coupled_feed_released',False) and set(s.get('released_supply_targets',{}))=={'target',TARGET})
+    released=s['released_supply_targets'][TARGET] if coupled else s
+    continuing=((s.get('target')==TARGET or coupled) and s.get('protected_structure_verified',False) and released.get('held_duration_s',0)>=2.98
+                and released.get('held_table_only',False) and released.get('held_drift_mm',1e6)<=2 and released.get('held_angular_drift_degrees',1e6)<=2
+                and released.get('final_face_tilt_degrees',1e6)<=2 and released.get('minimum_table_support_n',0)>=.8*m.body(TARGET).mass*9.81)
     if not (initial or continuing) or not s.get('source_sequence_continuity_verified',False) or s['abort'] or s['unintended_contacts'] or not checked['passed'] or s['checkpoint_next_step_maximum_difference']>1e-10:
         raise ValueError('Source is not a stable protected continuation')
     state=np.load(source/'integration-state.npz',allow_pickle=False)
@@ -27,16 +30,23 @@ def configure(source):
     return restore,checked['stages'][-1]['result']['final_joints_sdk']
 
 
-def prepare(mode,source,restore,double_finger=False,approach_height=.070,deploy_middle=False):
+def prepare(mode,source,restore,double_finger=False,approach_height=.070,deploy_middle=False,north_wrist_yaw=90,pickup_x=.227,pickup_y=.140):
     if deploy_middle and (mode!='south' or double_finger):raise ValueError('Middle deployment compares narrow-entry south feeding only')
+    if north_wrist_yaw!=90 and mode!='north-pickup':raise ValueError('North orientation applies only to north feeding')
+    if pickup_x not in [.165,.180,.227] or (pickup_x!=.227 and mode!='west-pickup'):raise ValueError('Alternative X belongs to the west staging move')
+    if pickup_y not in [.080,.140] or (pickup_y!=.140 and mode!='south'):raise ValueError('Alternative Y belongs to the south staging move')
     restore();position=d.xpos[m.body(TARGET).id].copy();initial={m.actuator(i).name:float(d.ctrl[i]) for i in range(m.nu)}
-    goal=[.289,float(position[1])] if mode=='west-clear' else [float(position[0]),.140] if mode=='south' else [.227,float(position[1])]
+    goal=[.289,float(position[1])] if mode=='west-clear' else [float(position[0]),pickup_y] if mode=='south' else [float(position[0]),.210] if mode=='north-pickup' else [pickup_x,float(position[1])]
     targets=p.t.CANDIDATE['hand_targets'].copy()
     if not double_finger:
         for suffix in ['_mcp_pitch','_dip']:targets['lh_middle'+suffix]=1.45
     contact_fingers=('index','middle') if double_finger else ('index',)
-    axis='south' if mode=='south' else 'west'
-    command,plan=first.prepare(axis,source,restore,approach_height=approach_height,adapt_lateral_face=axis=='west',
+    axis='south' if mode=='south' else 'north' if mode=='north-pickup' else 'west'
+    if axis=='north':
+        if not double_finger:raise ValueError('North feed currently uses the existing double-finger face')
+        command,plan=structure.second.prepare(axis,source,restore,approach_height=approach_height,vertical_approach=True,target_name=TARGET,goal_xy_m=goal,hand_targets=targets,south_wrist_yaw=north_wrist_yaw)
+    else:
+        command,plan=first.prepare(axis,source,restore,approach_height=approach_height,adapt_lateral_face=axis=='west',
                                target_name=TARGET,goal_xy_m=goal,contact_fingers=contact_fingers,hand_targets=targets,vertical_approach=axis=='south')
     def fingers(t):return {n:initial[n]+(v-initial[n])*np.clip(t/2,0,1) for n,v in targets.items()}
     if deploy_middle:
@@ -53,14 +63,14 @@ def prepare(mode,source,restore,double_finger=False,approach_height=.070,deploy_
                 name='lh_middle'+suffix;ctrl[name]=ctrl[name]+(double_targets[name]-ctrl[name])*np.clip((t-11)/1,0,1)
             return ctrl
         plan.update(middle_deployment_s=[11,12],two_finger_recenter_m=shift.tolist(),final_left_finger_targets=double_targets)
-    plan.update(mode=mode,structure_reference=str(REFERENCE),protected_structure=[*structure.BASES,structure.UPPER,'neighbor_4'],
+    plan.update(mode=mode,structure_reference=str(REFERENCE),protected_structure=[*structure.BASES,structure.UPPER,*EXTRA_BASES],
                 initial_left_controls={n:initial[n] for n in targets},left_finger_targets=targets,source_sequence_continuity_verified=True)
     return command,fingers,plan
 
 
 def evaluate(out,plan):
     record=json.loads((out/'result.json').read_text());s=record['summary']
-    protected,only,forces=structure.structure_status(record['rows'],REFERENCE,extra_bases=('neighbor_4',))
+    protected,only,forces=structure.structure_status(record['rows'],REFERENCE,extra_bases=EXTRA_BASES)
     safe=bool(not s['abort'] and not s['unintended_contacts'] and only and min(forces.values())>=.1
               and all(v['maximum_shift_mm']<=2 and v['maximum_angular_shift_degrees']<=2 for v in protected.values()))
     s.update(protected_structure_metrics=protected,protected_structure_verified=safe,upper_only_base_contacts=only,upper_minimum_support_force_n=forces,
@@ -70,11 +80,17 @@ def evaluate(out,plan):
 
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--mode',choices=['west-clear','south','west-pickup'],required=True)
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--mode',choices=['west-clear','south','west-pickup','north-pickup'],required=True)
     parser.add_argument('--source',type=Path,required=True);parser.add_argument('--out',type=Path,required=True);parser.add_argument('--run',action='store_true')
     parser.add_argument('--double-finger',action='store_true');parser.add_argument('--approach-height-mm',type=int,choices=[30,50,70],default=70)
     parser.add_argument('--deploy-middle-after-clearance',action='store_true')
-    args=parser.parse_args();restore,seed=configure(args.source);command,fingers,plan=prepare(args.mode,args.source,restore,args.double_finger,args.approach_height_mm/1000,args.deploy_middle_after_clearance)
+    parser.add_argument('--four-red-reference',action='store_true',help='Protect all four bases and the upper brick relative to round 105')
+    parser.add_argument('--north-wrist-yaw',type=int,choices=[0,90,180,270],default=90)
+    parser.add_argument('--pickup-x-mm',type=int,choices=[165,180,227],default=227)
+    parser.add_argument('--pickup-y-mm',type=int,choices=[80,140],default=140)
+    args=parser.parse_args()
+    if args.four_red_reference:REFERENCE=Path('runs/fourth-red-105/final-south');EXTRA_BASES=('neighbor_4','neighbor_2')
+    restore,seed=configure(args.source);command,fingers,plan=prepare(args.mode,args.source,restore,args.double_finger,args.approach_height_mm/1000,args.deploy_middle_after_clearance,args.north_wrist_yaw,args.pickup_x_mm/1000,args.pickup_y_mm/1000)
     args.out.mkdir(parents=True,exist_ok=False);checked=first.precheck(command,restore,seed,target=TARGET,finger_command=fingers)
     (args.out/'plan.json').write_text(json.dumps(plan,allow_nan=False));(args.out/'precheck.json').write_text(json.dumps(checked,allow_nan=False))
     brief=dict(precheck_passed=checked['passed'],geometry_failures=len(checked['geometry_failures']),stages=len(checked['stages']),precheck_wall_seconds=checked['wall_seconds']);passed=checked['passed']

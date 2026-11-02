@@ -35,7 +35,7 @@ def configure(axis,source):
 
 def prepare(axis,source,restore,tangent_shift_mm=0,diagonal_align=False,target_name=TARGET,goal_xy_m=None,hand_targets=None,vertical_approach=False,approach_height=.070,south_wrist_yaw=90):
     if approach_height not in [.030,.050,.070]:raise ValueError('Unsupported local approach height')
-    if south_wrist_yaw not in [0,90,180,270] or (south_wrist_yaw!=90 and axis!='south'):raise ValueError('Alternate wrist orientation applies only to south pushing')
+    if south_wrist_yaw not in [0,90,180,270] or (south_wrist_yaw!=90 and axis not in ['south','north']):raise ValueError('Alternate wrist orientation applies only to north/south pushing')
     goal=goal_xy_m or [.3025,.015]
     if diagonal_align and axis!='align-west':raise ValueError('Diagonal correction requires the adapted west face')
     if axis.startswith('align-'):
@@ -84,7 +84,8 @@ def prepare(axis,source,restore,tangent_shift_mm=0,diagonal_align=False,target_n
     return command,dict(source=str(source),target=target_name,axis=axis,initial_target_center_m=target.tolist(),component=0 if axis=='east' else 1,
                         destination_axis_m=goal[0] if axis=='east' else goal[1],goal_xy_m=[goal[0],float(target[1]) if axis=='east' else goal[1]],
                         contact_root_m=root.tolist(),distance_m=distance,tangent_shift_mm=tangent_shift_mm,offline_lost_travel_estimate_m=lost_travel,
-                        duration_s=23.,hold_start_s=20.,approach_offset_m=approach,approach_height_m=approach_height,south_wrist_yaw_degrees=south_wrist_yaw if axis=='south' else None,whole_arm_collision_checked=False,native_verified=False,official_region_verified=False)
+                        duration_s=23.,hold_start_s=20.,approach_offset_m=approach,approach_height_m=approach_height,south_wrist_yaw_degrees=south_wrist_yaw if axis=='south' else None,
+                        north_wrist_yaw_degrees=south_wrist_yaw if axis=='north' else None,whole_arm_collision_checked=False,native_verified=False,official_region_verified=False)
 
 
 def evaluate_pair(out,plan):

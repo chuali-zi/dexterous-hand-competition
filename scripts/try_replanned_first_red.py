@@ -100,7 +100,7 @@ def prepare(axis,source,restore,approach_height=.070,adapt_lateral_face=False,ta
     return command,plan
 
 
-def precheck(command,restore,seed,target=TARGET,finger_command=None):
+def precheck(command,restore,seed,target=TARGET,finger_command=None,additional_targets=()):
     started=time.monotonic();bad=[]
     for seconds in np.linspace(0,DURATION,461):
         restore();pos,q,phase=command(seconds);d.qpos[p.t.LA:p.t.LA+3]=pos;d.qpos[p.t.LA+3:p.t.LA+7]=q
@@ -109,7 +109,7 @@ def precheck(command,restore,seed,target=TARGET,finger_command=None):
         mj.mj_forward(m,d)
         for c in d.contact:
             ns=[m.geom(int(i)).name for i in c.geom]
-            if any(n.startswith(('lh_','rh_')) for n in ns) and not (target in ns and any(n.startswith('lh_') for n in ns)):
+            if any(n.startswith(('lh_','rh_')) for n in ns) and not (any(n in [target,*additional_targets] for n in ns) and any(n.startswith('lh_') for n in ns)):
                 bad.append(dict(t=float(seconds),phase=phase,pair=ns,depth_mm=-float(c.dist)*1000))
     restore();ctx=p.t.routes.context()['left'];ctx['limits']=ctx['intersection']+[.02,-.02];ctx['inset']=.02
     h=np.asarray(p.t.routes.sdk.forward_kinematics('left',seed))@ctx['mount'];pe=float(np.linalg.norm(h[:3,3]-d.mocap_pos[p.t.LM]))
@@ -125,45 +125,59 @@ def precheck(command,restore,seed,target=TARGET,finger_command=None):
                 initial_seed_error_m=pe,initial_seed_angle_rad=ae,wall_seconds=time.monotonic()-started,whole_arm_collision_checked=False,native_verified=False)
 
 
-def run(command,plan,restore,out,finger_command=None,protected_payload=None):
+def run(command,plan,restore,out,finger_command=None,protected_payload=None,right_command=None,additional_targets=()):
     target=plan.get('target',TARGET)
+    moved=[target,*additional_targets]
     restore();start=float(d.time);names=[m.body(i).name for i in range(m.nbody) if m.body(i).name=='target' or m.body(i).name.startswith('neighbor_')]
-    anchors={n:d.xpos[m.body(n).id].copy() for n in names};shifts={n:0. for n in names if n!=target};body=m.body(target).id
+    anchors={n:d.xpos[m.body(n).id].copy() for n in names};shifts={n:0. for n in names if n not in moved};body=m.body(target).id
+    planned_shifts={n:0. for n in additional_targets}
     rows=[];bad=[];abort=None;started=time.monotonic()
     with (out/'trace.jsonl').open('x') as stream:
-        for step in range(round(DURATION/m.opt.timestep)):
+        for step in range(round(plan.get('duration_s',DURATION)/m.opt.timestep)):
             pos,q,phase=command(float(d.time)-start);d.mocap_pos[p.t.LM]=pos;d.mocap_quat[p.t.LM]=q
+            if right_command is not None:d.mocap_pos[p.t.RM],d.mocap_quat[p.t.RM]=right_command(float(d.time)-start)
             if finger_command is not None:
                 for name,value in finger_command(float(d.time)-start).items():d.ctrl[m.actuator(name).id]=value
             mj.mj_step(m,d);mj.mj_forward(m,d)
             for n in shifts:
                 shifts[n]=max(shifts[n],float(np.linalg.norm(d.xpos[m.body(n).id]-anchors[n])))
                 if shifts[n]>.002:abort='other_brick_movement'
+            for n in planned_shifts:planned_shifts[n]=max(planned_shifts[n],float(np.linalg.norm(d.xpos[m.body(n).id]-anchors[n])))
             contacts=[];protected_contacts=[]
+            secondary_contacts={n:[] for n in additional_targets}
             for ci,c in enumerate(d.contact):
                 ns=[m.geom(int(i)).name for i in c.geom];hand=any(n.startswith(('lh_','rh_')) for n in ns)
-                intended=target in ns and (any(n.startswith('lh_') for n in ns) or 'table' in ns)
-                if (hand or target in ns) and not intended and c.dist<-.0005:
+                intended=any(n in moved for n in ns) and all(n in moved or n=='table' or n.startswith('lh_') for n in ns)
+                if (hand or any(n in moved for n in ns)) and not intended and c.dist<-.0005:
                     bad.append(dict(t=float(d.time)-start,pair=ns,depth_mm=-float(c.dist)*1000));abort='unexpected_contact'
                 if target in ns:
                     force=np.zeros(6);mj.mj_contactForce(m,d,ci,force);vector=c.frame.reshape(3,3).T@force[:3]*(1 if ns[1]==target else -1)
                     contacts.append(dict(pair=ns,force_xyz_n=vector.tolist()))
+                for n in additional_targets:
+                    if n in ns:
+                        force=np.zeros(6);mj.mj_contactForce(m,d,ci,force);vector=c.frame.reshape(3,3).T@force[:3]*(1 if ns[1]==n else -1)
+                        secondary_contacts[n].append(dict(pair=ns,force_xyz_n=vector.tolist()))
                 if protected_payload is not None and protected_payload in ns:
                     force=np.zeros(6);mj.mj_contactForce(m,d,ci,force);vector=c.frame.reshape(3,3).T@force[:3]*(1 if ns[1]==protected_payload else -1)
                     protected_contacts.append(dict(pair=ns,force_xyz_n=vector.tolist()))
             corners=Rotation.from_quat(d.xquat[body][[1,2,3,0]]).apply(p.CORNERS)+d.xpos[body]
             if corners[:,2].min()<b.a.placement.a.g.FLOOR-.010:abort='payload_below_table'
+            for n in additional_targets:
+                secondary_body=m.body(n).id;secondary_corners=Rotation.from_quat(d.xquat[secondary_body][[1,2,3,0]]).apply(p.CORNERS)+d.xpos[secondary_body]
+                if secondary_corners[:,2].min()<b.a.placement.a.g.FLOOR-.010:abort='secondary_payload_below_table'
             if not np.isfinite(d.qpos).all():raise RuntimeError('Nonfinite state')
             if step%10==9 or abort:
                 row=dict(elapsed_s=float(d.time)-start,phase=phase,position_m=d.xpos[body].tolist(),quaternion_wxyz=d.xquat[body].tolist(),contacts=contacts,
                          qpos=d.qpos.tolist(),qvel=d.qvel.tolist())
                 if protected_payload is not None:row['protected_payload_contacts']=protected_contacts
+                if additional_targets:row['secondary_contacts']=secondary_contacts
                 rows.append(row);stream.write(json.dumps(row,allow_nan=False)+'\n')
             if abort:break
     summary=dict(target=target,axis=plan['axis'],source=plan['source'],abort=abort,duration_s=float(d.time)-start,cumulative_simulation_s=float(d.time),wall_seconds=time.monotonic()-started,
                  unintended_contacts=bad,other_bricks_max_shift_mm={n:v*1000 for n,v in shifts.items()},local_red_position_verified=False,
                  native_verified=False,official_region_verified=False,whole_arm_collision_checked=False,full_pyramid_verified=False)
-    held=[r for r in rows if r['elapsed_s']>=HOLD-1e-8]
+    if additional_targets:summary['planned_other_bricks_max_shift_mm']={n:v*1000 for n,v in planned_shifts.items()}
+    held=[r for r in rows if r['elapsed_s']>=plan.get('hold_start_s',HOLD)-1e-8]
     if held:
         positions=np.array([r['position_m'] for r in held]);rot=Rotation.from_quat(np.array([r['quaternion_wxyz'] for r in held])[:,[1,2,3,0]])
         drift=float(np.linalg.norm(positions-positions[0],axis=1).max());angle=float(np.degrees((rot[0].inv()*rot).magnitude().max()))
