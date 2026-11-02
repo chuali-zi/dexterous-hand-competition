@@ -127,7 +127,7 @@ def evaluate(out, released=False):
     return summary
 
 
-def calibrate_release(command, plan, source):
+def calibrate_release(command, plan, source, bracket_source=None):
     """One offline rigid landing correction from a genuinely released trial."""
     record = json.loads((source / 'result.json').read_text())
     prior_plan = json.loads((source / 'plan.json').read_text())
@@ -147,6 +147,29 @@ def calibrate_release(command, plan, source):
     turn = Rotation.from_euler('z', yaw, degrees=True)
     shift = pair - (turn.apply(landing - center) + center)
     shift[2] = 0
+    if bracket_source is not None:
+        other = json.loads((bracket_source / 'result.json').read_text())
+        other_plan = json.loads((bracket_source / 'plan.json').read_text())
+        if (not other['summary'].get('local_released_bridge_verified', False)
+                or other['summary']['target'] != g.TARGET
+                or not other['summary'].get('held_only_base_contacts', False)
+                or other_plan.get('calibration_source') != str(source)
+                or other_plan['source'] != plan['source']
+                or other_plan['supports'] != plan['supports']
+                or any(other_plan.get(k) != plan.get(k) for k in ('lowering_m', 'support_first', 'horizontal_strip', 'guide_clear_s'))
+                or not seven.assess(bracket_source, placed_payload=g.TARGET)['local_seven_brick_final_structure_verified']):
+            raise ValueError('Bracket requires the stable matching calibrated release')
+        other_landing = np.array(other['rows'][-1]['position_m'])
+        if (landing[0] - pair[0]) * (other_landing[0] - pair[0]) >= 0:
+            raise ValueError('Measured landings must straddle the target in X')
+        fraction = float((pair[0] - landing[0]) / (other_landing[0] - landing[0]))
+        if not .2 <= fraction <= .8:
+            raise ValueError('Bracket interpolation must remain inside the measured interval')
+        shift = np.array(other_plan['landing_correction_m']) * fraction
+        shift[1] += pair[1] - (landing[1] * (1 - fraction) + other_landing[1] * fraction)
+        yaw = other_plan['landing_yaw_correction_degrees'] * fraction
+        plan.update(bracket_source=str(bracket_source), bracket_fraction=fraction,
+                    bracket_model='Measured X secant with interpolated yaw and residual Y translation; hypothesis until dynamics')
     if np.linalg.norm(shift) > .03 or abs(yaw) > 20:
         raise ValueError('Measured landing correction exceeds this local comparison')
     def calibrated(t):
@@ -163,6 +186,59 @@ def calibrate_release(command, plan, source):
     return calibrated, plan
 
 
+def translate_settled_release(command, plan, source, bracket_source=None, x_only=False):
+    """Test position correction separately, after the calibrated wrist turn."""
+    record = json.loads((source / 'result.json').read_text())
+    previous = json.loads((source / 'plan.json').read_text())
+    s = record['summary']
+    keys = ('source', 'supports', 'calibration_source', 'bracket_source', 'landing_correction_m',
+            'landing_yaw_correction_degrees', 'lowering_m', 'guide_clear_s', 'support_first', 'horizontal_strip')
+    if (not s.get('local_released_bridge_verified', False) or not s.get('held_only_base_contacts', False)
+            or s['target'] != g.TARGET or abs(s['final_cube_yaw_mod90_degrees']) > 10
+            or any(previous.get(k) != plan.get(k) for k in keys)
+            or previous.get('translation_source') or not plan.get('calibration_source')
+            or not seven.assess(source, placed_payload=g.TARGET)['local_seven_brick_final_structure_verified']):
+        raise ValueError('Translation requires a matching, stable, yaw-aligned released trial')
+    delta = np.array(plan['pair_center_m']) - np.array(record['rows'][-1]['position_m'])
+    delta[2] = 0
+    if bracket_source is not None:
+        other = json.loads((bracket_source / 'result.json').read_text())
+        other_plan = json.loads((bracket_source / 'plan.json').read_text())
+        if (not other['summary'].get('local_released_bridge_verified', False)
+                or not other['summary'].get('held_only_base_contacts', False)
+                or abs(other['summary']['final_cube_yaw_mod90_degrees']) > 10
+                or other_plan.get('translation_source') != str(source)
+                or other_plan.get('translation_bracket_source')
+                or any(other_plan.get(k) != plan.get(k) for k in keys)
+                or not np.allclose(other_plan['residual_translation_m'], delta, rtol=0, atol=1e-12)
+                or not seven.assess(bracket_source, placed_payload=g.TARGET)['local_seven_brick_final_structure_verified']):
+            raise ValueError('Translation bracket requires the matching stable full correction')
+        response = np.array(other['rows'][-1]['position_m'])[:2] - np.array(record['rows'][-1]['position_m'])[:2]
+        if np.linalg.norm(response) < .001:
+            raise ValueError('Translation response is too small for interpolation')
+        fraction = float(np.dot(delta[:2], response) / np.dot(response, response))
+        if not .2 <= fraction <= .8:
+            raise ValueError('Translation interpolation must remain inside the measured interval')
+        delta *= fraction
+        plan.update(translation_bracket_source=str(bracket_source), translation_fraction=fraction,
+                    translation_model='Least-squares interpolation of two measured XY landings at unchanged commanded yaw')
+    if x_only:
+        delta[1] = 0
+        plan['translation_x_only'] = True
+    if np.linalg.norm(delta) > .020:
+        raise ValueError('Residual translation exceeds 20 mm')
+    def translated(t):
+        clock = t if t < 3 else 3. if t < 6 else t - 3
+        poses, controls, phase = command(clock)
+        poses = {side: (pos + delta * np.clip((t - 3) / 3, 0, 1), quat)
+                 for side, (pos, quat) in poses.items()}
+        return poses, controls, 'separate_position_correction' if 3 <= t < 6 else phase
+    g.DURATION += 3
+    plan.update(translation_source=str(source), residual_translation_m=delta.tolist(),
+                duration_s=g.DURATION, hold_start_s=plan['hold_start_s'] + 3)
+    return translated, plan
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', type=Path, default=Path('runs/receiver-support-118/blue-transfer'))
@@ -172,6 +248,10 @@ if __name__ == '__main__':
     parser.add_argument('--horizontal-strip', action='store_true')
     parser.add_argument('--guide-clear-s', type=float, default=8.)
     parser.add_argument('--calibration-source', type=Path)
+    parser.add_argument('--bracket-source', type=Path)
+    parser.add_argument('--translation-source', type=Path)
+    parser.add_argument('--translation-bracket-source', type=Path)
+    parser.add_argument('--translation-x-only', action='store_true')
     parser.add_argument('--pair', choices=('south', 'north'))
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--run', action='store_true')
@@ -180,6 +260,14 @@ if __name__ == '__main__':
         parser.error('Withdrawal options and --lower-mm require --mode near-support')
     if args.calibration_source and args.mode != 'near-support':
         parser.error('--calibration-source requires --mode near-support')
+    if args.bracket_source and not args.calibration_source:
+        parser.error('--bracket-source requires --calibration-source')
+    if args.translation_source and not args.calibration_source:
+        parser.error('--translation-source requires --calibration-source')
+    if args.translation_bracket_source and not args.translation_source:
+        parser.error('--translation-bracket-source requires --translation-source')
+    if args.translation_x_only and not args.translation_source:
+        parser.error('--translation-x-only requires --translation-source')
     configure(args.source)
     if args.pair:
         if args.mode != 'level-at-pair':
@@ -209,7 +297,9 @@ if __name__ == '__main__':
             raise ValueError('Yaw alignment requires a verified level blue hold')
         command, plan = third.prepare_yaw(-g.RECORD['summary']['final_cube_yaw_mod90_degrees'])
     if args.calibration_source:
-        command, plan = calibrate_release(command, plan, args.calibration_source)
+        command, plan = calibrate_release(command, plan, args.calibration_source, args.bracket_source)
+    if args.translation_source:
+        command, plan = translate_settled_release(command, plan, args.translation_source, args.translation_bracket_source, args.translation_x_only)
     plan.update(mode=args.mode, diagnostic_only=True, payload_floor_m=.090)
     args.out.mkdir(parents=True, exist_ok=False)
     check = g.precheck(command)
